@@ -80,6 +80,7 @@ The download runs in the background at full speed, not in real time, and the aud
 ## Notes
 
 - Right-click a tile, or click its **⋯** button, to edit or delete it. ⌥-click a tile to stop it.
+- **Repeat:** in a sound's edit dialog, turn on **Repeat when finished** and set how many seconds to wait before it replays (0 = immediately). That's good for heartbeats, footsteps or a dripping tap. Click the tile again, or press Stop All, to stop it. Repeating tiles show ↻.
 - A hotkey must include ⌘, ⌥ or ⌃, or be an F-key, so it doesn't block normal typing in other apps.
 - Google sometimes blocks sign-in inside embedded browsers. YouTube works fine without signing in.
 - Only clip audio you have the right to use.

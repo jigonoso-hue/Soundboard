@@ -42,19 +42,35 @@ function soundUrl(sound) {
 function play(id) {
   const sound = sounds.find((s) => s.id === id);
   if (!sound) return;
+  // A repeating sound toggles: pressing it again stops it instead of stacking another copy.
+  if (sound.repeat && playing.has(id)) { stop(id); return; }
   if (prefs.noOverlap) stop(id);
   const audio = new Audio(soundUrl(sound));
   audio.volume = Math.min(1, sound.volume * prefs.master);
   if (prefs.outputDevice && audio.setSinkId) audio.setSinkId(prefs.outputDevice).catch(() => {});
+  if (sound.repeat && sound.repeat.gap === 0) audio.loop = true; // replay immediately
   let set = playing.get(id);
   if (!set) playing.set(id, (set = new Set()));
   set.add(audio);
   const done = () => {
+    clearTimeout(audio.repeatTimer);
     set.delete(audio);
     if (!set.size) playing.delete(id);
     updateTile(id);
   };
-  audio.addEventListener('ended', done);
+  audio.addEventListener('ended', () => {
+    // Use the latest settings, in case the sound was edited while playing.
+    const current = sounds.find((s) => s.id === id);
+    if (!current || !current.repeat || !set.has(audio)) { done(); return; }
+    const tile = document.querySelector(`.tile[data-id="${id}"]`);
+    if (tile) tile.classList.add('waiting');
+    audio.repeatTimer = setTimeout(() => {
+      if (!set.has(audio)) return;
+      if (tile) tile.classList.remove('waiting');
+      audio.currentTime = 0;
+      audio.play().catch(done);
+    }, current.repeat.gap * 1000);
+  });
   audio.addEventListener('error', () => { done(); toast(`Couldn't play “${sound.name}”.`, true); });
   audio.addEventListener('timeupdate', () => updateTile(id, audio));
   audio.play().catch(done);
@@ -64,7 +80,7 @@ function play(id) {
 function stop(id) {
   const set = playing.get(id);
   if (!set) return;
-  for (const audio of set) { audio.pause(); audio.src = ''; }
+  for (const audio of set) { clearTimeout(audio.repeatTimer); audio.pause(); audio.src = ''; }
   playing.delete(id);
   updateTile(id);
 }
@@ -78,6 +94,7 @@ function updateTile(id, audio) {
   if (!tile) return;
   const isPlaying = playing.has(id);
   tile.classList.toggle('playing', isPlaying);
+  if (!isPlaying) tile.classList.remove('waiting');
   const bar = tile.querySelector('.tile-progress');
   if (!isPlaying) bar.style.width = '0';
   else if (audio && audio.duration) bar.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
@@ -110,12 +127,25 @@ function makeTile(sound) {
   name.textContent = sound.name;
   tile.appendChild(name);
 
-  if (sound.hotkey) {
-    const key = document.createElement('div');
-    key.className = 'tile-hotkey';
-    key.textContent = prettyAccelerator(sound.hotkey);
-    tile.appendChild(key);
+  if (sound.hotkey || sound.repeat) {
+    const badges = document.createElement('div');
+    badges.className = 'tile-badges';
+    if (sound.repeat) {
+      const rep = document.createElement('span');
+      rep.className = 'tile-hotkey';
+      rep.textContent = sound.repeat.gap ? `↻ ${sound.repeat.gap}s` : '↻';
+      rep.title = sound.repeat.gap ? `Repeats ${sound.repeat.gap}s after it ends` : 'Repeats until stopped';
+      badges.appendChild(rep);
+    }
+    if (sound.hotkey) {
+      const key = document.createElement('span');
+      key.className = 'tile-hotkey';
+      key.textContent = prettyAccelerator(sound.hotkey);
+      badges.appendChild(key);
+    }
+    tile.appendChild(badges);
   }
+  if (sound.repeat) tile.title = 'Click to start repeating · click again to stop · right-click to edit';
 
   const edit = document.createElement('button');
   edit.className = 'tile-edit';
@@ -270,6 +300,9 @@ function openEditor(id) {
   $('#edit-name').value = sound.name;
   $('#edit-volume').value = sound.volume;
   $('#edit-hotkey').value = editHotkey ? prettyAccelerator(editHotkey) : '';
+  $('#edit-repeat').checked = !!sound.repeat;
+  $('#edit-repeat-gap').value = sound.repeat ? sound.repeat.gap : 0;
+  $('#edit-repeat-gap').disabled = !sound.repeat;
   const swatches = $('#edit-colors');
   swatches.textContent = '';
   for (const color of COLORS) {
@@ -297,6 +330,7 @@ dialog.addEventListener('close', async () => {
     color: editColor,
     volume: Number($('#edit-volume').value),
     hotkey: editHotkey,
+    repeat: $('#edit-repeat').checked ? { gap: Math.max(0, Number($('#edit-repeat-gap').value) || 0) } : null,
   });
   sounds = result.sounds;
   render();
@@ -317,6 +351,7 @@ $('#edit-ambience').addEventListener('click', () => {
   Ambience.addSoundLayer(editingId);
   dialog.close('ambience');
 });
+$('#edit-repeat').addEventListener('change', (e) => { $('#edit-repeat-gap').disabled = !e.target.checked; });
 $('#clear-hotkey').addEventListener('click', () => { editHotkey = null; $('#edit-hotkey').value = ''; });
 
 $('#edit-hotkey').addEventListener('keydown', (e) => {

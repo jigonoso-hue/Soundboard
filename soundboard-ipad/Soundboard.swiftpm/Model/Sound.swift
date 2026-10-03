@@ -17,6 +17,8 @@ struct Sound: Identifiable, Codable, Equatable {
     var volume: Double
     var createdAt: Date
     var source: SoundSource?
+    /// nil = play once; otherwise replay this many seconds after it ends (0 = immediately).
+    var repeatGap: Double? = nil
 }
 
 enum Palette {

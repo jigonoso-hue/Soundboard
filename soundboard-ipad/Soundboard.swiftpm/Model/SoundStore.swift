@@ -63,6 +63,7 @@ final class SoundStore: ObservableObject {
         var updated = sound
         updated.name = Self.clean(sound.name).isEmpty ? sounds[index].name : Self.clean(sound.name)
         updated.volume = min(1, max(0, sound.volume))
+        if let gap = sound.repeatGap { updated.repeatGap = min(3600, max(0, (gap * 10).rounded() / 10)) }
         sounds[index] = updated
         save()
     }

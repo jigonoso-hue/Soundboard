@@ -239,7 +239,8 @@ dialog input:not([type="range"]) { width: 100%; }
 .swatch.selected { border-color: white; }
 .hotkey-row { display: flex; gap: 8px; }
 .hotkey-row input { cursor: pointer; }
-.dialog-actions { display: flex; gap: 8px; margin-top: 8px; }
+.dialog-tools { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.dialog-actions { display: flex; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .spacer { flex: 1; }
 
 #toast {
@@ -391,3 +392,14 @@ button.plain.active { color: #6ee7b7; }
 .popup-menu button { text-align: left; border: none; background: none; }
 .popup-menu button:hover { background: var(--panel-2); }
 #edit-bash { max-width: 140px; }
+
+/* ---------- Repeat ---------- */
+
+.tile-badges { display: flex; gap: 4px; align-self: flex-start; }
+.tile.waiting { animation: waiting 1.2s ease-in-out infinite; }
+@keyframes waiting { 50% { background: color-mix(in srgb, var(--tile-color) 26%, var(--panel)); } }
+.repeat-row { margin-bottom: 14px; }
+dialog label.inline { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--text); }
+dialog label.inline input[type="checkbox"] { width: auto; }
+#edit-repeat-gap { width: 72px !important; text-align: center; }
+.repeat-row p { margin: 2px 0 0; }

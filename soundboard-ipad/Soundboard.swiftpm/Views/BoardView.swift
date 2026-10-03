@@ -243,13 +243,20 @@ struct SoundTile: View {
                 .fill(color.opacity(isPlaying ? 0.55 : 0.28))
             RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(color.opacity(0.7), lineWidth: 1)
-            Text(sound.name)
-                .font(.headline)
-                .foregroundStyle(.white)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .padding(12)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(sound.name)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                if let gap = sound.repeatGap {
+                    Label(gap > 0 ? "\(gap.formatted())s" : "Repeat", systemImage: "repeat")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             GeometryReader { geo in
                 Rectangle()
                     .fill(color)

@@ -34,6 +34,30 @@ struct EditSoundView: View {
                         Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
                     }
                 }
+                Section {
+                    Toggle("Repeat when finished", isOn: Binding(
+                        get: { sound.repeatGap != nil },
+                        set: { sound.repeatGap = $0 ? (sound.repeatGap ?? 0) : nil }
+                    ))
+                    if sound.repeatGap != nil {
+                        HStack {
+                            Text("Wait before replaying")
+                            Spacer()
+                            TextField("Seconds", value: Binding(
+                                get: { sound.repeatGap ?? 0 },
+                                set: { sound.repeatGap = max(0, $0) }
+                            ), format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 70)
+                            Text("sec").foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Repeat")
+                } footer: {
+                    Text("0 seconds replays immediately. Tap the sound again, or Stop All, to stop it.")
+                }
                 if let source = sound.source {
                     Section("From YouTube") {
                         Text(source.title.isEmpty ? "YouTube video" : source.title)

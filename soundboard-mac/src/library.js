@@ -55,6 +55,7 @@ class Library {
       color: COLORS[this.sounds.length % COLORS.length],
       volume: 1,
       hotkey: null,
+      repeat: null,
       source: source || null,
       createdAt: new Date().toISOString(),
     };
@@ -79,6 +80,11 @@ class Library {
     if ('name' in changes) sound.name = cleanName(changes.name) || sound.name;
     if ('color' in changes && /^#[0-9a-f]{6}$/i.test(changes.color)) sound.color = changes.color;
     if ('volume' in changes) sound.volume = Math.min(1, Math.max(0, Number(changes.volume) || 0));
+    if ('repeat' in changes) {
+      // null = play once; { gap } = replay `gap` seconds after it ends (0 = immediately).
+      const gap = Number(changes.repeat?.gap);
+      sound.repeat = changes.repeat ? { gap: Number.isFinite(gap) ? Math.min(3600, Math.max(0, Math.round(gap * 10) / 10)) : 0 } : null;
+    }
     if ('hotkey' in changes) {
       // Only one sound may own a given hotkey.
       if (changes.hotkey) for (const s of this.sounds) if (s.hotkey === changes.hotkey) s.hotkey = null;

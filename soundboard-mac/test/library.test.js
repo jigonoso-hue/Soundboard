@@ -46,3 +46,15 @@ test('drops entries whose files are missing', () => {
   fs.rmSync(path.join(dir, s.file));
   assert.equal(new Library(dir).list().length, 0);
 });
+
+test('repeat setting is validated and persisted', () => {
+  const dir = tmp();
+  const lib = new Library(dir);
+  const s = lib.add({ name: 'Heartbeat', data: Buffer.from('x'), ext: 'wav' });
+  assert.equal(s.repeat, null);
+  assert.deepEqual(lib.update(s.id, { repeat: { gap: 2.345 } }).repeat, { gap: 2.3 });
+  assert.deepEqual(lib.update(s.id, { repeat: { gap: -4 } }).repeat, { gap: 0 });
+  assert.deepEqual(lib.update(s.id, { repeat: { gap: 'abc' } }).repeat, { gap: 0 });
+  assert.deepEqual(new Library(dir).get(s.id).repeat, { gap: 0 });
+  assert.equal(lib.update(s.id, { repeat: null }).repeat, null);
+});

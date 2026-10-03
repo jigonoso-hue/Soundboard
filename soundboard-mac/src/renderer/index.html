@@ -97,6 +97,14 @@
         <div id="edit-colors" class="swatches"></div>
       </label>
       <label>Volume <input id="edit-volume" type="range" min="0" max="1" step="0.01"></label>
+      <div class="repeat-row">
+        <label class="inline"><input type="checkbox" id="edit-repeat"> Repeat when finished</label>
+        <label class="inline">wait
+          <input id="edit-repeat-gap" type="number" min="0" max="3600" step="0.5" value="0" aria-label="Seconds to wait before replaying">
+          seconds before replaying
+        </label>
+        <p class="muted small">0 seconds replays immediately. Click the tile again (or Stop All) to stop it.</p>
+      </div>
       <label>Hotkey (works even when the app is in the background)
         <div class="hotkey-row">
           <input id="edit-hotkey" readonly placeholder="Click, then press e.g. ⌥⌘1">
@@ -104,11 +112,13 @@
         </div>
       </label>
       <p id="edit-source" class="muted small"></p>
-      <div class="dialog-actions">
-        <button type="button" id="edit-delete" class="danger">Delete</button>
-        <button type="button" id="edit-reveal">Show in Finder</button>
+      <div class="dialog-tools">
         <button type="button" id="edit-ambience" title="Loop this sound as a background layer">Add to Ambience</button>
         <select id="edit-bash" title="Add this sound to a bash"><option value="">Add to Bash…</option></select>
+        <button type="button" id="edit-reveal">Show in Finder</button>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="edit-delete" class="danger">Delete</button>
         <span class="spacer"></span>
         <button value="cancel" formnovalidate>Cancel</button>
         <button value="save" class="primary">Save</button>
