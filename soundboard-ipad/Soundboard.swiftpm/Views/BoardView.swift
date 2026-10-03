@@ -149,6 +149,24 @@ struct BoardView: View {
             SoundTile(sound: sound, progress: player.progress[sound.id])
         }
         .buttonStyle(.plain)
+        // Stop button on the tile while this sound is playing.
+        .overlay(alignment: .bottomTrailing) {
+            if player.progress[sound.id] != nil {
+                Button {
+                    player.stop(sound.id)
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.5), in: Capsule())
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .accessibilityLabel("Stop \(sound.name)")
+            }
+        }
         .contextMenu {
             Button {
                 editing = sound

@@ -4,7 +4,7 @@ A desktop soundboard for your Mac. You can:
 
 - **Add your own sounds.** Click **+ Add Sounds** or drag audio files (mp3, wav, m4a, aac, ogg, opus, flac, aiff, caf, webm) onto the board.
 - **Bashes.** Named groups of sounds that play together with one click, each with a cover image or icon. Every Bash opens in its own editor window, with a timeline for choosing when each sound starts and layering sounds.
-- **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest or a dark dungeon drone. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer, such as a song you saved from YouTube.
+- **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer, such as a song you saved from YouTube.
 - **Save full audio from YouTube.** Save a whole video's audio track, such as a song or a one-hour tavern mix, to your library.
 - **Clip sounds from YouTube.** A built-in YouTube browser lets you search for a video, mark a start and end, and save that piece of audio as a new sound.
 - **Play sounds** by clicking a tile, or with a **global hotkey** (such as ⌥⌘1) that works even when the app is in the background.
@@ -79,7 +79,7 @@ The download runs in the background at full speed, not in real time, and the aud
 
 ## Notes
 
-- Right-click a tile, or click its **⋯** button, to edit or delete it. ⌥-click a tile to stop it.
+- While a sound plays, its tile shows **■ Stop**, which stops just that sound. Right-click a tile, or click its **⋯** button, to edit or delete it.
 - **Repeat:** in a sound's edit dialog, turn on **Repeat when finished** and set how many seconds to wait before it replays (0 = immediately). That's good for heartbeats, footsteps or a dripping tap. Click the tile again, or press Stop All, to stop it. Repeating tiles show ↻.
 - A hotkey must include ⌘, ⌥ or ⌃, or be an F-key, so it doesn't block normal typing in other apps.
 - Google sometimes blocks sign-in inside embedded browsers. YouTube works fine without signing in.

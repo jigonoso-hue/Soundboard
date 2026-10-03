@@ -3,9 +3,10 @@
 The iPad version of the soundboard: a native SwiftUI app with the same features as the Mac app.
 
 - **Your own sounds.** Tap **+** to add audio from the Files app, or pick a video from Files or Photos and trim out the part you want.
-- **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest or a dark dungeon drone. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer.
+- **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer.
 - **Save full audio from YouTube.** Save a whole video's audio, such as a song or a tavern mix, to your library.
 - **Clip sounds from YouTube.** A built-in YouTube browser opens beside the board. Mark a start and end, then tap **Create Sound**.
+- While a sound plays, its tile shows a **Stop** button, which stops just that sound.
 - Tap a tile to play it. Long-press a tile to edit, stop or delete it, or drag it onto another tile to reorder.
 - **Repeat:** any sound can keep replaying when it finishes, after a wait you choose (0 = immediately). Tap it again to stop.
 - Also includes per-sound volume and color, master volume, *restart instead of overlap*, a filter, and **Stop All**.

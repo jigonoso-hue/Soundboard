@@ -273,8 +273,8 @@ button.plain.active { color: #6ee7b7; }
 
 .amb-layers {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
   padding-top: 10px;
 }
 .layer {
@@ -403,3 +403,20 @@ dialog label.inline { flex-direction: row; align-items: center; gap: 8px; margin
 dialog label.inline input[type="checkbox"] { width: auto; }
 #edit-repeat-gap { width: 72px !important; text-align: center; }
 .repeat-row p { margin: 2px 0 0; }
+
+/* Per-tile stop button, shown while the sound plays. */
+.tile-stop {
+  position: absolute;
+  right: 6px;
+  bottom: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: none;
+}
+.tile.playing .tile-stop { display: block; }
+.tile-stop:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); }

@@ -120,7 +120,7 @@ function makeTile(sound) {
   tile.style.setProperty('--tile-color', sound.color);
   tile.draggable = true;
   tile.tabIndex = 0;
-  tile.title = 'Click to play · ⌥-click to stop · right-click to edit';
+  tile.title = 'Click to play · right-click to edit';
 
   const name = document.createElement('div');
   name.className = 'tile-name';
@@ -153,6 +153,14 @@ function makeTile(sound) {
   edit.title = 'Edit';
   edit.addEventListener('click', (e) => { e.stopPropagation(); openEditor(sound.id); });
   tile.appendChild(edit);
+
+  // Visible only while this sound is playing (or waiting to repeat).
+  const stopBtn = document.createElement('button');
+  stopBtn.className = 'tile-stop';
+  stopBtn.textContent = '■ Stop';
+  stopBtn.title = 'Stop this sound';
+  stopBtn.addEventListener('click', (e) => { e.stopPropagation(); stop(sound.id); });
+  tile.appendChild(stopBtn);
 
   const progress = document.createElement('div');
   progress.className = 'tile-progress';

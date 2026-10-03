@@ -17,6 +17,14 @@ SR = 22050
 LOOP = 20.0
 N = int(SR * LOOP)
 T = np.arange(N) / SR
+
+
+def configure(seconds):
+    """Sets the loop length used by every helper below."""
+    global LOOP, N, T
+    LOOP = float(seconds)
+    N = int(SR * LOOP)
+    T = np.arange(N) / SR
 OUTPUTS = [
     'soundboard-mac/src/ambience',
     'soundboard-ipad/Soundboard.swiftpm/Resources/Ambience',
@@ -194,6 +202,110 @@ def dark_drone():
     return reverb(out / np.std(out) * 0.6 + air, 2.5, 0.6)
 
 
+def thunder_clap(distance):
+    """One thunder strike: a lightning crack (when close) and a long rolling rumble.
+    distance 0 = right overhead, 1 = far away."""
+    length = int(rng.uniform(7, 11) * SR)
+    out = np.zeros(length)
+    if distance < 0.6:
+        # The crack: a few sharp broadband snaps in quick succession.
+        t = 0.0
+        for _ in range(rng.integers(3, 7)):
+            snap = burst(0.25, rng.uniform(0.01, 0.04), 300, 9000) * rng.uniform(1.0, 2.0)
+            start = int(t * SR)
+            out[start:start + len(snap)] += snap[:max(0, length - start)] * (1 - distance)
+            t += rng.uniform(0.02, 0.12)
+    # The rumble: deep noise that rolls in waves as the sound echoes off the land.
+    spec = np.fft.rfft(rng.standard_normal(length))
+    f = np.fft.rfftfreq(length, 1 / SR)
+    f[0] = 1e-3
+    cutoff = 220 - 140 * distance
+    spec *= f ** -0.5 / (1 + (f / cutoff) ** 4) / (1 + (25 / f) ** 4)
+    rumble = np.fft.irfft(spec, length)
+    rumble /= np.std(rumble) + 1e-12
+    x = np.arange(length) / SR
+    attack = 0.05 + distance * 0.6
+    envelope = np.minimum(1, x / attack) * np.exp(-x / rng.uniform(1.8, 3.2))
+    for _ in range(rng.integers(2, 5)):  # later rolls
+        center = rng.uniform(0.8, 5)
+        envelope += rng.uniform(0.3, 0.7) * np.exp(-((x - center) / rng.uniform(0.4, 1.2)) ** 2)
+    out += rumble * envelope * (1.4 - 0.6 * distance)
+    # Fade the tail to silence so it never ends abruptly.
+    out[-SR:] *= np.linspace(1, 0, SR)
+    return out
+
+
+def thunderstorm():
+    configure(60)
+    rain_bed = noise(400, 9000, tilt=-0.5) * 0.7 * (1 + 0.25 * slow(0.03, 0.3))
+    downpour = noise(80, 1200, tilt=-1) * 0.45
+    drops = np.zeros(N)
+    for t in poisson_times(400):
+        add_event(drops, t, burst(0.01, rng.uniform(0.0006, 0.0025), 1500, 9500) * rng.uniform(0.2, 1.0) ** 2)
+    drops /= np.std(drops)
+    gust = slow(0.02, 0.2)
+    storm_wind = noise(80, 700, tilt=-1) * np.clip(0.4 + 0.6 * gust, 0.1, None)
+    thunder = np.zeros(N)
+    # One big close strike, a couple of mid-distance ones and some far-off grumbles.
+    strikes = [(rng.uniform(3, 8), 0.05), (rng.uniform(22, 30), 0.4), (rng.uniform(40, 46), 0.25),
+               (rng.uniform(13, 17), 0.85), (rng.uniform(51, 56), 0.9)]
+    for start, distance in strikes:
+        add_event(thunder, start, thunder_clap(distance))
+    thunder /= np.max(np.abs(thunder)) + 1e-12
+    bed = rain_bed + downpour + drops * 0.3 + storm_wind * 0.6
+    bed = bed / np.std(bed)
+    # Thunder peaks far above the rain, so strikes really land.
+    return bed * 0.35 + thunder * 6.0
+
+
+def howling_wind():
+    configure(40)
+    gust = slow(0.02, 0.18)
+    gust2 = slow(0.03, 0.25)
+    body = noise(60, 900, tilt=-1) * np.clip(0.5 + 0.7 * gust, 0.15, None)
+    hiss = noise(1200, 6000, tilt=-0.5) * np.clip(0.1 + 0.5 * gust, 0, None) ** 2
+    howl = np.zeros(N)
+    # Each howl voice is breathy noise wrapped around a slowly sliding pitch.
+    for base, spread, mod, level in [(420, 240, gust, 1.0), (640, 300, gust2, 0.7), (300, 120, -gust2, 0.5)]:
+        freq = base + spread * mod + 25 * slow(0.2, 1.0)
+        # Nudge the pitch so the phase wraps exactly at the loop point (seamless).
+        total_cycles = np.sum(freq) / SR
+        freq *= max(1, round(total_cycles)) / total_cycles
+        phase = 2 * np.pi * np.cumsum(freq) / SR
+        breath = 1 + 0.6 * noise(0.5, 40, order=2) / 3
+        envelope = np.clip(0.4 + 0.7 * mod, 0.05, None) ** 1.5
+        howl += np.sin(phase) * breath * envelope * level
+    howl = reverb(howl, 1.2, 0.5)
+    return body * 0.5 + hiss * 0.4 + howl / (np.std(howl) + 1e-12) * 0.8
+
+
+def stormy_sea():
+    configure(40)
+    env = np.zeros(N)
+    crash_env = np.zeros(N)
+    # Six big, uneven waves per loop.
+    starts = np.sort(rng.uniform(0, LOOP, 6))
+    for i, start in enumerate(starts):
+        length = rng.uniform(5.5, 8.5)
+        strength = rng.uniform(0.7, 1.2)
+        phase = ((T - start) % LOOP) / length
+        rise = np.sin(np.pi / 2 * np.clip(phase / 0.5, 0, 1)) ** 2
+        fall = np.clip(1 - (phase - 0.5) / 0.5, 0, 1) ** 2.5
+        wave = np.where(phase < 0.5, rise, np.where(phase < 1, fall, 0)) * strength
+        env += wave
+        # The crash: a hard broadband burst right as the wave breaks.
+        attack = np.clip((phase - 0.45) / 0.04, 0, 1) ** 2
+        crash_env += np.where(phase < 1, attack * np.exp(-np.clip(phase - 0.49, 0, None) * 9), 0) * strength
+    smooth = np.hanning(1201) / np.sum(np.hanning(1201))
+    wrap = lambda x: np.convolve(np.concatenate([x[-600:], x, x[:600]]), smooth, 'same')[600:-600]
+    env, crash_env = wrap(env), wrap(crash_env)
+    swell = noise(40, 1800, tilt=-1.2) * (0.25 + env)
+    crash = noise(300, 9000, tilt=-0.4) * crash_env
+    spray = noise(3000, 10000, tilt=-0.3) * (0.05 + 0.3 * env)
+    wind = noise(100, 800, tilt=-1) * np.clip(0.4 + 0.5 * slow(0.03, 0.2), 0.1, None)
+    return swell + crash * 0.9 + spray * 0.4 + wind * 0.35
+
+
 SOUNDS = {
     'Rain': rain,
     'Campfire': campfire,
@@ -203,6 +315,9 @@ SOUNDS = {
     'Cave Drips': cave,
     'Night Forest': night_forest,
     'Dark Drone': dark_drone,
+    'Thunderstorm': thunderstorm,
+    'Howling Wind': howling_wind,
+    'Stormy Sea': stormy_sea,
 }
 
 
@@ -224,6 +339,7 @@ def main():
     for out in OUTPUTS:
         os.makedirs(out, exist_ok=True)
     for name, make in SOUNDS.items():
+        configure(20)  # default; the storm sounds set their own longer loops
         x = make()
         file = name.lower().replace(' ', '-') + '.wav'
         for out in OUTPUTS:

@@ -8,6 +8,9 @@ const Ambience = (() => {
   master.connect(ctx.destination);
 
   let builtins = [];
+  // The loops shipped before the app started tracking which ones you've seen.
+  const ORIGINAL_BUILTINS = ['campfire.wav', 'cave-drips.wav', 'dark-drone.wav', 'forest-stream.wav',
+    'night-forest.wav', 'ocean-waves.wav', 'rain.wav', 'wind.wav'];
   // Persisted: { volume, collapsed, layers: [{ id, kind: 'builtin'|'sound', ref, volume, on }] }
   let state = { volume: 0.8, collapsed: false, layers: [] };
   const voices = new Map(); // layer id -> { gain, stop() }
@@ -223,12 +226,19 @@ const Ambience = (() => {
   async function init() {
     builtins = await api.ambience.builtins();
     const saved = await api.ambience.load();
+    const builtinLayer = (b) => ({ id: `builtin-${b.file}`, kind: 'builtin', ref: b.file, volume: 0.7, on: false });
     if (saved && Array.isArray(saved.layers)) {
       state = { ...state, ...saved };
+      // Loops added in an app update show up in the strip; ones the user removed stay removed.
+      const known = new Set(saved.knownBuiltins || ORIGINAL_BUILTINS);
+      const added = builtins.filter((b) => !known.has(b.file) && !state.layers.some((l) => l.kind === 'builtin' && l.ref === b.file));
+      state.layers.push(...added.map(builtinLayer));
     } else {
       // First run: offer every built-in loop, all switched off.
-      state.layers = builtins.map((b) => ({ id: `builtin-${b.file}`, kind: 'builtin', ref: b.file, volume: 0.7, on: false }));
+      state.layers = builtins.map(builtinLayer);
     }
+    state.knownBuiltins = builtins.map((b) => b.file);
+    save();
     master.gain.value = state.volume;
     $('#amb-volume').value = state.volume;
     if (prefs.outputDevice) setOutputDevice(prefs.outputDevice);

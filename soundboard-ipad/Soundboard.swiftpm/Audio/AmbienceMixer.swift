@@ -38,7 +38,15 @@ final class AmbienceMixer: ObservableObject {
     private struct SavedState: Codable {
         var masterVolume: Double
         var layers: [AmbienceLayer]
+        /// Built-in loops the user has already been offered (nil in older saves).
+        var knownBuiltins: [String]?
     }
+
+    /// The loops shipped before the app started tracking which ones you've seen.
+    private static let originalBuiltins: Set<String> = [
+        "campfire.wav", "cave-drips.wav", "dark-drone.wav", "forest-stream.wav",
+        "night-forest.wav", "ocean-waves.wav", "rain.wav", "wind.wav",
+    ]
 
     init() {
         // Resources/Ambience may be copied as a folder or flattened into the bundle.
@@ -65,11 +73,17 @@ final class AmbienceMixer: ObservableObject {
            let saved = try? JSONDecoder().decode(SavedState.self, from: data) {
             layers = saved.layers
             masterVolume = saved.masterVolume
+            // Loops added in an app update show up in the strip; ones the user removed stay removed.
+            let known = saved.knownBuiltins.map(Set.init) ?? Self.originalBuiltins
+            for loop in builtins where !known.contains(loop.file)
+                && !layers.contains(where: { $0.kind == .builtin && $0.ref == loop.file }) {
+                layers.append(AmbienceLayer(id: "builtin-\(loop.file)", kind: .builtin, ref: loop.file, volume: 0.7))
+            }
         } else {
             // First run: offer every built-in loop, all switched off.
             layers = builtins.map { AmbienceLayer(id: "builtin-\($0.file)", kind: .builtin, ref: $0.file, volume: 0.7) }
-            save()
         }
+        save()
         syncWithLibrary()
     }
 
@@ -176,7 +190,7 @@ final class AmbienceMixer: ObservableObject {
 
     private func save() {
         guard let stateURL else { return }
-        let state = SavedState(masterVolume: masterVolume, layers: layers)
+        let state = SavedState(masterVolume: masterVolume, layers: layers, knownBuiltins: builtins.map(\.file))
         if let data = try? JSONEncoder().encode(state) {
             try? data.write(to: stateURL, options: .atomic)
         }
