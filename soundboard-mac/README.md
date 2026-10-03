@@ -85,7 +85,9 @@ In the editor window:
   - Repeats show as dashed copies on the timeline. A Bash with an endless repeat shows **∞** as its length, and its card pulses while it plays. Stop it by clicking the card again, pressing **Stop All**, or pressing Esc.
 - **Playback:** Space or **▶ Play** plays from the playhead. Click the ruler to move the playhead.
 - **Cover and name:** click the cover at the top left to pick an icon and color, or **Upload image…** to use your own picture as album art. Edit the name next to the cover.
-- **Zoom** changes the timeline scale. Changes save automatically.
+- **Zoom** changes the timeline scale.
+- **Saving:** the editor opens as its own smaller window in front of the main app. Changes aren't saved until you click **Save** (or press ⌘S), which saves and closes the editor. Until then, **● Unsaved changes** shows at the top.
+- **Closing:** **Close** (or ⌘W, or the window's red button) closes the editor. With unsaved changes it asks first: **Save**, **Don't Save** or **Keep Editing**. If you don't save a brand-new Bash, it's removed.
 
 ## Ambience
 

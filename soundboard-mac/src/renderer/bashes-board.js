@@ -141,7 +141,7 @@ const Bashes = (() => {
   $('#bash-new').addEventListener('click', async () => {
     const bash = await api.bashes.create({});
     await reload();
-    api.bashes.openEditor(bash.id);
+    api.bashes.openEditor(bash.id, { isNew: true });
   });
 
   $('#bash-collapse').addEventListener('click', () => {

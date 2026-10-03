@@ -70,7 +70,7 @@ function broadcast(channel, payload, except) {
   }
 }
 
-function openBashEditor(id) {
+function openBashEditor(id, { isNew = false } = {}) {
   const existing = editors.get(id);
   if (existing && !existing.isDestroyed()) {
     existing.focus();
@@ -78,14 +78,21 @@ function openBashEditor(id) {
   }
   const bash = bashes.get(id);
   if (!bash) return;
+  // A smaller window with a normal title bar, floating in front of (and
+  // offset from) the main window, so it clearly reads as a separate editor.
+  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  const bounds = parent ? parent.getBounds() : null;
+  const width = 1040;
+  const height = 640;
   const win = new BrowserWindow({
-    width: 1180,
-    height: 720,
+    width,
+    height,
     minWidth: 760,
     minHeight: 480,
-    title: `Bash — ${bash.name}`,
-    titleBarStyle: 'hiddenInset',
-    backgroundColor: '#14141c',
+    ...(bounds ? { x: Math.round(bounds.x + (bounds.width - width) / 2), y: Math.round(bounds.y + Math.max(40, (bounds.height - height) / 2)) } : {}),
+    parent,
+    title: `Edit Bash — ${bash.name}`,
+    backgroundColor: '#181822',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -93,10 +100,19 @@ function openBashEditor(id) {
       sandbox: true,
     },
   });
-  win.loadFile(path.join(__dirname, 'renderer', 'bash-editor.html'), { query: { id } });
+  win.loadFile(path.join(__dirname, 'renderer', 'bash-editor.html'), { query: { id, new: isNew ? '1' : '0' } });
   editors.set(id, win);
+  // With unsaved changes, the red button / ⌘W asks the editor to confirm first.
+  win.on('close', (e) => {
+    if (dirtyEditors.has(win.webContents.id)) {
+      e.preventDefault();
+      win.webContents.send('bash-editor:close-requested');
+    }
+  });
   win.on('closed', () => editors.delete(id));
 }
+
+const dirtyEditors = new Set(); // webContents ids of editors with unsaved changes
 
 function syncHotkeys() {
   globalShortcut.unregisterAll();
@@ -226,7 +242,7 @@ function registerIpc() {
     const bash = bashes.update(id, changes);
     bashesChanged(e.sender);
     const editor = editors.get(id);
-    if (editor && !editor.isDestroyed()) editor.setTitle(`Bash — ${bash.name}`);
+    if (editor && !editor.isDestroyed()) editor.setTitle(`Edit Bash — ${bash.name}`);
     return bash;
   });
   ipcMain.handle('bashes:duplicate', (e, id) => {
@@ -240,23 +256,31 @@ function registerIpc() {
     if (editor && !editor.isDestroyed()) editor.close();
     bashesChanged(e.sender);
   });
-  ipcMain.handle('bashes:open-editor', (_e, id) => openBashEditor(id));
+  ipcMain.handle('bash-editor:set-dirty', (e, dirty) => {
+    if (dirty) dirtyEditors.add(e.sender.id); else dirtyEditors.delete(e.sender.id);
+  });
+  ipcMain.handle('bashes:open-editor', (_e, id, options) => openBashEditor(id, options));
 
-  ipcMain.handle('bashes:choose-cover', async (e, id) => {
+  // Picks and shrinks a cover image but doesn't save it: the editor keeps it
+  // as an unsaved change until the user clicks Save.
+  ipcMain.handle('bashes:pick-cover', async (e) => {
     const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
       title: 'Choose a cover image',
       properties: ['openFile'],
       filters: [{ name: 'Images', extensions: COVER_TYPES }],
     });
     if (result.canceled || !result.filePaths.length) return null;
-    // Shrink big photos so covers load instantly.
     const image = nativeImage.createFromPath(result.filePaths[0]);
     if (image.isEmpty()) throw new Error("That image couldn't be opened.");
     const { width, height } = image.getSize();
     const scaled = Math.max(width, height) > 512
       ? image.resize(width >= height ? { width: 512, quality: 'best' } : { height: 512, quality: 'best' })
       : image;
-    const bash = bashes.setCoverImage(id, scaled.toPNG(), 'png');
+    return scaled.toPNG().toString('base64');
+  });
+
+  ipcMain.handle('bashes:set-cover-data', (e, id, base64) => {
+    const bash = bashes.setCoverImage(id, Buffer.from(String(base64), 'base64'), 'png');
     bashesChanged(e.sender);
     return bash;
   });

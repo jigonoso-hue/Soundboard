@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('soundboard', {
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
   onHotkey: (callback) => ipcRenderer.on('hotkey:play', (_e, id) => callback(id)),
   readSound: (id) => ipcRenderer.invoke('sounds:read', id),
+  editor: {
+    setDirty: (dirty) => ipcRenderer.invoke('bash-editor:set-dirty', dirty),
+    onCloseRequested: (callback) => ipcRenderer.on('bash-editor:close-requested', () => callback()),
+  },
   tags: {
     list: () => ipcRenderer.invoke('tags:list'),
     add: (name) => ipcRenderer.invoke('tags:add', name),
@@ -24,8 +28,9 @@ contextBridge.exposeInMainWorld('soundboard', {
     update: (id, changes) => ipcRenderer.invoke('bashes:update', id, changes),
     duplicate: (id) => ipcRenderer.invoke('bashes:duplicate', id),
     remove: (id) => ipcRenderer.invoke('bashes:remove', id),
-    openEditor: (id) => ipcRenderer.invoke('bashes:open-editor', id),
-    chooseCover: (id) => ipcRenderer.invoke('bashes:choose-cover', id),
+    openEditor: (id, options) => ipcRenderer.invoke('bashes:open-editor', id, options),
+    pickCover: () => ipcRenderer.invoke('bashes:pick-cover'),
+    setCoverData: (id, base64) => ipcRenderer.invoke('bashes:set-cover-data', id, base64),
     coverData: (file) => ipcRenderer.invoke('bashes:cover-data', file),
     onChanged: (callback) => ipcRenderer.on('bashes:changed', (_e, list) => callback(list)),
   },

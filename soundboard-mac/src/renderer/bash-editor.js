@@ -45,18 +45,81 @@ function toast(message, isError = false) {
   toastTimer = setTimeout(() => el.classList.add('hidden'), 3000);
 }
 
-let saveTimer;
-function scheduleSave(extra = {}) {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    try {
-      // Don't adopt the response: the user may have kept editing meanwhile.
-      await api.bashes.update(bashId, { name: bash.name, clips: bash.clips, ...extra });
-    } catch (err) {
-      toast(`Couldn't save: ${err.message}`, true);
-    }
-  }, extra.cover ? 0 : 250);
+// ---------- Draft, Save and Close ----------
+// Edits stay in this window until Save; Close asks before throwing them away.
+
+const isNewBash = new URLSearchParams(location.search).get('new') === '1';
+let dirty = false;
+let everSaved = false;
+let pendingCover = null; // base64 PNG picked but not saved yet
+
+function markDirty() {
+  if (!dirty) {
+    dirty = true;
+    $('#dirty').classList.remove('hidden');
+    api.editor.setDirty(true);
+  }
 }
+
+async function save() {
+  try {
+    $('#save-btn').disabled = true;
+    const changes = { name: bash.name, clips: bash.clips };
+    if (!pendingCover && bash.cover.type === 'icon') changes.cover = bash.cover;
+    await api.bashes.update(bashId, changes);
+    if (pendingCover) await api.bashes.setCoverData(bashId, pendingCover);
+    dirty = false;
+    everSaved = true;
+    await api.editor.setDirty(false);
+    return true;
+  } catch (err) {
+    toast(`Couldn't save: ${String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`, true);
+    return false;
+  } finally {
+    $('#save-btn').disabled = false;
+  }
+}
+
+async function closeWindow() {
+  player.stop(false);
+  await api.editor.setDirty(false);
+  window.close();
+}
+
+async function discardAndClose() {
+  // A brand-new bash that was never saved shouldn't leave an empty card behind.
+  if (isNewBash && !everSaved) await api.bashes.remove(bashId);
+  await closeWindow();
+}
+
+async function saveAndClose() {
+  if (await save()) await closeWindow();
+}
+
+// Close button, ⌘W and the window's red button all come through here.
+async function requestClose() {
+  if (!dirty) {
+    if (isNewBash && !everSaved && !bash.clips.length) await api.bashes.remove(bashId);
+    await closeWindow();
+    return;
+  }
+  const dialog = $('#confirm-close');
+  $('#confirm-close-name').textContent = bash.name || 'this bash';
+  dialog.returnValue = '';
+  dialog.showModal();
+  const choice = await new Promise((resolve) => dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }));
+  if (choice === 'save') await saveAndClose();
+  else if (choice === 'discard') await discardAndClose();
+}
+
+$('#save-btn').addEventListener('click', saveAndClose);
+$('#close-btn').addEventListener('click', requestClose);
+let confirming = false;
+api.editor.onCloseRequested(async () => {
+  if (confirming) return;
+  confirming = true;
+  try { await requestClose(); } finally { confirming = false; }
+});
 
 async function loadInfo(sound) {
   if (info.has(sound.id)) return;
@@ -289,14 +352,14 @@ function addClip(soundId, offset, lane) {
   bash.clips.push(clip);
   selectedId = clip.id;
   loadInfo(sound);
-  scheduleSave();
+  markDirty();
   render();
 }
 
 function removeClip(id) {
   bash.clips = bash.clips.filter((c) => c.id !== id);
   if (selectedId === id) selectedId = null;
-  scheduleSave();
+  markDirty();
   render();
 }
 
@@ -363,7 +426,7 @@ function onDragEnd() {
   el.classList.remove('dragging');
   dragging = null;
   if (moved) {
-    scheduleSave();
+    markDirty();
     render();
   }
 }
@@ -410,7 +473,7 @@ $('#clip-offset').addEventListener('change', (e) => {
   if (!clip) return;
   if (!Number.isFinite(value)) { toast('Type a time like 1.5 or 0:01.5', true); renderInspector(); return; }
   clip.offset = Math.max(0, Math.round(value * 1000) / 1000);
-  scheduleSave();
+  markDirty();
   render();
 });
 
@@ -418,7 +481,7 @@ $('#clip-volume').addEventListener('input', (e) => {
   const clip = selectedClip();
   if (!clip) return;
   clip.volume = Number(e.target.value);
-  scheduleSave();
+  markDirty();
   const el = document.querySelector(`.clip[data-id="${clip.id}"] canvas`);
   if (el) drawWaveform(el, clip);
 });
@@ -428,7 +491,7 @@ $('#clip-zero').addEventListener('click', () => {
   const clip = selectedClip();
   if (!clip) return;
   clip.offset = 0;
-  scheduleSave();
+  markDirty();
   render();
 });
 
@@ -438,7 +501,7 @@ $('#clip-dup').addEventListener('click', () => {
   const copy = { ...clip, id: newId(), lane: bash.clips.reduce((max, c) => Math.max(max, c.lane + 1), 0) };
   bash.clips.push(copy);
   selectedId = copy.id;
-  scheduleSave();
+  markDirty();
   render();
 });
 
@@ -452,7 +515,7 @@ function updateRepeat() {
     const times = Math.floor(Number($('#clip-repeat-times').value) || 0);
     clip.repeat = { gap: Math.round(gap * 10) / 10, times: times >= 2 ? Math.min(999, times) : 0 };
   }
-  scheduleSave();
+  markDirty();
   render();
 }
 $('#clip-repeat').addEventListener('change', updateRepeat);
@@ -465,8 +528,8 @@ $('#clip-remove').addEventListener('click', () => { if (selectedId) removeClip(s
 
 $('#bash-name').addEventListener('input', (e) => {
   bash.name = e.target.value;
-  document.title = `Bash — ${bash.name || 'Untitled'}`;
-  scheduleSave();
+  document.title = `Edit Bash — ${bash.name || 'Untitled'}`;
+  markDirty();
 });
 
 $('#zoom').addEventListener('input', (e) => {
@@ -506,6 +569,8 @@ function animate() {
 player.onChange(() => { cancelAnimationFrame(raf); animate(); });
 
 document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveAndClose(); return; }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'w') { e.preventDefault(); requestClose(); return; }
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) && document.activeElement.type !== 'range' && document.activeElement.type !== 'checkbox';
   if (typing) return;
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
@@ -515,14 +580,14 @@ document.addEventListener('keydown', (e) => {
     const clip = selectedClip();
     const delta = (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 1 : 0.1);
     clip.offset = Math.max(0, Math.round((clip.offset + delta) * 1000) / 1000);
-    scheduleSave();
+    markDirty();
     render();
   }
   if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && selectedId) {
     e.preventDefault();
     const clip = selectedClip();
     clip.lane = Math.max(0, clip.lane + (e.key === 'ArrowUp' ? -1 : 1));
-    scheduleSave();
+    markDirty();
     render();
   }
   if (e.key === 'Escape') { select(null); hideCoverPopover(); }
@@ -531,7 +596,13 @@ document.addEventListener('keydown', (e) => {
 // ---------- Cover ----------
 
 function renderCoverButton() {
-  BashCommon.renderCover($('#cover-btn'), bash, api);
+  const el = $('#cover-btn');
+  if (pendingCover) {
+    el.textContent = '';
+    el.style.background = `center / cover no-repeat url("data:image/png;base64,${pendingCover}")`;
+    return;
+  }
+  BashCommon.renderCover(el, bash, api);
 }
 
 function showCoverPopover() {
@@ -564,10 +635,11 @@ function hideCoverPopover() {
 }
 
 function setIconCover(icon, color) {
+  pendingCover = null;
   bash.cover = { type: 'icon', icon, color };
   renderCoverButton();
   showCoverPopover();
-  scheduleSave({ cover: bash.cover });
+  markDirty();
 }
 
 $('#cover-btn').addEventListener('click', (e) => {
@@ -576,9 +648,10 @@ $('#cover-btn').addEventListener('click', (e) => {
 });
 $('#upload-cover').addEventListener('click', async () => {
   try {
-    const updated = await api.bashes.chooseCover(bashId);
-    if (updated) {
-      bash.cover = updated.cover;
+    const picked = await api.bashes.pickCover();
+    if (picked) {
+      pendingCover = picked;
+      markDirty();
       renderCoverButton();
       hideCoverPopover();
     }
@@ -610,8 +683,14 @@ async function reloadSounds() {
 api.onSoundsChanged(reloadSounds);
 api.bashes.onChanged((list) => {
   const updated = list.find((b) => b.id === bashId);
-  if (!updated || dragging) return;
-  // Another window changed this bash (e.g. a sound was deleted).
+  if (!updated) {
+    // Deleted from the main window.
+    api.editor.setDirty(false).then(() => window.close());
+    return;
+  }
+  // Another window changed this bash (e.g. a sound was deleted). Don't
+  // overwrite unsaved edits; Save will write the current draft.
+  if (dragging || dirty) return;
   bash = updated;
   if (selectedId && !bash.clips.some((c) => c.id === selectedId)) selectedId = null;
   renderCoverButton();
@@ -624,7 +703,7 @@ api.bashes.onChanged((list) => {
     document.body.innerHTML = '<p class="muted" style="padding:40px">This bash no longer exists.</p>';
     return;
   }
-  document.title = `Bash — ${bash.name}`;
+  document.title = `Edit Bash — ${bash.name}`;
   $('#bash-name').value = bash.name;
   pps = Number($('#zoom').value);
   renderCoverButton();

@@ -13,11 +13,16 @@
     <input id="bash-name" maxlength="80" aria-label="Bash name" placeholder="Bash name">
     <button id="play-btn" class="primary" title="Play from the playhead (Space)">▶ Play</button>
     <span id="time" class="mono muted">0:00.0 / 0:00.0</span>
+    <span id="dirty" class="dirty hidden" title="Click Save to keep your changes">● Unsaved changes</span>
     <span class="spacer"></span>
     <label class="muted" title="Zoom the timeline">Zoom <input id="zoom" type="range" min="15" max="400" step="1" value="80"></label>
     <label class="muted" title="Snap clips to 0.1s and to other clips' edges (hold ⌥ while dragging to turn off)">
       <input id="snap" type="checkbox" checked> Snap
     </label>
+    <span class="ed-actions">
+      <button id="close-btn" title="Close the editor (⌘W)">Close</button>
+      <button id="save-btn" class="primary" title="Save changes and close (⌘S)">Save</button>
+    </span>
   </header>
 
   <div class="ed-body">
@@ -66,6 +71,19 @@
     <div id="color-grid" class="swatches"></div>
     <button id="upload-cover">Upload image…</button>
   </div>
+
+  <dialog id="confirm-close">
+    <form method="dialog">
+      <h2>Save changes to “<span id="confirm-close-name"></span>”?</h2>
+      <p class="muted">If you don't save, your changes to this bash will be lost.</p>
+      <div class="dialog-actions">
+        <button value="discard" class="danger">Don't Save</button>
+        <span class="spacer"></span>
+        <button value="cancel">Keep Editing</button>
+        <button value="save" class="primary" autofocus>Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="hidden"></div>
 
