@@ -1,0 +1,75 @@
+import SwiftUI
+
+struct EditSoundView: View {
+    @State var sound: Sound
+    var onSave: (Sound) -> Void
+    var onDelete: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmDelete = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Name") {
+                    TextField("Name", text: $sound.name)
+                }
+                Section("Color") {
+                    HStack(spacing: 12) {
+                        ForEach(Palette.colors.indices, id: \.self) { index in
+                            Circle()
+                                .fill(Palette.colors[index])
+                                .frame(width: 32, height: 32)
+                                .overlay(Circle().stroke(.white, lineWidth: sound.colorIndex == index ? 3 : 0))
+                                .onTapGesture { sound.colorIndex = index }
+                                .accessibilityAddTraits(sound.colorIndex == index ? .isSelected : [])
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                Section("Volume") {
+                    HStack {
+                        Image(systemName: "speaker.fill").foregroundStyle(.secondary)
+                        Slider(value: $sound.volume, in: 0...1)
+                        Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
+                    }
+                }
+                if let source = sound.source {
+                    Section("From YouTube") {
+                        Text(source.title.isEmpty ? "YouTube video" : source.title)
+                        Text(source.full == true ? "Full audio" : "\(TimeText.format(source.start)) – \(TimeText.format(source.end))")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        if let url = URL(string: source.url) {
+                            Link("Open video", destination: url)
+                        }
+                    }
+                }
+                Section {
+                    Button("Delete Sound", role: .destructive) { confirmDelete = true }
+                }
+            }
+            .navigationTitle("Edit Sound")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(sound)
+                        dismiss()
+                    }
+                }
+            }
+            .confirmationDialog("Delete “\(sound.name)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+            } message: {
+                Text("This can't be undone.")
+            }
+        }
+    }
+}

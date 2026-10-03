@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' sound: blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+  <title>Soundboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <section id="board">
+      <header class="titlebar">
+        <h1>Soundboard</h1>
+        <div class="toolbar">
+          <input id="filter" type="search" placeholder="Filter sounds…">
+          <button id="add-btn" class="primary" title="Add audio files">+ Add Sounds</button>
+          <button id="toggle-yt" title="Show/hide the YouTube browser">▶ YouTube</button>
+        </div>
+      </header>
+
+      <div class="controls">
+        <label>Master <input id="master-volume" type="range" min="0" max="1" step="0.01" value="1"></label>
+        <label title="When on, a sound restarts instead of layering over itself">
+          <input id="no-overlap" type="checkbox"> Restart instead of overlap
+        </label>
+        <label>Output
+          <select id="output-device"><option value="">System default</option></select>
+        </label>
+        <button id="stop-all" class="danger">■ Stop All</button>
+      </div>
+
+      <section id="ambience">
+        <div class="amb-header">
+          <button id="amb-collapse" class="plain" title="Show/hide ambience layers">▾ Ambience</button>
+          <label class="muted">Volume <input id="amb-volume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+          <select id="amb-add" title="Add an ambience layer"><option value="">+ Add layer…</option></select>
+          <button id="amb-stop">Stop Ambience</button>
+        </div>
+        <div id="amb-layers" class="amb-layers"></div>
+      </section>
+
+      <section id="bashes">
+        <div class="bash-header">
+          <button id="bash-collapse" class="plain" title="Show/hide bashes">▾ Bashes</button>
+          <span class="muted small">Several sounds fired together with one click</span>
+          <button id="bash-new">+ New Bash</button>
+        </div>
+        <div id="bash-list" class="bash-list"></div>
+      </section>
+
+      <div id="empty" class="empty hidden">
+        <p>No sounds yet.</p>
+        <p>Drop audio files here, click <b>+ Add Sounds</b>, or open the <b>YouTube</b> browser to clip a sound from a video.</p>
+      </div>
+      <div id="grid" class="grid"></div>
+      <div id="drop-overlay" class="hidden">Drop audio files to add them</div>
+    </section>
+
+    <section id="browser" class="hidden">
+      <form id="yt-search" class="nav">
+        <button type="button" id="yt-back" title="Back">‹</button>
+        <button type="button" id="yt-forward" title="Forward">›</button>
+        <button type="button" id="yt-home" title="YouTube home">⌂</button>
+        <input id="yt-query" type="search" placeholder="Search YouTube or paste a video link…">
+        <button type="submit">Search</button>
+      </form>
+      <div id="webview-host"></div>
+
+      <div id="clipper">
+        <div class="clip-row">
+          <span id="clip-now" class="mono">0:00.0</span>
+          <button id="set-start" title="Use the current playback position as the start">Set Start</button>
+          <input id="clip-start" class="mono time" value="0:00.0" aria-label="Start time">
+          <span class="arrow">→</span>
+          <input id="clip-end" class="mono time" value="0:05.0" aria-label="End time">
+          <button id="set-end" title="Use the current playback position as the end">Set End</button>
+          <span id="clip-len" class="muted mono"></span>
+        </div>
+        <div class="clip-row">
+          <input id="clip-name" placeholder="Sound name (defaults to video title)">
+          <button id="preview-clip" title="Play the selected range in the video">Preview</button>
+          <button id="capture-clip" class="primary">✂ Create Sound</button>
+          <button id="cancel-capture" class="hidden">Cancel</button>
+          <button id="save-full" title="Download this video's whole audio track into your library">⬇ Save Full Audio</button>
+        </div>
+        <div id="clip-status" class="muted">Find a video, play it, then mark a start and end.</div>
+        <div class="progress"><div id="clip-progress"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <dialog id="edit-dialog">
+    <form method="dialog" id="edit-form">
+      <h2>Edit Sound</h2>
+      <label>Name <input id="edit-name" required maxlength="80"></label>
+      <label>Color
+        <div id="edit-colors" class="swatches"></div>
+      </label>
+      <label>Volume <input id="edit-volume" type="range" min="0" max="1" step="0.01"></label>
+      <label>Hotkey (works even when the app is in the background)
+        <div class="hotkey-row">
+          <input id="edit-hotkey" readonly placeholder="Click, then press e.g. ⌥⌘1">
+          <button type="button" id="clear-hotkey">Clear</button>
+        </div>
+      </label>
+      <p id="edit-source" class="muted small"></p>
+      <div class="dialog-actions">
+        <button type="button" id="edit-delete" class="danger">Delete</button>
+        <button type="button" id="edit-reveal">Show in Finder</button>
+        <button type="button" id="edit-ambience" title="Loop this sound as a background layer">Add to Ambience</button>
+        <select id="edit-bash" title="Add this sound to a bash"><option value="">Add to Bash…</option></select>
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="bash-menu" class="popup-menu hidden" role="menu">
+    <button data-action="edit" role="menuitem">Edit…</button>
+    <button data-action="duplicate" role="menuitem">Duplicate</button>
+    <button data-action="delete" role="menuitem" class="danger">Delete</button>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script src="audio-utils.js"></script>
+  <script src="app.js"></script>
+  <script src="ambience.js"></script>
+  <script src="bash-common.js"></script>
+  <script src="bashes-board.js"></script>
+</body>
+</html>

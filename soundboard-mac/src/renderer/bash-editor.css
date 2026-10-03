@@ -1,0 +1,161 @@
+/* Bash editor window */
+
+body.editor { display: flex; flex-direction: column; height: 100vh; }
+
+.ed-top {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 12px 84px;
+  border-bottom: 1px solid var(--border);
+}
+.ed-top > * { -webkit-app-region: no-drag; }
+.ed-top .spacer { flex: 1; -webkit-app-region: drag; }
+.ed-top label { display: flex; align-items: center; gap: 6px; }
+#bash-name { font-size: 16px; font-weight: 600; width: 260px; }
+#time { min-width: 130px; }
+
+.ed-cover {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  padding: 0;
+  border: 1px solid var(--border);
+  flex: none;
+}
+.ed-cover .cover-icon { font-size: 26px; }
+
+.ed-body { flex: 1; display: flex; min-height: 0; }
+
+.ed-library {
+  width: 240px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.lib-list { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.lib-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: grab;
+}
+.lib-row:hover { background: var(--panel-2); }
+.lib-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-row button { padding: 2px 9px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+
+.ed-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.timeline { flex: 1; overflow: auto; position: relative; background: #101017; }
+.timeline-content { position: relative; min-height: 100%; }
+
+.ruler {
+  position: sticky;
+  top: 0;
+  height: 26px;
+  z-index: 3;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid #3a3a4c;
+  padding: 5px 0 0 4px;
+  font-size: 10px;
+  color: var(--muted);
+  font-family: ui-monospace, Menlo, monospace;
+  pointer-events: none;
+}
+
+.lanes { position: relative; }
+.lane { position: absolute; left: 0; right: 0; border-bottom: 1px solid #1f1f2b; }
+.lane:nth-child(even) { background: rgba(255, 255, 255, 0.015); }
+
+.clip {
+  --clip-color: var(--accent);
+  position: absolute;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--clip-color) 38%, #16161f);
+  border: 1px solid color-mix(in srgb, var(--clip-color) 70%, transparent);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  z-index: 1;
+}
+.clip canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+.clip.selected { box-shadow: 0 0 0 2px #fff; z-index: 2; }
+.clip.dragging { cursor: grabbing; opacity: 0.85; z-index: 4; }
+.clip-label {
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  right: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+.clip-vol {
+  position: absolute;
+  right: 6px;
+  bottom: 3px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+}
+
+.playhead {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #6ee7b7;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.inspector {
+  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+}
+#inspector-clip { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#inspector-clip.hidden { display: none; }
+#inspector-clip label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.time { width: 86px; text-align: center; }
+
+.popover {
+  position: fixed;
+  top: 74px;
+  left: 84px;
+  z-index: 20;
+  width: 300px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.icon-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.icon-choice { padding: 4px 0; font-size: 18px; background: none; border: 1px solid transparent; }
+.icon-choice.selected { border-color: var(--accent); background: var(--panel-2); }

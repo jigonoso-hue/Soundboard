@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' sound: blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+  <title>Bash</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="bash-editor.css">
+</head>
+<body class="editor">
+  <header class="ed-top">
+    <button id="cover-btn" class="ed-cover bash-cover" title="Change the cover"></button>
+    <input id="bash-name" maxlength="80" aria-label="Bash name" placeholder="Bash name">
+    <button id="play-btn" class="primary" title="Play from the playhead (Space)">▶ Play</button>
+    <span id="time" class="mono muted">0:00.0 / 0:00.0</span>
+    <span class="spacer"></span>
+    <label class="muted" title="Zoom the timeline">Zoom <input id="zoom" type="range" min="15" max="400" step="1" value="80"></label>
+    <label class="muted" title="Snap clips to 0.1s and to other clips' edges (hold ⌥ while dragging to turn off)">
+      <input id="snap" type="checkbox" checked> Snap
+    </label>
+  </header>
+
+  <div class="ed-body">
+    <aside class="ed-library">
+      <input id="lib-filter" type="search" placeholder="Filter sounds…">
+      <p class="muted small">Click <b>+</b> to add a sound, or drag it onto the timeline.</p>
+      <div id="lib-list" class="lib-list"></div>
+    </aside>
+
+    <main class="ed-main">
+      <div id="timeline" class="timeline">
+        <div id="content" class="timeline-content">
+          <div id="ruler" class="ruler"></div>
+          <div id="lanes" class="lanes"></div>
+          <div id="playhead" class="playhead"></div>
+        </div>
+      </div>
+
+      <div id="inspector" class="inspector">
+        <div id="inspector-empty" class="muted">
+          Select a clip to edit it. Drag clips <b>left/right</b> to change when they start and <b>up/down</b> to move them between layers.
+          Click the ruler to move the playhead. Space plays, Delete removes, ←/→ nudge.
+        </div>
+        <div id="inspector-clip" class="hidden">
+          <span id="clip-color" class="dot"></span>
+          <b id="clip-name"></b>
+          <label>Starts at <input id="clip-offset" class="mono time" aria-label="Start time"></label>
+          <label>Volume <input id="clip-volume" type="range" min="0" max="1" step="0.01"></label>
+          <button id="clip-zero" title="Start this clip with the bash">Start at 0</button>
+          <button id="clip-dup" title="Duplicate this clip on a new layer">Duplicate</button>
+          <button id="clip-remove" class="danger">Remove</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="cover-popover" class="popover hidden">
+    <div class="muted small">Icon</div>
+    <div id="icon-grid" class="icon-grid"></div>
+    <div class="muted small">Color</div>
+    <div id="color-grid" class="swatches"></div>
+    <button id="upload-cover">Upload image…</button>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script src="audio-utils.js"></script>
+  <script src="bash-common.js"></script>
+  <script src="bash-editor.js"></script>
+</body>
+</html>

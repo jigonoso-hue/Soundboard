@@ -1,0 +1,29 @@
+{
+  "name": "clipboard-soundboard",
+  "productName": "Soundboard",
+  "version": "1.0.0",
+  "description": "A Mac soundboard with your own sounds and a built-in YouTube browser for clipping new ones.",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac",
+    "test": "node --test"
+  },
+  "build": {
+    "appId": "com.local.soundboard",
+    "productName": "Soundboard",
+    "files": ["src/**/*", "package.json"],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Soundboard does not record your microphone; this is only required by macOS for audio output device selection."
+      }
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  }
+}

@@ -1,0 +1,579 @@
+/* global AudioUtils */
+const api = window.soundboard;
+const $ = (sel) => document.querySelector(sel);
+
+const COLORS = ['#ff5d73', '#ffb347', '#ffe156', '#6ee7b7', '#5ec8ff', '#8b8cff', '#d58bff', '#ff8fd1'];
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'flac', 'webm', 'aiff', 'aif', 'caf', 'mp4'];
+const MAX_CLIP_SECONDS = 300;
+const YOUTUBE_HOME = 'https://www.youtube.com/';
+
+const prefs = loadPrefs();
+let sounds = [];
+const playing = new Map(); // sound id -> Set<HTMLAudioElement>
+
+// ---------- Preferences (per-machine conveniences) ----------
+
+function loadPrefs() {
+  const defaults = { master: 1, noOverlap: false, outputDevice: '', browserOpen: false };
+  try { return { ...defaults, ...JSON.parse(localStorage.getItem('prefs') || '{}') }; } catch { return defaults; }
+}
+function savePrefs() {
+  try { localStorage.setItem('prefs', JSON.stringify(prefs)); } catch { /* ignore */ }
+}
+
+// ---------- Toasts ----------
+
+let toastTimer;
+function toast(message, isError = false) {
+  const el = $('#toast');
+  el.textContent = message;
+  el.classList.toggle('error', isError);
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+// ---------- Playback ----------
+
+function soundUrl(sound) {
+  return `sound://local/${encodeURIComponent(sound.file)}`;
+}
+
+function play(id) {
+  const sound = sounds.find((s) => s.id === id);
+  if (!sound) return;
+  if (prefs.noOverlap) stop(id);
+  const audio = new Audio(soundUrl(sound));
+  audio.volume = Math.min(1, sound.volume * prefs.master);
+  if (prefs.outputDevice && audio.setSinkId) audio.setSinkId(prefs.outputDevice).catch(() => {});
+  let set = playing.get(id);
+  if (!set) playing.set(id, (set = new Set()));
+  set.add(audio);
+  const done = () => {
+    set.delete(audio);
+    if (!set.size) playing.delete(id);
+    updateTile(id);
+  };
+  audio.addEventListener('ended', done);
+  audio.addEventListener('error', () => { done(); toast(`Couldn't play “${sound.name}”.`, true); });
+  audio.addEventListener('timeupdate', () => updateTile(id, audio));
+  audio.play().catch(done);
+  updateTile(id, audio);
+}
+
+function stop(id) {
+  const set = playing.get(id);
+  if (!set) return;
+  for (const audio of set) { audio.pause(); audio.src = ''; }
+  playing.delete(id);
+  updateTile(id);
+}
+
+function stopAll() {
+  for (const id of [...playing.keys()]) stop(id);
+}
+
+function updateTile(id, audio) {
+  const tile = document.querySelector(`.tile[data-id="${id}"]`);
+  if (!tile) return;
+  const isPlaying = playing.has(id);
+  tile.classList.toggle('playing', isPlaying);
+  const bar = tile.querySelector('.tile-progress');
+  if (!isPlaying) bar.style.width = '0';
+  else if (audio && audio.duration) bar.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
+}
+
+// ---------- Board rendering ----------
+
+function render() {
+  const grid = $('#grid');
+  const filter = $('#filter').value.trim().toLowerCase();
+  grid.textContent = '';
+  const visible = sounds.filter((s) => !filter || s.name.toLowerCase().includes(filter));
+  for (const sound of visible) grid.appendChild(makeTile(sound));
+  $('#empty').classList.toggle('hidden', sounds.length > 0);
+  if (typeof Ambience !== 'undefined') Ambience.syncSounds();
+  if (typeof Bashes !== 'undefined') Bashes.render();
+}
+
+function makeTile(sound) {
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  tile.dataset.id = sound.id;
+  tile.style.setProperty('--tile-color', sound.color);
+  tile.draggable = true;
+  tile.tabIndex = 0;
+  tile.title = 'Click to play · ⌥-click to stop · right-click to edit';
+
+  const name = document.createElement('div');
+  name.className = 'tile-name';
+  name.textContent = sound.name;
+  tile.appendChild(name);
+
+  if (sound.hotkey) {
+    const key = document.createElement('div');
+    key.className = 'tile-hotkey';
+    key.textContent = prettyAccelerator(sound.hotkey);
+    tile.appendChild(key);
+  }
+
+  const edit = document.createElement('button');
+  edit.className = 'tile-edit';
+  edit.textContent = '⋯';
+  edit.title = 'Edit';
+  edit.addEventListener('click', (e) => { e.stopPropagation(); openEditor(sound.id); });
+  tile.appendChild(edit);
+
+  const progress = document.createElement('div');
+  progress.className = 'tile-progress';
+  tile.appendChild(progress);
+
+  tile.addEventListener('click', (e) => (e.altKey ? stop(sound.id) : play(sound.id)));
+  tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
+  tile.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
+
+  // Drag to reorder.
+  tile.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('application/x-sound-id', sound.id);
+    e.dataTransfer.effectAllowed = 'move';
+    tile.classList.add('dragging');
+  });
+  tile.addEventListener('dragend', () => tile.classList.remove('dragging'));
+  tile.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('application/x-sound-id')) { e.preventDefault(); tile.classList.add('drop-target'); }
+  });
+  tile.addEventListener('dragleave', () => tile.classList.remove('drop-target'));
+  tile.addEventListener('drop', (e) => {
+    const draggedId = e.dataTransfer.getData('application/x-sound-id');
+    tile.classList.remove('drop-target');
+    if (!draggedId || draggedId === sound.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ids = sounds.map((s) => s.id).filter((id) => id !== draggedId);
+    ids.splice(ids.indexOf(sound.id), 0, draggedId);
+    sounds = ids.map((id) => sounds.find((s) => s.id === id));
+    api.reorder(ids);
+    render();
+  });
+
+  if (playing.has(sound.id)) tile.classList.add('playing');
+  return tile;
+}
+
+let soundsLoaded = false;
+
+async function refresh() {
+  sounds = await api.list();
+  soundsLoaded = true;
+  render();
+}
+
+// ---------- Adding sounds ----------
+
+$('#add-btn').addEventListener('click', async () => {
+  const added = await api.importDialog();
+  if (added.length) {
+    await refresh();
+    toast(`Added ${added.length} sound${added.length > 1 ? 's' : ''}.`);
+  }
+});
+
+let dragDepth = 0;
+const board = $('#board');
+board.addEventListener('dragenter', (e) => {
+  if (!e.dataTransfer.types.includes('Files')) return;
+  dragDepth++;
+  $('#drop-overlay').classList.remove('hidden');
+});
+board.addEventListener('dragleave', (e) => {
+  if (!e.dataTransfer.types.includes('Files')) return;
+  if (--dragDepth <= 0) { dragDepth = 0; $('#drop-overlay').classList.add('hidden'); }
+});
+board.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); });
+board.addEventListener('drop', async (e) => {
+  if (!e.dataTransfer.files.length) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $('#drop-overlay').classList.add('hidden');
+  let count = 0;
+  for (const file of e.dataTransfer.files) {
+    const dot = file.name.lastIndexOf('.');
+    const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : '';
+    if (!AUDIO_EXTENSIONS.includes(ext)) { toast(`Skipped ${file.name} (not an audio file).`, true); continue; }
+    await api.add({ name: file.name.slice(0, dot), data: await file.arrayBuffer(), ext });
+    count++;
+  }
+  if (count) { await refresh(); toast(`Added ${count} sound${count > 1 ? 's' : ''}.`); }
+});
+
+// ---------- Controls ----------
+
+$('#filter').addEventListener('input', render);
+$('#stop-all').addEventListener('click', stopAll);
+
+const master = $('#master-volume');
+master.value = prefs.master;
+master.addEventListener('input', () => {
+  prefs.master = Number(master.value);
+  savePrefs();
+  for (const [id, set] of playing) {
+    const sound = sounds.find((s) => s.id === id);
+    for (const audio of set) audio.volume = Math.min(1, (sound ? sound.volume : 1) * prefs.master);
+  }
+});
+
+const noOverlap = $('#no-overlap');
+noOverlap.checked = prefs.noOverlap;
+noOverlap.addEventListener('change', () => { prefs.noOverlap = noOverlap.checked; savePrefs(); });
+
+async function loadOutputDevices() {
+  const select = $('#output-device');
+  let devices = [];
+  try { devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput'); } catch { /* ignore */ }
+  select.length = 1;
+  devices.filter((d) => d.deviceId !== 'default').forEach((d, i) => {
+    const opt = document.createElement('option');
+    opt.value = d.deviceId;
+    opt.textContent = d.label || `Output ${i + 1}`;
+    select.appendChild(opt);
+  });
+  select.value = [...select.options].some((o) => o.value === prefs.outputDevice) ? prefs.outputDevice : '';
+}
+$('#output-device').addEventListener('change', (e) => {
+  prefs.outputDevice = e.target.value;
+  savePrefs();
+  Ambience.setOutputDevice(prefs.outputDevice);
+});
+navigator.mediaDevices?.addEventListener?.('devicechange', loadOutputDevices);
+
+document.addEventListener('keydown', (e) => {
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName);
+  if (e.key === 'Escape' && !typing && !$('#edit-dialog').open) stopAll();
+  if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); $('#filter').focus(); }
+});
+
+api.onHotkey(play);
+
+// ---------- Edit dialog ----------
+
+const dialog = $('#edit-dialog');
+let editingId = null;
+let editColor = null;
+let editHotkey = null;
+
+function openEditor(id) {
+  const sound = sounds.find((s) => s.id === id);
+  if (!sound) return;
+  editingId = id;
+  editColor = sound.color;
+  editHotkey = sound.hotkey;
+  $('#edit-name').value = sound.name;
+  $('#edit-volume').value = sound.volume;
+  $('#edit-hotkey').value = editHotkey ? prettyAccelerator(editHotkey) : '';
+  const swatches = $('#edit-colors');
+  swatches.textContent = '';
+  for (const color of COLORS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'swatch' + (color === editColor ? ' selected' : '');
+    b.style.background = color;
+    b.addEventListener('click', () => {
+      editColor = color;
+      swatches.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('selected', s === b));
+    });
+    swatches.appendChild(b);
+  }
+  const src = sound.source;
+  $('#edit-source').textContent = !src || !src.title ? ''
+    : src.full ? `Full audio of “${src.title}”`
+    : `Clipped from “${src.title}” (${AudioUtils.formatTime(src.start)}–${AudioUtils.formatTime(src.end)})`;
+  dialog.showModal();
+}
+
+dialog.addEventListener('close', async () => {
+  if (dialog.returnValue !== 'save' || !editingId) return;
+  const result = await api.update(editingId, {
+    name: $('#edit-name').value,
+    color: editColor,
+    volume: Number($('#edit-volume').value),
+    hotkey: editHotkey,
+  });
+  sounds = result.sounds;
+  render();
+  if (result.failedHotkeys.length) toast(`Hotkey ${result.failedHotkeys.map(prettyAccelerator).join(', ')} is already used by another app.`, true);
+});
+
+$('#edit-delete').addEventListener('click', async () => {
+  const sound = sounds.find((s) => s.id === editingId);
+  if (!sound || !confirm(`Delete “${sound.name}”? This can't be undone.`)) return;
+  stop(editingId);
+  await api.remove(editingId);
+  dialog.close('deleted');
+  await refresh();
+});
+
+$('#edit-reveal').addEventListener('click', () => api.reveal(editingId));
+$('#edit-ambience').addEventListener('click', () => {
+  Ambience.addSoundLayer(editingId);
+  dialog.close('ambience');
+});
+$('#clear-hotkey').addEventListener('click', () => { editHotkey = null; $('#edit-hotkey').value = ''; });
+
+$('#edit-hotkey').addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') return;
+  e.preventDefault();
+  if (e.key === 'Escape') { e.stopPropagation(); $('#edit-hotkey').blur(); return; }
+  if (e.key === 'Backspace' || e.key === 'Delete') { editHotkey = null; e.target.value = ''; return; }
+  const accel = acceleratorFromEvent(e);
+  if (accel === undefined) return; // just a modifier so far
+  if (accel === null) { toast('Hotkeys need at least one of ⌘ ⌥ ⌃ (or use an F-key).', true); return; }
+  editHotkey = accel;
+  e.target.value = prettyAccelerator(accel);
+});
+
+// Builds an Electron accelerator string. Returns undefined for a lone
+// modifier, null when the combo would hijack normal typing.
+function acceleratorFromEvent(e) {
+  if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return undefined;
+  let key = null;
+  const code = e.code;
+  if (/^Key[A-Z]$/.test(code)) key = code.slice(3);
+  else if (/^Digit\d$/.test(code)) key = code.slice(5);
+  else if (/^Numpad\d$/.test(code)) key = 'num' + code.slice(6);
+  else if (/^F\d{1,2}$/.test(code)) key = code;
+  else {
+    key = {
+      Space: 'Space', Enter: 'Enter', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+      Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'",
+      Comma: ',', Period: '.', Slash: '/', Backslash: '\\', Backquote: '`', Home: 'Home', End: 'End',
+      PageUp: 'PageUp', PageDown: 'PageDown',
+    }[code] || null;
+  }
+  if (!key) return undefined;
+  const mods = [];
+  if (e.metaKey) mods.push('Command');
+  if (e.ctrlKey) mods.push('Control');
+  if (e.altKey) mods.push('Alt');
+  if (e.shiftKey) mods.push('Shift');
+  const isFKey = /^F\d{1,2}$/.test(key);
+  if (!isFKey && !mods.some((m) => m !== 'Shift')) return null;
+  return [...mods, key].join('+');
+}
+
+function prettyAccelerator(accel) {
+  const symbols = { Command: '⌘', Control: '⌃', Alt: '⌥', Shift: '⇧', Up: '↑', Down: '↓', Left: '←', Right: '→', Space: '␣', Enter: '↩' };
+  return accel.split('+').map((p) => symbols[p] || p.replace(/^num/, 'Num')).join('');
+}
+
+// ---------- YouTube browser & clipper ----------
+
+let webview = null;
+let ytReady = false;
+let ytState = { hasVideo: false };
+let capturing = false;
+let stateTimer = null;
+
+function setBrowserOpen(open) {
+  prefs.browserOpen = open;
+  savePrefs();
+  $('#browser').classList.toggle('hidden', !open);
+  $('#toggle-yt').classList.toggle('active', open);
+  if (open && !webview) createWebview();
+  clearInterval(stateTimer);
+  if (open) stateTimer = setInterval(pollState, 200);
+}
+
+function createWebview() {
+  webview = document.createElement('webview');
+  webview.setAttribute('partition', 'persist:youtube');
+  webview.setAttribute('src', YOUTUBE_HOME);
+  webview.setAttribute('allowpopups', '');
+  $('#webview-host').appendChild(webview);
+  webview.addEventListener('dom-ready', () => { ytReady = true; });
+  webview.addEventListener('did-start-navigation', (e) => { if (e.isMainFrame) ytReady = false; });
+  webview.addEventListener('did-navigate-in-page', () => { ytReady = true; });
+  webview.addEventListener('ipc-message', onWebviewMessage);
+}
+
+function pollState() {
+  if (webview && ytReady && !capturing) {
+    try { webview.send('yt:state', 0); } catch { /* not attached yet */ }
+  }
+}
+
+function onWebviewMessage(e) {
+  const [first, second] = e.args;
+  switch (e.channel) {
+    case 'yt:state':
+      ytState = second;
+      $('#clip-now').textContent = ytState.hasVideo ? AudioUtils.formatTime(ytState.currentTime) : '–:––';
+      break;
+    case 'yt:progress': {
+      const pct = ((first.current - first.start) / (first.end - first.start)) * 100;
+      $('#clip-progress').style.width = `${Math.max(0, Math.min(100, pct))}%`;
+      $('#clip-now').textContent = AudioUtils.formatTime(first.current);
+      break;
+    }
+    case 'yt:captured':
+      finishCapture(first).catch((err) => captureFailed(err.message || String(err)));
+      break;
+    case 'yt:error':
+      captureFailed(first);
+      break;
+  }
+}
+
+$('#toggle-yt').addEventListener('click', () => setBrowserOpen($('#browser').classList.contains('hidden')));
+$('#yt-back').addEventListener('click', () => webview?.canGoBack() && webview.goBack());
+$('#yt-forward').addEventListener('click', () => webview?.canGoForward() && webview.goForward());
+$('#yt-home').addEventListener('click', () => webview?.loadURL(YOUTUBE_HOME));
+
+$('#yt-search').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = $('#yt-query').value.trim();
+  if (!q || !webview) return;
+  const isLink = /^(https?:\/\/)?((www|m|music)\.)?(youtube\.com|youtu\.be)\//i.test(q);
+  const url = isLink
+    ? (q.startsWith('http') ? q : `https://${q}`)
+    : `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+  webview.loadURL(url);
+});
+
+function readRange() {
+  const start = AudioUtils.parseTime($('#clip-start').value);
+  const end = AudioUtils.parseTime($('#clip-end').value);
+  return { start, end };
+}
+
+function updateClipLength() {
+  const { start, end } = readRange();
+  const valid = Number.isFinite(start) && Number.isFinite(end) && end > start;
+  $('#clip-len').textContent = valid ? `${(end - start).toFixed(1)}s` : 'invalid range';
+  $('#clip-len').classList.toggle('error-text', !valid);
+}
+
+function setMark(which) {
+  if (!ytState.hasVideo) { toast('Open and play a YouTube video first.', true); return; }
+  const input = $(which === 'start' ? '#clip-start' : '#clip-end');
+  input.value = AudioUtils.formatTime(ytState.currentTime);
+  if (which === 'start') {
+    const { start, end } = readRange();
+    if (!(end > start)) $('#clip-end').value = AudioUtils.formatTime(start + 3);
+  }
+  updateClipLength();
+}
+
+$('#set-start').addEventListener('click', () => setMark('start'));
+$('#set-end').addEventListener('click', () => setMark('end'));
+$('#clip-start').addEventListener('input', updateClipLength);
+$('#clip-end').addEventListener('input', updateClipLength);
+
+$('#preview-clip').addEventListener('click', () => {
+  const { start, end } = readRange();
+  if (!webview || !ytState.hasVideo || !(end > start)) return;
+  webview.send('yt:preview', { start, end });
+});
+
+$('#capture-clip').addEventListener('click', () => {
+  const { start, end } = readRange();
+  if (!webview || !ytState.hasVideo) { toast('Open a YouTube video first.', true); return; }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !(end > start)) { toast('Set a valid start and end time.', true); return; }
+  if (end - start > MAX_CLIP_SECONDS) { toast(`Clips can be at most ${MAX_CLIP_SECONDS / 60} minutes long.`, true); return; }
+  if (ytState.duration && start >= ytState.duration) { toast('The start time is past the end of the video.', true); return; }
+  capturing = true;
+  setCaptureUi(true, `Recording ${AudioUtils.formatTime(start)} → ${AudioUtils.formatTime(end)}… (plays in real time)`);
+  webview.send('yt:capture', { start, end });
+});
+
+$('#cancel-capture').addEventListener('click', () => webview?.send('yt:cancel'));
+
+function setCaptureUi(active, status) {
+  $('#capture-clip').disabled = active;
+  $('#preview-clip').disabled = active;
+  $('#set-start').disabled = active;
+  $('#set-end').disabled = active;
+  $('#save-full').disabled = active;
+  $('#cancel-capture').classList.toggle('hidden', !active);
+  $('#clip-status').textContent = status;
+  $('#clip-status').classList.remove('error-text');
+  if (!active) $('#clip-progress').style.width = '0';
+}
+
+function captureFailed(message) {
+  capturing = false;
+  setCaptureUi(false, message);
+  $('#clip-status').classList.add('error-text');
+}
+
+async function finishCapture({ data, trimStart, trimEnd, title, url }) {
+  $('#clip-status').textContent = 'Processing…';
+  const ctx = new AudioContext();
+  let decoded;
+  try {
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    decoded = await ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  } finally {
+    ctx.close();
+  }
+  const channels = [];
+  for (let c = 0; c < decoded.numberOfChannels; c++) channels.push(decoded.getChannelData(c));
+  const trimmed = AudioUtils.trimChannels(channels, decoded.sampleRate, trimStart, trimEnd);
+  if (!trimmed[0].length) throw new Error('The captured clip was empty.');
+  const wav = AudioUtils.encodeWav(trimmed, decoded.sampleRate);
+
+  const { start, end } = readRange();
+  const name = $('#clip-name').value.trim() || title || 'YouTube clip';
+  const sound = await api.add({ name, data: wav, ext: 'wav', source: { title, url, start, end } });
+  capturing = false;
+  setCaptureUi(false, `Saved “${sound.name}” (${(trimmed[0].length / decoded.sampleRate).toFixed(1)}s).`);
+  $('#clip-name').value = '';
+  await refresh();
+  const tile = document.querySelector(`.tile[data-id="${sound.id}"]`);
+  if (tile) { tile.scrollIntoView({ block: 'nearest' }); tile.classList.add('new'); }
+}
+
+// ---------- Full audio download ----------
+
+let downloadJob = null;
+
+$('#save-full').addEventListener('click', async () => {
+  if (downloadJob) {
+    api.cancelDownload(downloadJob);
+    return;
+  }
+  if (!ytState.hasVideo || !ytState.url) { toast('Open a YouTube video first.', true); return; }
+  const jobId = `dl-${Date.now()}`;
+  downloadJob = jobId;
+  setDownloadUi(true, 'Starting download…');
+  try {
+    const sound = await api.downloadAudio(jobId, ytState.url);
+    setDownloadUi(false, `Saved full audio “${sound.name}”.`);
+    await refresh();
+  } catch (err) {
+    setDownloadUi(false, String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), true);
+  } finally {
+    downloadJob = null;
+  }
+});
+
+api.onDownloadProgress((jobId, progress) => {
+  if (jobId !== downloadJob) return;
+  const pct = Number.isFinite(progress.percent) ? ` ${progress.percent.toFixed(0)}%` : '';
+  $('#clip-status').textContent = `${progress.message}${pct}`;
+  if (Number.isFinite(progress.percent)) $('#clip-progress').style.width = `${progress.percent}%`;
+});
+
+function setDownloadUi(active, status, isError = false) {
+  $('#save-full').textContent = active ? 'Cancel Download' : '⬇ Save Full Audio';
+  $('#capture-clip').disabled = active;
+  $('#clip-status').textContent = status;
+  $('#clip-status').classList.toggle('error-text', isError);
+  if (!active) $('#clip-progress').style.width = '0';
+}
+
+// ---------- Startup ----------
+
+updateClipLength();
+setBrowserOpen(prefs.browserOpen);
+loadOutputDevices();
+refresh();
