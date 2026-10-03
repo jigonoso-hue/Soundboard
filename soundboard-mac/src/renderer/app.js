@@ -120,16 +120,10 @@ const isFull = (sound) => sound.kind === 'full';
 
 // Applies search, tag filters and sort; returns { clips, full }.
 function filteredSounds() {
-  const search = $('#filter').value.trim().toLowerCase();
-  const tags = prefs.tagFilter;
   const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
   let list = sounds.filter((s) => {
-    if (kit && !kit.items.some((i) => i.type === 'sound' && i.id === s.id)) return false;
-    if (search && !s.name.toLowerCase().includes(search) && !(s.tags || []).some((t) => t.includes(search))) return false;
-    if (!tags.length) return true;
-    const own = s.tags || [];
-    const matches = (tag) => (tag === UNTAGGED ? own.length === 0 : own.includes(tag));
-    return prefs.tagMode === 'all' ? tags.every(matches) : tags.some(matches);
+    if (kit) return false; // kits draw their own board
+    return matchesFilters(s);
   });
   if (prefs.sort === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
   if (prefs.sort === 'newest') list = [...list].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -138,6 +132,17 @@ function filteredSounds() {
 }
 
 const UNTAGGED = '__untagged__';
+
+// Search box + tag filters, shared by the library and scene kit boards.
+function matchesFilters(s) {
+  const search = $('#filter').value.trim().toLowerCase();
+  const tags = prefs.tagFilter;
+  if (search && !s.name.toLowerCase().includes(search) && !(s.tags || []).some((t) => t.includes(search))) return false;
+  if (!tags.length) return true;
+  const own = s.tags || [];
+  const matches = (tag) => (tag === UNTAGGED ? own.length === 0 : own.includes(tag));
+  return prefs.tagMode === 'all' ? tags.every(matches) : tags.some(matches);
+}
 
 function render() {
   const view = prefs.view;
@@ -170,12 +175,7 @@ function render() {
   // Which blocks the current view shows. A scene kit shows all three, limited to its items.
   const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
   if (kit) {
-    const inKit = (type) => kit.items.some((i) => i.type === type);
-    const kitSounds = sounds.filter((s) => kit.items.some((i) => i.type === 'sound' && i.id === s.id));
-    $('#bashes').classList.toggle('hidden', !inKit('bash'));
-    $('#clips-block').classList.toggle('hidden', !kitSounds.some((s) => !isFull(s)));
-    $('#full-block').classList.toggle('hidden', !kitSounds.some(isFull));
-    $('#empty').classList.add('hidden');
+    for (const id of ['#bashes', '#clips-block', '#full-block', '#empty']) $(id).classList.add('hidden');
   } else {
     $('#bashes').classList.toggle('hidden', !(view === 'all' || view === 'bashes'));
     $('#clips-block').classList.toggle('hidden', !(view === 'all' || view === 'clips') || !sounds.length);
@@ -183,7 +183,7 @@ function render() {
     $('#empty').classList.toggle('hidden', sounds.length > 0 || view === 'bashes');
   }
   $('#bash-new').classList.toggle('hidden', !!kit);
-  if (typeof Kits !== 'undefined') { Kits.renderSidebar(); Kits.renderHeader(); }
+  if (typeof Kits !== 'undefined') { Kits.renderSidebar(); Kits.renderHeader(); Kits.renderBoard(); }
 
   for (const btn of document.querySelectorAll('.side-nav .view-btn')) btn.classList.toggle('active', btn.dataset.view === view);
   document.querySelector('[data-count="all"]').textContent = sounds.length;
@@ -322,7 +322,7 @@ function tagLine(sound, max) {
 }
 
 // Full sounds: a row with play button, name, tags, timer and progress.
-function makeTrack(sound) {
+function makeTrack(sound, { reorder = true } = {}) {
   const row = document.createElement('div');
   row.className = 'track';
   row.dataset.soundId = sound.id;
@@ -371,27 +371,15 @@ function makeTrack(sound) {
   progress.className = 'tile-progress';
 
   row.append(playBtn, info, meta, edit, progress);
-  addKitRemove(row, sound);
   row.addEventListener('click', () => play(sound.id));
   row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
-  addReorder(row, sound);
+  if (reorder) addReorder(row, sound);
   if (playing.has(sound.id)) {
     row.classList.add('playing');
     playBtn.textContent = '■';
   }
   return row;
-}
-
-// While viewing a scene kit, each sound gets a small button to take it out of the kit.
-function addKitRemove(el, sound) {
-  if (typeof Kits === 'undefined' || !Kits.activeKit()) return;
-  const btn = document.createElement('button');
-  btn.className = 'kit-remove';
-  btn.textContent = '−';
-  btn.title = `Remove from this scene kit (stays in your library)`;
-  btn.addEventListener('click', (e) => { e.stopPropagation(); Kits.removeFromActive('sound', sound.id); });
-  el.appendChild(btn);
 }
 
 // Drag a tile or row onto another of the same kind to reorder.
@@ -422,7 +410,7 @@ function addReorder(el, sound) {
   });
 }
 
-function makeTile(sound) {
+function makeTile(sound, { reorder = true } = {}) {
   const tile = document.createElement('div');
   tile.className = 'tile';
   tile.dataset.id = sound.id;
@@ -480,9 +468,8 @@ function makeTile(sound) {
   tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
   tile.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
 
-  addReorder(tile, sound);
+  if (reorder) addReorder(tile, sound);
 
-  addKitRemove(tile, sound);
   if (playing.has(sound.id)) tile.classList.add('playing');
   return tile;
 }

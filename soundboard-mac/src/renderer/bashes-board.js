@@ -18,8 +18,9 @@ const Bashes = (() => {
     host.classList.toggle('hidden', collapsed);
     $('#bash-collapse').textContent = `${collapsed ? '▸' : '▾'} Bashes`;
 
+    // Inside a scene kit the board draws its own bash cards; this row is hidden.
     const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
-    const shown = kit ? list.filter((b) => kit.items.some((i) => i.type === 'bash' && i.id === b.id)) : list;
+    const shown = kit ? [] : list;
     if (!shown.length && !kit) {
       const empty = document.createElement('p');
       empty.className = 'muted small bash-empty';
@@ -27,50 +28,55 @@ const Bashes = (() => {
       host.appendChild(empty);
     }
 
-    for (const bash of shown) {
-      const card = document.createElement('div');
-      card.className = 'bash-card';
-      card.dataset.id = bash.id;
-      card.tabIndex = 0;
-      card.title = 'Click to play · double-click to edit';
-
-      const cover = document.createElement('div');
-      cover.className = 'bash-cover';
-      BashCommon.renderCover(cover, bash, api);
-      const play = document.createElement('div');
-      play.className = 'bash-play';
-      play.textContent = '▶';
-      cover.appendChild(play);
-
-      const info = document.createElement('div');
-      info.className = 'bash-info';
-      const name = document.createElement('div');
-      name.className = 'bash-name';
-      name.textContent = bash.name;
-      const meta = document.createElement('div');
-      meta.className = 'muted small';
-      const count = soundCount(bash);
-      meta.textContent = count ? `${count} sound${count > 1 ? 's' : ''}` : 'Empty — click ⋯ to edit';
-      info.append(name, meta);
-
-      const more = document.createElement('button');
-      more.className = 'bash-more';
-      more.textContent = '⋯';
-      more.title = 'Edit, duplicate or delete';
-      more.addEventListener('click', (e) => { e.stopPropagation(); openMenu(bash.id, more); });
-
-      const progress = document.createElement('div');
-      progress.className = 'bash-progress';
-
-      card.append(cover, info, more, progress);
-      card.addEventListener('click', () => toggle(bash.id));
-      card.addEventListener('dblclick', (e) => { e.preventDefault(); player.stop(); api.bashes.openEditor(bash.id); });
-      card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(bash.id); } });
-      card.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(bash.id, card); });
-      host.appendChild(card);
-    }
+    for (const bash of shown) host.appendChild(makeCard(bash));
     updatePlaying();
     renderEditDialogSelect();
+  }
+
+  // One bash card; used on the board and inside scene kit sections.
+  function makeCard(bash) {
+    const card = document.createElement('div');
+    card.className = 'bash-card';
+    card.dataset.id = bash.id;
+    card.tabIndex = 0;
+    card.title = 'Click to play · double-click to edit';
+
+    const cover = document.createElement('div');
+    cover.className = 'bash-cover';
+    BashCommon.renderCover(cover, bash, api);
+    const play = document.createElement('div');
+    play.className = 'bash-play';
+    play.textContent = '▶';
+    cover.appendChild(play);
+
+    const info = document.createElement('div');
+    info.className = 'bash-info';
+    const name = document.createElement('div');
+    name.className = 'bash-name';
+    name.textContent = bash.name;
+    const meta = document.createElement('div');
+    meta.className = 'muted small';
+    const count = soundCount(bash);
+    meta.textContent = count ? `${count} sound${count > 1 ? 's' : ''}` : 'Empty — click ⋯ to edit';
+    info.append(name, meta);
+
+    const more = document.createElement('button');
+    more.className = 'bash-more';
+    more.textContent = '⋯';
+    more.title = 'Edit, duplicate or delete';
+    more.addEventListener('click', (e) => { e.stopPropagation(); openMenu(bash.id, more); });
+
+    const progress = document.createElement('div');
+    progress.className = 'bash-progress';
+
+    card.append(cover, info, more, progress);
+    card.addEventListener('click', () => toggle(bash.id));
+    card.addEventListener('dblclick', (e) => { e.preventDefault(); player.stop(); api.bashes.openEditor(bash.id); });
+    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(bash.id); } });
+    card.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(bash.id, card); });
+    const state = player.state();
+    if (state && state.bashId === bash.id) card.classList.add('playing');
+    return card;
   }
 
   async function toggle(id) {
@@ -205,9 +211,9 @@ const Bashes = (() => {
     render();
   }
 
-  api.bashes.onChanged((next) => { list = next; render(); });
+  api.bashes.onChanged((next) => { list = next; render(); if (typeof Kits !== 'undefined') Kits.renderBoard(); });
   api.onSoundsChanged(() => { if (typeof refresh === 'function') refresh(); });
   reload();
 
-  return { render: () => render(), player };
+  return { render: () => render(), player, makeCard, all: () => list, refreshPlaying: () => updatePlaying() };
 })();

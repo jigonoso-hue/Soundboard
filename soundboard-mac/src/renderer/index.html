@@ -68,6 +68,7 @@
 
       <div id="active-filters" class="active-filters hidden"></div>
 
+      <div class="content-row">
       <div id="content" class="content">
         <section id="kit-header" class="kit-header hidden">
           <div id="kit-header-badge"></div>
@@ -77,13 +78,18 @@
             <div id="kit-header-meta" class="muted"></div>
           </div>
           <div class="kit-header-actions">
-            <button data-kit-action="add" class="primary">+ Add from Library</button>
+            <button data-kit-action="library" class="primary" title="Open your library to add sounds and bashes">＋ Add from Library</button>
+            <button data-kit-action="layout" id="kit-layout-btn" title="Move and resize sections">✥ Customize Layout</button>
+            <button data-kit-action="section" title="Add a new section to this kit">＋ Section</button>
+            <span class="spacer"></span>
             <button data-kit-action="edit">Edit</button>
             <button data-kit-action="duplicate">Duplicate</button>
             <button data-kit-action="delete" class="danger">Delete</button>
           </div>
-          <p id="kit-empty" class="muted kit-empty hidden">This kit is empty. Click <b>+ Add from Library</b> to pick clips, full sounds and bashes for this scene.</p>
+          <p id="kit-layout-hint" class="muted small kit-layout-hint hidden">Drag a section by its title bar to move it, or drag its bottom-right corner to resize it. Click <b>Done</b> when finished.</p>
         </section>
+
+        <div id="kit-board" class="kit-board hidden"></div>
 
         <section id="bashes" class="block">
           <div class="block-head bash-header">
@@ -116,6 +122,27 @@
           <p>No sounds yet.</p>
           <p>Drop audio files here, click <b>+ Add Sounds</b>, or open the <b>YouTube</b> browser to clip a sound from a video.</p>
         </div>
+      </div>
+
+      <aside id="kit-drawer" class="kit-drawer hidden" aria-label="Add from library">
+        <div class="drawer-head">
+          <div>
+            <div class="muted small">Adding to</div>
+            <select id="drawer-target" title="Which section to add to"></select>
+          </div>
+          <button id="drawer-close" class="mini" title="Close">✕</button>
+        </div>
+        <input id="drawer-search" type="search" placeholder="Search names and tags…">
+        <div id="drawer-types" class="segmented drawer-types">
+          <button type="button" data-type="all">All</button>
+          <button type="button" data-type="clips">✂ Clips</button>
+          <button type="button" data-type="full">♫ Full</button>
+          <button type="button" data-type="bashes">⚡ Bashes</button>
+        </div>
+        <div id="drawer-tags" class="chip-row drawer-tags"></div>
+        <div id="drawer-list" class="drawer-list"></div>
+        <p class="muted small drawer-hint">Click to add or remove. You can also drag items onto any section.</p>
+      </aside>
       </div>
 
       <section id="ambience" class="dock">
@@ -219,6 +246,20 @@
     <button data-action="delete" role="menuitem" class="danger">Delete</button>
   </div>
 
+  <div id="section-menu" class="popup-menu hidden" role="menu"></div>
+
+  <dialog id="text-dialog">
+    <form method="dialog">
+      <h2 id="text-dialog-title">Name</h2>
+      <input id="text-dialog-input" maxlength="40">
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="kit-dialog">
     <form method="dialog">
       <h2 id="kit-dialog-title">New Scene Kit</h2>
@@ -232,28 +273,6 @@
         <span class="spacer"></span>
         <button value="cancel" formnovalidate>Cancel</button>
         <button value="save" class="primary">Save</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="kit-add-dialog" class="wide">
-    <form method="dialog">
-      <h2 id="kit-add-title">Add to kit</h2>
-      <div class="kit-add-tools">
-        <input id="kit-add-search" type="search" placeholder="Search names and tags…">
-        <div id="kit-add-filter" class="segmented">
-          <button type="button" data-filter="all">All</button>
-          <button type="button" data-filter="clip">✂ Clips</button>
-          <button type="button" data-filter="full">♫ Full</button>
-          <button type="button" data-filter="bash">⚡ Bashes</button>
-        </div>
-      </div>
-      <div id="kit-add-list" class="kit-add-list"></div>
-      <div class="dialog-actions">
-        <span id="kit-add-count" class="muted small"></span>
-        <span class="spacer"></span>
-        <button value="cancel" formnovalidate>Cancel</button>
-        <button value="save" class="primary">Done</button>
       </div>
     </form>
   </dialog>

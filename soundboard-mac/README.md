@@ -54,13 +54,35 @@ The app plays the selected range once and records the video's audio while it pla
 
 ### Scene Kits
 
-A Scene Kit gathers everything you need for one scene from across your library: clips, full songs and Bashes. A sound can be in any number of kits. Kits only point at your sounds, so removing something from a kit, or deleting a kit, never deletes the sound.
+A Scene Kit is a board for one scene, such as "Tavern Brawl" or "Dragon's Lair". It holds clips, full songs and Bashes from your whole library. Kits only point at your sounds: a sound can be in many kits, and removing it from a kit (or deleting the kit) never deletes the sound.
 
-- **Creating a kit:** click **+ New** next to *Scene Kits* in the sidebar. Give the kit a name, pick an icon and a color, then tick the sounds and Bashes to include. The checklist can be searched by name or tag and filtered to Clips, Full sounds or Bashes.
-- **Opening a kit:** click it in the sidebar. Its page shows its Bashes, Clips and Full Sounds, styled the same as the library. Search and tag filters work inside the kit too.
-- **Adding more:** use **+ Add from Library** on the kit page. You can also use **Add to Scene Kit…** in a sound's editor, or **⋯ → Add to Scene Kit…** on a Bash.
-- **Removing:** hover a sound in the kit and click **−**, or use **⋯ → Remove from this Kit** on a Bash.
-- **Managing kits:** **Edit** renames a kit or changes its icon and color. **Duplicate** copies it as a starting point for a similar scene, and **Delete** removes it. The same options are on the kit's right-click menu in the sidebar.
+**Sections.** A kit is made of sections. A new kit starts with three, already laid out: **Bashes** across the top, **Sound Effects** (clips) on the left, and **Music** (full sounds) on the right. Inside a section, Bashes appear as cards, clips as tiles and songs as rows with a timer.
+
+**Adding sounds.** Click **＋ Add** on any section, or **＋ Add from Library** at the top of the kit. A library panel opens on the right, already filtered to what that section is for. It has:
+- Search by name or tag.
+- Filters for **All / Clips / Full / Bashes**, and for tags.
+- **Click to add or remove:** click an item to add it to the section (it shows ✓), and click again to remove it. The **Adding to** menu at the top switches which section you're filling.
+- **Dragging:** drag any item from the panel onto any section.
+
+**Organizing items.**
+- Drag a sound or Bash from one section to another to move it.
+- Hover an item and click **−** to take it out of that section.
+
+**Customizing the layout.** Click **✥ Customize Layout**:
+- **Move** a section by dragging its title bar.
+- **Resize** it by dragging its bottom-right corner.
+- Sections snap to a 12-column grid and slide up to fill gaps.
+- **＋ Section** adds a new section.
+
+Click **✓ Done** to lock the layout, so nothing moves by accident during a session.
+
+**Section options (⋯).**
+- **Rename** it (double-clicking the title also works).
+- **Item size:** Small, Medium or Large.
+- **Meant for:** sets which items the add panel shows first (clips, full sounds, Bashes or anything).
+- **Remove section.**
+
+**Kit options:** **Edit** (name, icon, color), **Duplicate** and **Delete** are at the top of the kit, and on its right-click menu in the sidebar. You can also add a single sound with **Add to Scene Kit…** in its editor, or a Bash from its **⋯** menu. These go into the section that suits them.
 
 ### Clips vs Full Sounds
 
