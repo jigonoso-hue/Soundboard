@@ -79,6 +79,10 @@ In the editor window:
 - **Adding sounds:** click **+** next to a sound in the list on the left, or drag it onto the timeline. Sounds added with **+** start at 0:00, so by default everything plays at the same moment. Each sound gets its own layer (row).
 - **Timing and layering:** drag a clip **left or right** to change when it starts, or **up and down** to move it between layers. Clips snap to 0.1 s and to the edges of other clips. Hold ⌥ while dragging, or turn off **Snap**, for free positioning. You can also select a clip and type an exact start time, or use ←/→ to nudge it by 0.1 s (⇧ for 1 s) and ↑/↓ to change its layer.
 - **Per-clip controls:** each clip has its own **Volume**, plus **Duplicate** and **Remove** (Delete key).
+- **Repeat:** select a clip and tick **Repeat**.
+  - **wait** is the number of seconds between plays. 0 starts it again the instant it ends, with no gap.
+  - **plays** is how many times it plays in total. Leave it empty to repeat until the Bash is stopped.
+  - Repeats show as dashed copies on the timeline. A Bash with an endless repeat shows **∞** as its length, and its card pulses while it plays. Stop it by clicking the card again, pressing **Stop All**, or pressing Esc.
 - **Playback:** Space or **▶ Play** plays from the playhead. Click the ruler to move the playhead.
 - **Cover and name:** click the cover at the top left to pick an icon and color, or **Upload image…** to use your own picture as album art. Edit the name next to the cover.
 - **Zoom** changes the timeline scale. Changes save automatically.

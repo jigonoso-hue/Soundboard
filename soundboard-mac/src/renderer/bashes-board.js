@@ -91,8 +91,11 @@ const Bashes = (() => {
       const playing = state && state.bashId === card.dataset.id;
       card.classList.toggle('playing', !!playing);
       card.querySelector('.bash-play').textContent = playing ? '■' : '▶';
-      card.querySelector('.bash-progress').style.width = playing && state.duration
-        ? `${Math.min(100, (state.position / state.duration) * 100)}%` : '0';
+      const endless = playing && !Number.isFinite(state.duration);
+      card.classList.toggle('endless', !!endless);
+      card.querySelector('.bash-progress').style.width = !playing ? '0'
+        : endless ? '100%'
+        : state.duration ? `${Math.min(100, (state.position / state.duration) * 100)}%` : '0';
     }
     cancelAnimationFrame(raf);
     if (state) raf = requestAnimationFrame(updatePlaying);

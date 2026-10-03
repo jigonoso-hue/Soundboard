@@ -147,6 +147,7 @@ function normalize(bash) {
       offset: clamp(Math.round((Number(c.offset) || 0) * 1000) / 1000, 0, MAX_OFFSET),
       volume: clamp(Number(c.volume ?? 1), 0, 1),
       lane: Math.max(0, Math.floor(Number(c.lane) || 0)),
+      repeat: normalizeRepeat(c.repeat),
     }));
   return {
     id: bash.id,
@@ -154,6 +155,17 @@ function normalize(bash) {
     cover,
     clips,
     createdAt: bash.createdAt || new Date().toISOString(),
+  };
+}
+
+// null = play once. { gap, times }: replay `gap` seconds after each play ends
+// (0 = immediately); `times` is the total number of plays, 0 = until stopped.
+function normalizeRepeat(repeat) {
+  if (!repeat || typeof repeat !== 'object') return null;
+  const times = Math.floor(Number(repeat.times) || 0);
+  return {
+    gap: Math.round(clamp(Number(repeat.gap) || 0, 0, 3600) * 10) / 10,
+    times: times >= 2 ? Math.min(999, times) : 0,
   };
 }
 

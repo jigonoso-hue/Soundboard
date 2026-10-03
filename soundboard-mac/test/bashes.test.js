@@ -66,3 +66,21 @@ test('pruning a deleted sound, duplicating and removing', () => {
   store.remove(bash.id);
   assert.deepEqual(new BashStore(dir).list().map((b) => b.id), [copy.id]);
 });
+
+test('clips can repeat', () => {
+  const dir = tmp();
+  const store = new BashStore(dir);
+  const bash = store.create({ soundIds: ['a', 'b', 'c'] });
+  const [a, b, c] = bash.clips;
+  store.update(bash.id, {
+    clips: [
+      { ...a, repeat: { gap: 0, times: 0 } },
+      { ...b, repeat: { gap: 1.26, times: 4.7 } },
+      { ...c, repeat: { gap: -3, times: 1 } },
+    ],
+  });
+  const clips = new BashStore(dir).get(bash.id).clips;
+  assert.deepEqual(clips.map((x) => x.repeat), [{ gap: 0, times: 0 }, { gap: 1.3, times: 4 }, { gap: 0, times: 0 }]);
+  store.update(bash.id, { clips: [{ ...a, repeat: null }] });
+  assert.equal(store.get(bash.id).clips[0].repeat, null);
+});

@@ -39,13 +39,18 @@
       <div id="inspector" class="inspector">
         <div id="inspector-empty" class="muted">
           Select a clip to edit it. Drag clips <b>left/right</b> to change when they start and <b>up/down</b> to move them between layers.
-          Click the ruler to move the playhead. Space plays, Delete removes, ←/→ nudge.
+          Click the ruler to move the playhead. Space plays, Delete removes, ←/→ nudge. Select a clip to make it <b>repeat</b>.
         </div>
         <div id="inspector-clip" class="hidden">
           <span id="clip-color" class="dot"></span>
           <b id="clip-name"></b>
           <label>Starts at <input id="clip-offset" class="mono time" aria-label="Start time"></label>
           <label>Volume <input id="clip-volume" type="range" min="0" max="1" step="0.01"></label>
+          <label class="repeat-toggle" title="Play this clip again when it ends"><input id="clip-repeat" type="checkbox"> Repeat</label>
+          <span id="clip-repeat-fields" class="repeat-fields">
+            <label title="Seconds of silence between plays. 0 starts it again as soon as it ends.">wait <input id="clip-repeat-gap" type="number" min="0" max="3600" step="0.5" value="0"> s</label>
+            <label title="Total number of plays. Leave empty to repeat until the bash is stopped.">plays <input id="clip-repeat-times" type="number" min="2" max="999" step="1" placeholder="∞"></label>
+          </span>
           <button id="clip-zero" title="Start this clip with the bash">Start at 0</button>
           <button id="clip-dup" title="Duplicate this clip on a new layer">Duplicate</button>
           <button id="clip-remove" class="danger">Remove</button>

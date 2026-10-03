@@ -159,3 +159,32 @@ body.editor { display: flex; flex-direction: column; height: 100vh; }
 .icon-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
 .icon-choice { padding: 4px 0; font-size: 18px; background: none; border: 1px solid transparent; }
 .icon-choice.selected { border-color: var(--accent); background: var(--panel-2); }
+
+/* Repeats */
+.clip-repeat {
+  position: absolute;
+  left: 7px;
+  bottom: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.clip-ghost {
+  --clip-color: var(--accent);
+  position: absolute;
+  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--clip-color) 70%, transparent);
+  background: color-mix(in srgb, var(--clip-color) 14%, transparent);
+  color: color-mix(in srgb, var(--clip-color) 80%, #fff);
+  font-size: 12px;
+  padding: 3px 6px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.repeat-toggle { color: var(--text) !important; }
+.repeat-fields { display: inline-flex; gap: 10px; align-items: center; }
+.repeat-fields.disabled { opacity: 0.45; }
+.repeat-fields input { width: 64px; text-align: center; }

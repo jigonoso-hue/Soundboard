@@ -21,7 +21,17 @@ const info = new Map(); // soundId -> { duration, peaks }
 
 const soundOf = (clip) => sounds.find((s) => s.id === clip.soundId);
 const clipDuration = (clip) => info.get(clip.soundId)?.duration ?? 2;
-const totalDuration = () => bash.clips.reduce((end, c) => Math.max(end, c.offset + clipDuration(c)), 0);
+// Bash time when the clip's last play ends (Infinity = repeats until stopped).
+const clipEnd = (clip) => BashCommon.clipEnd(clip, clipDuration(clip));
+const totalDuration = () => bash.clips.reduce((end, c) => Math.max(end, clipEnd(c)), 0);
+// Length to lay out on the timeline: endless repeats show a few plays.
+const layoutEnd = (clip) => {
+  const end = clipEnd(clip);
+  if (Number.isFinite(end)) return end;
+  const period = clipDuration(clip) + clip.repeat.gap;
+  return clip.offset + Math.max(period * 4, 20);
+};
+const layoutDuration = () => bash.clips.reduce((end, c) => Math.max(end, layoutEnd(c)), 0);
 const laneCount = () => Math.max(3, bash.clips.reduce((max, c) => Math.max(max, c.lane + 1), 0) + 1);
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
 
@@ -79,7 +89,7 @@ function renderTimeline() {
   const timeline = $('#timeline');
   const content = $('#content');
   const lanes = laneCount();
-  const width = Math.max(timeline.clientWidth, (totalDuration() + 10) * pps);
+  const width = Math.max(timeline.clientWidth, (layoutDuration() + 10) * pps);
   content.style.width = `${width}px`;
   content.style.height = `${RULER_HEIGHT + lanes * LANE_HEIGHT}px`;
 
@@ -129,11 +139,42 @@ function renderTimeline() {
       el.appendChild(vol);
     }
 
+    if (clip.repeat) {
+      const rep = document.createElement('span');
+      rep.className = 'clip-repeat';
+      rep.textContent = clip.repeat.times ? `↻ ×${clip.repeat.times}` : '↻ ∞';
+      el.appendChild(rep);
+    }
+
     el.addEventListener('pointerdown', (e) => startDrag(e, clip, el));
     host.appendChild(el);
     drawWaveform(canvas, clip);
+    drawRepeats(host, clip, sound, width);
   }
   positionPlayhead();
+}
+
+// Faded copies after a repeating clip, one per extra play.
+function drawRepeats(host, clip, sound, width) {
+  for (const ghost of host.querySelectorAll(`.clip-ghost[data-for="${clip.id}"]`)) ghost.remove();
+  if (!clip.repeat) return;
+  const length = clipDuration(clip);
+  const period = length + clip.repeat.gap;
+  const plays = clip.repeat.times || Infinity;
+  for (let i = 1; i < plays && i < 400; i++) {
+    const start = clip.offset + i * period;
+    if (start * pps > width) break;
+    const ghost = document.createElement('div');
+    ghost.className = 'clip-ghost';
+    ghost.dataset.for = clip.id;
+    ghost.style.setProperty('--clip-color', sound.color || '#7c6cff');
+    ghost.style.left = `${start * pps}px`;
+    ghost.style.top = `${clip.lane * LANE_HEIGHT + 5}px`;
+    ghost.style.width = `${Math.max(6, length * pps)}px`;
+    ghost.style.height = `${LANE_HEIGHT - 10}px`;
+    ghost.textContent = '↻';
+    host.appendChild(ghost);
+  }
 }
 
 function positionClip(el, clip) {
@@ -176,12 +217,18 @@ function renderInspector() {
   $('#clip-name').textContent = sound?.name || 'Missing sound';
   if (document.activeElement !== $('#clip-offset')) $('#clip-offset').value = AudioUtils.formatTime(clip.offset);
   if (document.activeElement !== $('#clip-volume')) $('#clip-volume').value = clip.volume;
+  $('#clip-repeat').checked = !!clip.repeat;
+  $('#clip-repeat-fields').classList.toggle('disabled', !clip.repeat);
+  for (const input of [$('#clip-repeat-gap'), $('#clip-repeat-times')]) input.disabled = !clip.repeat;
+  if (document.activeElement !== $('#clip-repeat-gap')) $('#clip-repeat-gap').value = clip.repeat ? clip.repeat.gap : 0;
+  if (document.activeElement !== $('#clip-repeat-times')) $('#clip-repeat-times').value = clip.repeat && clip.repeat.times ? clip.repeat.times : '';
 }
 
 function renderTime() {
   const state = player.state();
   const position = state ? state.position : cursor;
-  $('#time').textContent = `${AudioUtils.formatTime(position)} / ${AudioUtils.formatTime(totalDuration())}`;
+  const total = totalDuration();
+  $('#time').textContent = `${AudioUtils.formatTime(position)} / ${Number.isFinite(total) ? AudioUtils.formatTime(total) : '∞ (repeats until stopped)'}`;
   $('#play-btn').textContent = state ? '■ Stop' : '▶ Play';
 }
 
@@ -303,6 +350,8 @@ function onDragMove(e) {
   clip.offset = snapOffset(dragging.offset + dx / pps, clip, e.altKey);
   clip.lane = Math.max(0, Math.min(laneCount(), dragging.lane + Math.round(dy / LANE_HEIGHT)));
   positionClip(el, clip);
+  const sound = soundOf(clip);
+  if (sound) drawRepeats($('#lanes'), clip, sound, parseFloat($('#content').style.width) || 0);
   renderInspector();
   renderTime();
 }
@@ -392,6 +441,23 @@ $('#clip-dup').addEventListener('click', () => {
   scheduleSave();
   render();
 });
+
+function updateRepeat() {
+  const clip = selectedClip();
+  if (!clip) return;
+  if (!$('#clip-repeat').checked) {
+    clip.repeat = null;
+  } else {
+    const gap = Math.max(0, Math.min(3600, Number($('#clip-repeat-gap').value) || 0));
+    const times = Math.floor(Number($('#clip-repeat-times').value) || 0);
+    clip.repeat = { gap: Math.round(gap * 10) / 10, times: times >= 2 ? Math.min(999, times) : 0 };
+  }
+  scheduleSave();
+  render();
+}
+$('#clip-repeat').addEventListener('change', updateRepeat);
+$('#clip-repeat-gap').addEventListener('change', updateRepeat);
+$('#clip-repeat-times').addEventListener('change', updateRepeat);
 
 $('#clip-remove').addEventListener('click', () => { if (selectedId) removeClip(selectedId); });
 

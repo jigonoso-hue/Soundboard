@@ -43,12 +43,13 @@
     }
 
     // Length of the whole bash in seconds (needs the clips' sounds decoded).
+    // Infinity when a clip repeats until stopped.
     async duration(bash, sounds) {
       let end = 0;
       for (const clip of bash.clips) {
         const sound = sounds.find((s) => s.id === clip.soundId);
         if (!sound) continue;
-        try { end = Math.max(end, clip.offset + (await this.buffer(sound)).duration); } catch { /* skip */ }
+        try { end = Math.max(end, clipEnd(clip, (await this.buffer(sound)).duration)); } catch { /* skip */ }
       }
       return end;
     }
@@ -69,39 +70,71 @@
       if (this.pending !== token) return; // another play/stop happened while decoding
 
       const startedAt = this.ctx.currentTime + 0.05;
-      const sources = [];
-      let duration = 0;
+      const active = { bashId: bash.id, sources: [], startedAt, from, duration: 0, voices: [] };
       for (const { clip, sound, buffer } of entries) {
-        duration = Math.max(duration, clip.offset + buffer.duration);
-        const clipEnd = clip.offset + buffer.duration;
-        if (clipEnd <= from) continue;
-        const source = this.ctx.createBufferSource();
-        source.buffer = buffer;
+        active.duration = Math.max(active.duration, clipEnd(clip, buffer.duration));
         const gain = this.ctx.createGain();
         gain.gain.value = clip.volume * (sound.volume ?? 1);
-        source.connect(gain).connect(this.master);
-        const delay = Math.max(0, clip.offset - from);
-        const into = Math.max(0, from - clip.offset);
-        source.start(startedAt + delay, into);
-        sources.push({ source, gain });
+        gain.connect(this.master);
+        // Each voice schedules its plays: once, or repeatedly every (length + gap).
+        const period = buffer.duration + (clip.repeat ? clip.repeat.gap : 0);
+        const plays = clip.repeat ? (clip.repeat.times || Infinity) : 1;
+        // Skip plays that finished before `from`.
+        let index = clip.offset >= from || period <= 0 ? 0 : Math.floor((from - clip.offset) / period);
+        if (index > 0 && from - (clip.offset + index * period) >= buffer.duration) index++;
+        active.voices.push({ buffer, gain, period, plays, offset: clip.offset, index });
+        active.sources.push({ gain, source: null });
       }
-      this.active = { bashId: bash.id, sources, startedAt, from, duration };
+      this.active = active;
+      this.schedule();
+      // Keep scheduling repeats a little ahead of time while playing.
+      this.scheduler = setInterval(() => this.schedule(), 200);
       this.emit();
       clearTimeout(this.endTimer);
-      this.endTimer = setTimeout(() => {
-        if (this.active && this.active.startedAt === startedAt) this.stop();
-      }, Math.max(0, duration - from) * 1000 + 150);
+      if (Number.isFinite(active.duration)) {
+        this.endTimer = setTimeout(() => {
+          if (this.active === active) this.stop();
+        }, Math.max(0, active.duration - from) * 1000 + 150);
+      }
+    }
+
+    // Starts every play due within the next second.
+    schedule() {
+      const active = this.active;
+      if (!active) return;
+      const horizon = this.ctx.currentTime + 1;
+      for (const voice of active.voices) {
+        while (voice.index < voice.plays) {
+          const start = voice.offset + voice.index * voice.period; // bash time
+          const when = active.startedAt + (start - active.from);
+          if (when > horizon) break;
+          const into = Math.max(0, active.from - start);
+          if (into < voice.buffer.duration) {
+            const source = this.ctx.createBufferSource();
+            source.buffer = voice.buffer;
+            source.connect(voice.gain);
+            source.start(Math.max(when, this.ctx.currentTime), into);
+            active.sources.push({ source, gain: voice.gain });
+            source.onended = () => {
+              const i = active.sources.findIndex((x) => x.source === source);
+              if (i >= 0) active.sources.splice(i, 1);
+            };
+          }
+          voice.index++;
+        }
+      }
     }
 
     stop(emit = true) {
       this.pending = null;
       clearTimeout(this.endTimer);
+      clearInterval(this.scheduler);
       if (this.active) {
         const now = this.ctx.currentTime;
         for (const { source, gain } of this.active.sources) {
           // Tiny fade so stopping mid-sound doesn't click.
           gain.gain.setTargetAtTime(0, now, 0.01);
-          try { source.stop(now + 0.06); } catch { /* not started */ }
+          if (source) { try { source.stop(now + 0.06); } catch { /* not started */ } }
         }
         this.active = null;
       }
@@ -114,6 +147,13 @@
       const { bashId, startedAt, from, duration } = this.active;
       return { bashId, position: from + Math.max(0, this.ctx.currentTime - startedAt), duration };
     }
+  }
+
+  // When a clip's last play ends, in bash time (Infinity if it repeats until stopped).
+  function clipEnd(clip, length) {
+    if (!clip.repeat) return clip.offset + length;
+    if (!clip.repeat.times) return Infinity;
+    return clip.offset + clip.repeat.times * length + (clip.repeat.times - 1) * clip.repeat.gap;
   }
 
   // Fills `el` with the bash's cover: an uploaded image or an icon on a colour.
@@ -164,5 +204,5 @@
     return out;
   }
 
-  root.BashCommon = { ICONS, ICON_COLORS, BashPlayer, renderCover, peaks, readPrefs };
+  root.BashCommon = { ICONS, ICON_COLORS, BashPlayer, renderCover, peaks, readPrefs, clipEnd };
 })(window);

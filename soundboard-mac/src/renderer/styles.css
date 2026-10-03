@@ -609,3 +609,7 @@ dialog { max-height: 90vh; overflow-y: auto; }
 .segmented button.active { background: var(--accent); color: #fff; }
 #tag-dialog-picker { margin: 6px 0 4px; }
 #edit-tags .tag-picker, #edit-kind { color: var(--text); }
+
+/* A playing bash with endless repeats: pulsing bar instead of progress. */
+.bash-card.endless .bash-progress { animation: endless 1.6s ease-in-out infinite; }
+@keyframes endless { 50% { opacity: 0.35; } }
