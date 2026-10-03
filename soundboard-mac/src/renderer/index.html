@@ -8,30 +8,92 @@
 </head>
 <body>
   <div id="app">
-    <section id="board">
-      <header class="titlebar">
-        <h1>Soundboard</h1>
-        <div class="toolbar">
-          <input id="filter" type="search" placeholder="Filter sounds…">
-          <button id="add-btn" class="primary" title="Add audio files">+ Add Sounds</button>
-          <button id="toggle-yt" title="Show/hide the YouTube browser">▶ YouTube</button>
-        </div>
-      </header>
+    <aside id="sidebar">
+      <div class="side-top">Soundboard</div>
 
-      <div class="controls">
-        <label>Master <input id="master-volume" type="range" min="0" max="1" step="0.01" value="1"></label>
-        <label title="When on, a sound restarts instead of layering over itself">
-          <input id="no-overlap" type="checkbox"> Restart instead of overlap
-        </label>
-        <label>Output
-          <select id="output-device"><option value="">System default</option></select>
-        </label>
-        <button id="stop-all" class="danger">■ Stop All</button>
+      <nav class="side-nav" aria-label="Views">
+        <button class="view-btn" data-view="all"><span class="view-icon">◎</span> All <span class="count" data-count="all"></span></button>
+        <button class="view-btn" data-view="clips"><span class="view-icon">✂</span> Clips <span class="count" data-count="clips"></span></button>
+        <button class="view-btn" data-view="full"><span class="view-icon">♫</span> Full Sounds <span class="count" data-count="full"></span></button>
+        <button class="view-btn" data-view="bashes"><span class="view-icon">⚡</span> Bashes <span class="count" data-count="bashes"></span></button>
+      </nav>
+
+      <div class="side-section">
+        <div class="side-head">
+          <span>Tags</span>
+          <button id="tag-mode" class="mini" title="Whether a sound needs any or all of the selected tags">Match any</button>
+        </div>
+        <div id="tag-filters" class="tag-filters"></div>
+        <form id="new-tag-form" class="new-tag">
+          <input id="new-tag" maxlength="24" placeholder="+ New tag">
+        </form>
       </div>
 
-      <section id="ambience">
+      <div class="side-footer">
+        <label class="stack">Master volume <input id="master-volume" type="range" min="0" max="1" step="0.01" value="1"></label>
+        <label class="stack">Output
+          <select id="output-device"><option value="">System default</option></select>
+        </label>
+        <label class="check" title="When on, a sound restarts instead of layering over itself">
+          <input id="no-overlap" type="checkbox"> Restart instead of overlap
+        </label>
+      </div>
+    </aside>
+
+    <section id="board">
+      <header class="titlebar">
+        <input id="filter" type="search" placeholder="Search sounds and tags…  ⌘F">
+        <select id="sort" title="Sort sounds">
+          <option value="custom">My order</option>
+          <option value="name">Name</option>
+          <option value="newest">Newest first</option>
+          <option value="longest">Longest first</option>
+        </select>
+        <span class="spacer"></span>
+        <button id="add-btn" class="primary" title="Add audio files">+ Add Sounds</button>
+        <button id="toggle-yt" title="Show/hide the YouTube browser">▶ YouTube</button>
+        <button id="stop-all" class="danger" title="Stop every sound effect and bash (Esc)">■ Stop All</button>
+      </header>
+
+      <div id="active-filters" class="active-filters hidden"></div>
+
+      <div id="content" class="content">
+        <section id="bashes" class="block">
+          <div class="block-head bash-header">
+            <button id="bash-collapse" class="plain block-title" title="Show/hide bashes">▾ Bashes</button>
+            <span class="muted small">Several sounds fired together with one click</span>
+            <button id="bash-new">+ New Bash</button>
+          </div>
+          <div id="bash-list" class="bash-list"></div>
+        </section>
+
+        <section id="clips-block" class="block">
+          <div class="block-head">
+            <h2 class="block-title">✂ Clips</h2>
+            <span id="clips-count" class="muted small"></span>
+          </div>
+          <div id="grid" class="grid"></div>
+          <p id="clips-empty" class="muted small block-empty hidden"></p>
+        </section>
+
+        <section id="full-block" class="block">
+          <div class="block-head">
+            <h2 class="block-title">♫ Full Sounds</h2>
+            <span id="full-count" class="muted small"></span>
+          </div>
+          <div id="full-list" class="full-list"></div>
+          <p id="full-empty" class="muted small block-empty hidden"></p>
+        </section>
+
+        <div id="empty" class="empty hidden">
+          <p>No sounds yet.</p>
+          <p>Drop audio files here, click <b>+ Add Sounds</b>, or open the <b>YouTube</b> browser to clip a sound from a video.</p>
+        </div>
+      </div>
+
+      <section id="ambience" class="dock">
         <div class="amb-header">
-          <button id="amb-collapse" class="plain" title="Show/hide ambience layers">▾ Ambience</button>
+          <button id="amb-collapse" class="plain block-title" title="Show/hide ambience layers">▾ Ambience</button>
           <label class="muted">Volume <input id="amb-volume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
           <select id="amb-add" title="Add an ambience layer"><option value="">+ Add layer…</option></select>
           <button id="amb-stop">Stop Ambience</button>
@@ -39,20 +101,6 @@
         <div id="amb-layers" class="amb-layers"></div>
       </section>
 
-      <section id="bashes">
-        <div class="bash-header">
-          <button id="bash-collapse" class="plain" title="Show/hide bashes">▾ Bashes</button>
-          <span class="muted small">Several sounds fired together with one click</span>
-          <button id="bash-new">+ New Bash</button>
-        </div>
-        <div id="bash-list" class="bash-list"></div>
-      </section>
-
-      <div id="empty" class="empty hidden">
-        <p>No sounds yet.</p>
-        <p>Drop audio files here, click <b>+ Add Sounds</b>, or open the <b>YouTube</b> browser to clip a sound from a video.</p>
-      </div>
-      <div id="grid" class="grid"></div>
       <div id="drop-overlay" class="hidden">Drop audio files to add them</div>
     </section>
 
@@ -96,6 +144,8 @@
       <label>Color
         <div id="edit-colors" class="swatches"></div>
       </label>
+      <label>Type <div id="edit-kind"></div></label>
+      <label>Tags <div id="edit-tags"></div></label>
       <label>Volume <input id="edit-volume" type="range" min="0" max="1" step="0.01"></label>
       <div class="repeat-row">
         <label class="inline"><input type="checkbox" id="edit-repeat"> Repeat when finished</label>
@@ -132,9 +182,25 @@
     <button data-action="delete" role="menuitem" class="danger">Delete</button>
   </div>
 
+  <dialog id="tag-dialog" class="wide">
+    <form method="dialog">
+      <h2 id="tag-dialog-title">Tag your new sound</h2>
+      <div id="tag-dialog-sounds" class="new-sounds"></div>
+      <div class="muted small">Tags</div>
+      <div id="tag-dialog-picker"></div>
+      <p id="tag-dialog-hint" class="muted small"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button value="skip" formnovalidate>Skip</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="hidden"></div>
 
   <script src="audio-utils.js"></script>
+  <script src="tags.js"></script>
   <script src="app.js"></script>
   <script src="ambience.js"></script>
   <script src="bash-common.js"></script>

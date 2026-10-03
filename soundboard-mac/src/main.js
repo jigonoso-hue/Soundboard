@@ -1,6 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, shell, globalShortcut, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, globalShortcut, nativeImage } = require('electron');
 const path = require('path');
-const { pathToFileURL } = require('url');
+const { Readable } = require('stream');
 const fs = require('fs');
 const { Library, AUDIO_EXTENSIONS } = require('./library');
 const { YtDlp } = require('./ytdlp');
@@ -133,8 +133,8 @@ function registerIpc() {
     return added;
   });
 
-  ipcMain.handle('sounds:add', (e, { name, data, ext, source }) => {
-    const sound = library.add({ name, data, ext, source });
+  ipcMain.handle('sounds:add', (e, { name, data, ext, source, kind, duration }) => {
+    const sound = library.add({ name, data, ext, source, kind, duration });
     broadcast('sounds:changed', null, e.sender);
     return sound;
   });
@@ -161,6 +161,17 @@ function registerIpc() {
   });
 
   ipcMain.handle('sounds:reorder', (_e, ids) => library.reorder(ids));
+
+  ipcMain.handle('tags:list', () => library.tags());
+  ipcMain.handle('tags:add', (e, name) => {
+    const tag = library.addTag(name);
+    broadcast('sounds:changed', null, e.sender);
+    return tag;
+  });
+  ipcMain.handle('tags:remove', (e, name) => {
+    library.removeTag(name);
+    broadcast('sounds:changed', null, e.sender);
+  });
 
   ipcMain.handle('sounds:reveal', (_e, id) => {
     const sound = library.get(id);
@@ -192,7 +203,7 @@ function registerIpc() {
     const { file, title, cleanup } = await ytdlp.download(jobId, url, send);
     try {
       send({ message: 'Adding to your library…', percent: 100 });
-      const sound = library.addFromFile(file, { name: title || 'YouTube audio', source: { title, url, full: true } });
+      const sound = library.addFromFile(file, { name: title || 'YouTube audio', source: { title, url, full: true }, kind: 'full' });
       broadcast('sounds:changed', null, event.sender);
       return sound;
     } finally {
@@ -275,11 +286,7 @@ app.whenReady().then(() => {
     const file = decodeURIComponent(url.pathname.slice(1));
     const resolved = url.host === 'builtin' ? resolveBuiltin(file) : library.resolveFile(file);
     if (!resolved) return new Response('Not found', { status: 404 });
-    const res = await net.fetch(pathToFileURL(resolved).toString(), { headers: request.headers });
-    // Allow the UI to decode sounds with Web Audio (used by ambience layers).
-    const headers = new Headers(res.headers);
-    headers.set('Access-Control-Allow-Origin', '*');
-    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+    return serveFile(resolved, request.headers.get('range'));
   });
 
   registerIpc();
@@ -290,6 +297,40 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+const MIME_TYPES = {
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg',
+  oga: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', webm: 'audio/webm', aiff: 'audio/aiff', aif: 'audio/aiff',
+  caf: 'audio/x-caf',
+};
+
+// Serves a file with its size and HTTP range support, so the audio player
+// knows how long long tracks are and can seek within them.
+async function serveFile(file, range) {
+  let stat;
+  try { stat = await fs.promises.stat(file); } catch { return new Response('Not found', { status: 404 }); }
+  const size = stat.size;
+  const headers = {
+    'Content-Type': MIME_TYPES[path.extname(file).slice(1).toLowerCase()] || 'application/octet-stream',
+    'Accept-Ranges': 'bytes',
+    // Lets the UI decode sounds with Web Audio (used by ambience layers).
+    'Access-Control-Allow-Origin': '*',
+  };
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range || '');
+  if (match && size > 0) {
+    let start = match[1] === '' ? size - Number(match[2]) : Number(match[1]);
+    let end = match[1] !== '' && match[2] !== '' ? Number(match[2]) : size - 1;
+    start = Math.max(0, start);
+    end = Math.min(size - 1, end);
+    if (start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+    const stream = Readable.toWeb(fs.createReadStream(file, { start, end }));
+    return new Response(stream, {
+      status: 206,
+      headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) },
+    });
+  }
+  return new Response(Readable.toWeb(fs.createReadStream(file)), { status: 200, headers: { ...headers, 'Content-Length': String(size) } });
+}
 
 function resolveBuiltin(file) {
   const resolved = path.resolve(AMBIENCE_DIR, file);

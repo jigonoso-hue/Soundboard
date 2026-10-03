@@ -11,6 +11,11 @@ contextBridge.exposeInMainWorld('soundboard', {
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
   onHotkey: (callback) => ipcRenderer.on('hotkey:play', (_e, id) => callback(id)),
   readSound: (id) => ipcRenderer.invoke('sounds:read', id),
+  tags: {
+    list: () => ipcRenderer.invoke('tags:list'),
+    add: (name) => ipcRenderer.invoke('tags:add', name),
+    remove: (name) => ipcRenderer.invoke('tags:remove', name),
+  },
   onSoundsChanged: (callback) => ipcRenderer.on('sounds:changed', () => callback()),
   bashes: {
     list: () => ipcRenderer.invoke('bashes:list'),

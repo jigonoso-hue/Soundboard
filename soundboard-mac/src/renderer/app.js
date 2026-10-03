@@ -1,4 +1,4 @@
-/* global AudioUtils */
+/* global AudioUtils, Tags */
 const api = window.soundboard;
 const $ = (sel) => document.querySelector(sel);
 
@@ -14,7 +14,7 @@ const playing = new Map(); // sound id -> Set<HTMLAudioElement>
 // ---------- Preferences (per-machine conveniences) ----------
 
 function loadPrefs() {
-  const defaults = { master: 1, noOverlap: false, outputDevice: '', browserOpen: false };
+  const defaults = { master: 1, noOverlap: false, outputDevice: '', browserOpen: false, view: 'all', tagFilter: [], tagMode: 'any', sort: 'custom' };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem('prefs') || '{}') }; } catch { return defaults; }
 }
 function savePrefs() {
@@ -42,8 +42,8 @@ function soundUrl(sound) {
 function play(id) {
   const sound = sounds.find((s) => s.id === id);
   if (!sound) return;
-  // A repeating sound toggles: pressing it again stops it instead of stacking another copy.
-  if (sound.repeat && playing.has(id)) { stop(id); return; }
+  // Full sounds and repeating sounds toggle: pressing again stops them instead of stacking another copy.
+  if ((sound.repeat || isFull(sound)) && playing.has(id)) { stop(id); return; }
   if (prefs.noOverlap) stop(id);
   const audio = new Audio(soundUrl(sound));
   audio.volume = Math.min(1, sound.volume * prefs.master);
@@ -71,7 +71,11 @@ function play(id) {
       audio.play().catch(done);
     }, current.repeat.gap * 1000);
   });
-  audio.addEventListener('error', () => { done(); toast(`Couldn't play “${sound.name}”.`, true); });
+  audio.addEventListener('error', () => {
+    if (audio.stopped) return; // clearing the source on stop also fires 'error'
+    done();
+    toast(`Couldn't play “${sound.name}”.`, true);
+  });
   audio.addEventListener('timeupdate', () => updateTile(id, audio));
   audio.play().catch(done);
   updateTile(id, audio);
@@ -80,7 +84,7 @@ function play(id) {
 function stop(id) {
   const set = playing.get(id);
   if (!set) return;
-  for (const audio of set) { clearTimeout(audio.repeatTimer); audio.pause(); audio.src = ''; }
+  for (const audio of set) { audio.stopped = true; clearTimeout(audio.repeatTimer); audio.pause(); audio.removeAttribute('src'); audio.load(); }
   playing.delete(id);
   updateTile(id);
 }
@@ -90,7 +94,7 @@ function stopAll() {
 }
 
 function updateTile(id, audio) {
-  const tile = document.querySelector(`.tile[data-id="${id}"]`);
+  const tile = document.querySelector(`[data-sound-id="${id}"]`);
   if (!tile) return;
   const isPlaying = playing.has(id);
   tile.classList.toggle('playing', isPlaying);
@@ -98,27 +102,296 @@ function updateTile(id, audio) {
   const bar = tile.querySelector('.tile-progress');
   if (!isPlaying) bar.style.width = '0';
   else if (audio && audio.duration) bar.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
+  const time = tile.querySelector('.track-time');
+  if (time) {
+    const sound = sounds.find((s) => s.id === id);
+    const total = (audio && Number.isFinite(audio.duration) && audio.duration) || sound?.duration || 0;
+    time.textContent = isPlaying && audio
+      ? `${AudioUtils.formatTime(audio.currentTime)} / ${AudioUtils.formatTime(total)}`
+      : (total ? AudioUtils.formatTime(total) : '');
+  }
+  const button = tile.querySelector('.track-play');
+  if (button) button.textContent = isPlaying ? '■' : '▶';
 }
 
 // ---------- Board rendering ----------
 
+const isFull = (sound) => sound.kind === 'full';
+
+// Applies search, tag filters and sort; returns { clips, full }.
+function filteredSounds() {
+  const search = $('#filter').value.trim().toLowerCase();
+  const tags = prefs.tagFilter;
+  let list = sounds.filter((s) => {
+    if (search && !s.name.toLowerCase().includes(search) && !(s.tags || []).some((t) => t.includes(search))) return false;
+    if (!tags.length) return true;
+    const own = s.tags || [];
+    const matches = (tag) => (tag === UNTAGGED ? own.length === 0 : own.includes(tag));
+    return prefs.tagMode === 'all' ? tags.every(matches) : tags.some(matches);
+  });
+  if (prefs.sort === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  if (prefs.sort === 'newest') list = [...list].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  if (prefs.sort === 'longest') list = [...list].sort((a, b) => (b.duration || 0) - (a.duration || 0));
+  return { clips: list.filter((s) => !isFull(s)), full: list.filter(isFull) };
+}
+
+const UNTAGGED = '__untagged__';
+
 function render() {
+  const view = prefs.view;
+  const { clips, full } = filteredSounds();
+  const filtering = !!($('#filter').value.trim() || prefs.tagFilter.length);
+
+  // Clips grid
   const grid = $('#grid');
-  const filter = $('#filter').value.trim().toLowerCase();
   grid.textContent = '';
-  const visible = sounds.filter((s) => !filter || s.name.toLowerCase().includes(filter));
-  for (const sound of visible) grid.appendChild(makeTile(sound));
-  $('#empty').classList.toggle('hidden', sounds.length > 0);
+  for (const sound of clips) grid.appendChild(makeTile(sound));
+  // Full sounds list
+  const fullList = $('#full-list');
+  fullList.textContent = '';
+  for (const sound of full) fullList.appendChild(makeTrack(sound));
+
+  const totalClips = sounds.filter((s) => !isFull(s)).length;
+  const totalFull = sounds.length - totalClips;
+  $('#clips-count').textContent = filtering ? `${clips.length} of ${totalClips}` : `${totalClips}`;
+  $('#full-count').textContent = filtering ? `${full.length} of ${totalFull}` : `${totalFull}`;
+  const emptyText = (n, total, what) => (n ? '' : total ? `No ${what} match your filters.` : what === 'clips'
+    ? 'No clips yet. Short sound effects you add show up here as tiles.'
+    : 'No full sounds yet. Songs and long tracks (a minute or more, or saved with “Save Full Audio”) show up here.');
+  $('#clips-empty').textContent = emptyText(clips.length, totalClips, 'clips');
+  $('#clips-empty').classList.toggle('hidden', !!clips.length);
+  $('#full-empty').textContent = emptyText(full.length, totalFull, 'full sounds');
+  $('#full-empty').classList.toggle('hidden', !!full.length);
+
+  // Which blocks the current view shows.
+  $('#bashes').classList.toggle('hidden', !(view === 'all' || view === 'bashes'));
+  $('#clips-block').classList.toggle('hidden', !(view === 'all' || view === 'clips') || !sounds.length);
+  $('#full-block').classList.toggle('hidden', !(view === 'all' || view === 'full') || !sounds.length);
+  $('#empty').classList.toggle('hidden', sounds.length > 0 || view === 'bashes');
+
+  for (const btn of document.querySelectorAll('.view-btn')) btn.classList.toggle('active', btn.dataset.view === view);
+  document.querySelector('[data-count="all"]').textContent = sounds.length;
+  document.querySelector('[data-count="clips"]').textContent = totalClips;
+  document.querySelector('[data-count="full"]').textContent = totalFull;
+
+  renderTagFilters();
+  renderActiveFilters();
   if (typeof Ambience !== 'undefined') Ambience.syncSounds();
   if (typeof Bashes !== 'undefined') Bashes.render();
+}
+
+function renderTagFilters() {
+  const host = $('#tag-filters');
+  host.textContent = '';
+  const counts = new Map();
+  let untagged = 0;
+  for (const s of sounds) {
+    if (!(s.tags || []).length) untagged++;
+    for (const t of s.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+  }
+  const all = Tags.list().all;
+  const custom = new Set(all.filter((t) => !Tags.list().premade.includes(t)));
+  for (const tag of all) {
+    const row = document.createElement('div');
+    row.className = 'tag-filter' + (prefs.tagFilter.includes(tag) ? ' active' : '') + (counts.get(tag) ? '' : ' unused');
+    row.style.setProperty('--chip-color', Tags.color(tag));
+    const btn = document.createElement('button');
+    btn.className = 'tag-filter-btn';
+    btn.innerHTML = '<span class="tag-dot"></span>';
+    btn.append(document.createTextNode(tag));
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = counts.get(tag) || '';
+    btn.appendChild(count);
+    btn.addEventListener('click', () => toggleTagFilter(tag));
+    row.appendChild(btn);
+    if (custom.has(tag)) {
+      const del = document.createElement('button');
+      del.className = 'tag-delete';
+      del.textContent = '×';
+      del.title = `Delete the “${tag}” tag`;
+      del.addEventListener('click', async () => {
+        if (!confirm(`Delete the tag “${tag}”? It will be removed from ${counts.get(tag) || 0} sound(s). The sounds themselves stay.`)) return;
+        await api.tags.remove(tag);
+        prefs.tagFilter = prefs.tagFilter.filter((t) => t !== tag);
+        savePrefs();
+        await refresh();
+      });
+      row.appendChild(del);
+    }
+    host.appendChild(row);
+  }
+  const row = document.createElement('div');
+  row.className = 'tag-filter untagged' + (prefs.tagFilter.includes(UNTAGGED) ? ' active' : '');
+  const btn = document.createElement('button');
+  btn.className = 'tag-filter-btn';
+  btn.innerHTML = '<span class="tag-dot"></span>';
+  btn.append(document.createTextNode('untagged'));
+  const count = document.createElement('span');
+  count.className = 'count';
+  count.textContent = untagged || '';
+  btn.appendChild(count);
+  btn.addEventListener('click', () => toggleTagFilter(UNTAGGED));
+  row.appendChild(btn);
+  host.appendChild(row);
+  $('#tag-mode').textContent = prefs.tagMode === 'all' ? 'Match all' : 'Match any';
+}
+
+function renderActiveFilters() {
+  const host = $('#active-filters');
+  host.textContent = '';
+  const tags = prefs.tagFilter;
+  host.classList.toggle('hidden', !tags.length);
+  if (!tags.length) return;
+  const label = document.createElement('span');
+  label.className = 'muted small';
+  label.textContent = tags.length > 1 ? `Showing sounds tagged ${prefs.tagMode === 'all' ? 'with all of' : 'with any of'}:` : 'Showing sounds tagged:';
+  host.appendChild(label);
+  for (const tag of tags) {
+    host.appendChild(Tags.chip(tag === UNTAGGED ? 'untagged' : tag, { selected: true, label: `${tag === UNTAGGED ? 'untagged' : tag} ×`, onClick: () => toggleTagFilter(tag), title: 'Remove this filter' }));
+  }
+  const clear = document.createElement('button');
+  clear.className = 'mini';
+  clear.textContent = 'Clear';
+  clear.addEventListener('click', () => { prefs.tagFilter = []; savePrefs(); render(); });
+  host.appendChild(clear);
+}
+
+function toggleTagFilter(tag) {
+  prefs.tagFilter = prefs.tagFilter.includes(tag) ? prefs.tagFilter.filter((t) => t !== tag) : [...prefs.tagFilter, tag];
+  savePrefs();
+  render();
+}
+
+for (const btn of document.querySelectorAll('.view-btn')) {
+  btn.addEventListener('click', () => { prefs.view = btn.dataset.view; savePrefs(); render(); });
+}
+$('#tag-mode').addEventListener('click', () => { prefs.tagMode = prefs.tagMode === 'all' ? 'any' : 'all'; savePrefs(); render(); });
+$('#sort').value = prefs.sort;
+$('#sort').addEventListener('change', (e) => { prefs.sort = e.target.value; savePrefs(); render(); });
+$('#new-tag-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('#new-tag').value.trim();
+  if (!name) return;
+  try {
+    await api.tags.add(name);
+    $('#new-tag').value = '';
+    await refresh();
+  } catch (err) {
+    toast(String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), true);
+  }
+});
+
+// Small tag chips shown on tiles and rows.
+function tagLine(sound, max) {
+  const line = document.createElement('div');
+  line.className = 'tag-line';
+  const tags = sound.tags || [];
+  for (const tag of tags.slice(0, max)) line.appendChild(Tags.chip(tag, { small: true }));
+  if (tags.length > max) {
+    const more = document.createElement('span');
+    more.className = 'muted small';
+    more.textContent = `+${tags.length - max}`;
+    line.appendChild(more);
+  }
+  return line;
+}
+
+// Full sounds: a row with play button, name, tags, timer and progress.
+function makeTrack(sound) {
+  const row = document.createElement('div');
+  row.className = 'track';
+  row.dataset.soundId = sound.id;
+  row.style.setProperty('--tile-color', sound.color);
+  row.tabIndex = 0;
+
+  const playBtn = document.createElement('button');
+  playBtn.className = 'track-play';
+  playBtn.textContent = '▶';
+  playBtn.title = 'Play / stop';
+  playBtn.addEventListener('click', (e) => { e.stopPropagation(); play(sound.id); });
+
+  const info = document.createElement('div');
+  info.className = 'track-info';
+  const name = document.createElement('div');
+  name.className = 'track-name';
+  name.textContent = sound.name;
+  info.append(name, tagLine(sound, 5));
+
+  const meta = document.createElement('div');
+  meta.className = 'track-meta';
+  if (sound.repeat) {
+    const rep = document.createElement('span');
+    rep.className = 'tile-hotkey';
+    rep.textContent = sound.repeat.gap ? `↻ ${sound.repeat.gap}s` : '↻';
+    meta.appendChild(rep);
+  }
+  if (sound.hotkey) {
+    const key = document.createElement('span');
+    key.className = 'tile-hotkey';
+    key.textContent = prettyAccelerator(sound.hotkey);
+    meta.appendChild(key);
+  }
+  const time = document.createElement('span');
+  time.className = 'track-time mono';
+  time.textContent = sound.duration ? AudioUtils.formatTime(sound.duration) : '';
+  meta.appendChild(time);
+
+  const edit = document.createElement('button');
+  edit.className = 'track-edit';
+  edit.textContent = '⋯';
+  edit.title = 'Edit';
+  edit.addEventListener('click', (e) => { e.stopPropagation(); openEditor(sound.id); });
+
+  const progress = document.createElement('div');
+  progress.className = 'tile-progress';
+
+  row.append(playBtn, info, meta, edit, progress);
+  row.addEventListener('click', () => play(sound.id));
+  row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
+  row.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
+  addReorder(row, sound);
+  if (playing.has(sound.id)) {
+    row.classList.add('playing');
+    playBtn.textContent = '■';
+  }
+  return row;
+}
+
+// Drag a tile or row onto another of the same kind to reorder.
+function addReorder(el, sound) {
+  el.draggable = true;
+  el.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('application/x-sound-id', sound.id);
+    e.dataTransfer.effectAllowed = 'move';
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  el.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('application/x-sound-id')) { e.preventDefault(); el.classList.add('drop-target'); }
+  });
+  el.addEventListener('dragleave', () => el.classList.remove('drop-target'));
+  el.addEventListener('drop', (e) => {
+    const draggedId = e.dataTransfer.getData('application/x-sound-id');
+    el.classList.remove('drop-target');
+    if (!draggedId || draggedId === sound.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ids = sounds.map((s) => s.id).filter((id) => id !== draggedId);
+    ids.splice(ids.indexOf(sound.id), 0, draggedId);
+    sounds = ids.map((id) => sounds.find((s) => s.id === id));
+    api.reorder(ids);
+    if (prefs.sort !== 'custom') { prefs.sort = 'custom'; $('#sort').value = 'custom'; savePrefs(); }
+    render();
+  });
 }
 
 function makeTile(sound) {
   const tile = document.createElement('div');
   tile.className = 'tile';
   tile.dataset.id = sound.id;
+  tile.dataset.soundId = sound.id;
   tile.style.setProperty('--tile-color', sound.color);
-  tile.draggable = true;
   tile.tabIndex = 0;
   tile.title = 'Click to play · right-click to edit';
 
@@ -126,6 +399,7 @@ function makeTile(sound) {
   name.className = 'tile-name';
   name.textContent = sound.name;
   tile.appendChild(name);
+  if ((sound.tags || []).length) tile.appendChild(tagLine(sound, 2));
 
   if (sound.hotkey || sound.repeat) {
     const badges = document.createElement('div');
@@ -170,29 +444,7 @@ function makeTile(sound) {
   tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
   tile.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
 
-  // Drag to reorder.
-  tile.addEventListener('dragstart', (e) => {
-    e.dataTransfer.setData('application/x-sound-id', sound.id);
-    e.dataTransfer.effectAllowed = 'move';
-    tile.classList.add('dragging');
-  });
-  tile.addEventListener('dragend', () => tile.classList.remove('dragging'));
-  tile.addEventListener('dragover', (e) => {
-    if (e.dataTransfer.types.includes('application/x-sound-id')) { e.preventDefault(); tile.classList.add('drop-target'); }
-  });
-  tile.addEventListener('dragleave', () => tile.classList.remove('drop-target'));
-  tile.addEventListener('drop', (e) => {
-    const draggedId = e.dataTransfer.getData('application/x-sound-id');
-    tile.classList.remove('drop-target');
-    if (!draggedId || draggedId === sound.id) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const ids = sounds.map((s) => s.id).filter((id) => id !== draggedId);
-    ids.splice(ids.indexOf(sound.id), 0, draggedId);
-    sounds = ids.map((id) => sounds.find((s) => s.id === id));
-    api.reorder(ids);
-    render();
-  });
+  addReorder(tile, sound);
 
   if (playing.has(sound.id)) tile.classList.add('playing');
   return tile;
@@ -201,19 +453,46 @@ function makeTile(sound) {
 let soundsLoaded = false;
 
 async function refresh() {
-  sounds = await api.list();
+  [sounds] = await Promise.all([api.list(), Tags.load()]);
   soundsLoaded = true;
   render();
+  measureMissingDurations();
+}
+
+// Older sounds (and ones added elsewhere) may not know their length yet.
+let measuring = false;
+async function measureMissingDurations() {
+  if (measuring) return;
+  measuring = true;
+  try {
+    let changed = false;
+    for (const sound of sounds.filter((s) => !s.duration)) {
+      const duration = await Tags.probeDuration(sound);
+      if (!duration) continue;
+      const result = await api.update(sound.id, { duration });
+      sounds = result.sounds;
+      changed = true;
+    }
+    if (changed) render();
+  } finally {
+    measuring = false;
+  }
+}
+
+// After adding sounds: ask for tags and the type, then show them.
+async function afterAdding(added) {
+  if (!added.length) return;
+  await refresh();
+  await Tags.askForNewSounds(added);
+  await refresh();
+  toast(`Added ${added.length} sound${added.length > 1 ? 's' : ''}.`);
 }
 
 // ---------- Adding sounds ----------
 
 $('#add-btn').addEventListener('click', async () => {
   const added = await api.importDialog();
-  if (added.length) {
-    await refresh();
-    toast(`Added ${added.length} sound${added.length > 1 ? 's' : ''}.`);
-  }
+  await afterAdding(added);
 });
 
 let dragDepth = 0;
@@ -233,15 +512,14 @@ board.addEventListener('drop', async (e) => {
   e.preventDefault();
   dragDepth = 0;
   $('#drop-overlay').classList.add('hidden');
-  let count = 0;
+  const added = [];
   for (const file of e.dataTransfer.files) {
     const dot = file.name.lastIndexOf('.');
     const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : '';
     if (!AUDIO_EXTENSIONS.includes(ext)) { toast(`Skipped ${file.name} (not an audio file).`, true); continue; }
-    await api.add({ name: file.name.slice(0, dot), data: await file.arrayBuffer(), ext });
-    count++;
+    added.push(await api.add({ name: file.name.slice(0, dot), data: await file.arrayBuffer(), ext }));
   }
-  if (count) { await refresh(); toast(`Added ${count} sound${count > 1 ? 's' : ''}.`); }
+  await afterAdding(added);
 });
 
 // ---------- Controls ----------
@@ -298,6 +576,8 @@ const dialog = $('#edit-dialog');
 let editingId = null;
 let editColor = null;
 let editHotkey = null;
+let editKind = null;
+let editTags = null;
 
 function openEditor(id) {
   const sound = sounds.find((s) => s.id === id);
@@ -308,6 +588,10 @@ function openEditor(id) {
   $('#edit-name').value = sound.name;
   $('#edit-volume').value = sound.volume;
   $('#edit-hotkey').value = editHotkey ? prettyAccelerator(editHotkey) : '';
+  editKind = Tags.kindToggle(sound.kind || (sound.duration >= 60 ? 'full' : 'clip'));
+  $('#edit-kind').replaceChildren(editKind.element);
+  editTags = Tags.picker(sound.tags || []);
+  $('#edit-tags').replaceChildren(editTags.element);
   $('#edit-repeat').checked = !!sound.repeat;
   $('#edit-repeat-gap').value = sound.repeat ? sound.repeat.gap : 0;
   $('#edit-repeat-gap').disabled = !sound.repeat;
@@ -339,7 +623,10 @@ dialog.addEventListener('close', async () => {
     volume: Number($('#edit-volume').value),
     hotkey: editHotkey,
     repeat: $('#edit-repeat').checked ? { gap: Math.max(0, Number($('#edit-repeat-gap').value) || 0) } : null,
+    kind: editKind.value(),
+    tags: editTags.selected(),
   });
+  await Tags.load();
   sounds = result.sounds;
   render();
   if (result.failedHotkeys.length) toast(`Hotkey ${result.failedHotkeys.map(prettyAccelerator).join(', ')} is already used by another app.`, true);
@@ -566,12 +853,13 @@ async function finishCapture({ data, trimStart, trimEnd, title, url }) {
 
   const { start, end } = readRange();
   const name = $('#clip-name').value.trim() || title || 'YouTube clip';
-  const sound = await api.add({ name, data: wav, ext: 'wav', source: { title, url, start, end } });
+  const seconds = trimmed[0].length / decoded.sampleRate;
+  const sound = await api.add({ name, data: wav, ext: 'wav', source: { title, url, start, end }, kind: 'clip', duration: seconds });
   capturing = false;
-  setCaptureUi(false, `Saved “${sound.name}” (${(trimmed[0].length / decoded.sampleRate).toFixed(1)}s).`);
+  setCaptureUi(false, `Saved “${sound.name}” (${seconds.toFixed(1)}s).`);
   $('#clip-name').value = '';
-  await refresh();
-  const tile = document.querySelector(`.tile[data-id="${sound.id}"]`);
+  await afterAdding([sound]);
+  const tile = document.querySelector(`[data-sound-id="${sound.id}"]`);
   if (tile) { tile.scrollIntoView({ block: 'nearest' }); tile.classList.add('new'); }
 }
 
@@ -591,7 +879,8 @@ $('#save-full').addEventListener('click', async () => {
   try {
     const sound = await api.downloadAudio(jobId, ytState.url);
     setDownloadUi(false, `Saved full audio “${sound.name}”.`);
-    await refresh();
+    downloadJob = null;
+    await afterAdding([sound]);
   } catch (err) {
     setDownloadUi(false, String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), true);
   } finally {

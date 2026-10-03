@@ -58,3 +58,30 @@ test('repeat setting is validated and persisted', () => {
   assert.deepEqual(new Library(dir).get(s.id).repeat, { gap: 0 });
   assert.equal(lib.update(s.id, { repeat: null }).repeat, null);
 });
+
+test('tags, kinds and durations', () => {
+  const dir = tmp();
+  const lib = new Library(dir);
+  const a = lib.add({ name: 'Scream', data: Buffer.from('x'), ext: 'wav' });
+  assert.deepEqual(a.tags, []);
+  assert.equal(a.kind, null);
+  // Learning the duration picks a type automatically; an explicit choice wins later.
+  assert.equal(lib.update(a.id, { duration: 2.5 }).kind, 'clip');
+  const song = lib.add({ name: 'Song', data: Buffer.from('x'), ext: 'mp3' });
+  assert.equal(lib.update(song.id, { duration: 185 }).kind, 'full');
+  assert.equal(lib.update(song.id, { kind: 'clip' }).kind, 'clip');
+  assert.equal(lib.add({ name: 'Mix', data: Buffer.from('x'), ext: 'm4a', source: { full: true } }).kind, 'full');
+
+  const tagged = lib.update(a.id, { tags: ['Horror', 'shock', 'horror', ' Jump  Scare! ', ''] });
+  assert.deepEqual(tagged.tags, ['horror', 'shock', 'jump scare']);
+  const reloaded = new Library(dir);
+  assert.deepEqual(reloaded.get(a.id).tags, ['horror', 'shock', 'jump scare']);
+  assert.ok(reloaded.tags().all.includes('jump scare'), 'new tags used on a sound are registered');
+  assert.ok(reloaded.tags().premade.includes('comedy'));
+
+  assert.equal(reloaded.addTag('Boss Fight'), 'boss fight');
+  assert.throws(() => reloaded.addTag('!!!'));
+  reloaded.removeTag('jump scare');
+  assert.deepEqual(reloaded.get(a.id).tags, ['horror', 'shock']);
+  assert.ok(!new Library(dir).tags().all.includes('jump scare'));
+});
