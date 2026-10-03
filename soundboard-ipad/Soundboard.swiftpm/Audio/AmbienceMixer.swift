@@ -49,10 +49,7 @@ final class AmbienceMixer: ObservableObject {
     ]
 
     init() {
-        // Resources/Ambience may be copied as a folder or flattened into the bundle.
-        let nested = Bundle.module.urls(forResourcesWithExtension: "wav", subdirectory: "Ambience") ?? []
-        let urls = nested.isEmpty ? (Bundle.module.urls(forResourcesWithExtension: "wav", subdirectory: nil) ?? []) : nested
-        builtins = urls
+        builtins = Self.findLoops()
             .map { url in
                 let file = url.lastPathComponent
                 let name = url.deletingPathExtension().lastPathComponent
@@ -61,6 +58,22 @@ final class AmbienceMixer: ObservableObject {
                 return BuiltinLoop(file: file, name: name, url: url)
             }
             .sorted { $0.name < $1.name }
+    }
+
+    /// Finds the built-in .wav loops. Xcode and Swift Playgrounds package
+    /// resources differently (a separate resource bundle, a folder, or loose
+    /// files), and `Bundle.module` stops the app if its bundle isn't where it
+    /// expects, so search the app's own files instead.
+    private static func findLoops() -> [URL] {
+        var found: [String: URL] = [:]
+        let roots = ([Bundle.main] + Bundle.allBundles).compactMap(\.resourceURL)
+        for root in Set(roots) {
+            guard let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
+            for case let url as URL in files where url.pathExtension.lowercased() == "wav" {
+                found[url.lastPathComponent] = found[url.lastPathComponent] ?? url
+            }
+        }
+        return Array(found.values)
     }
 
     /// Connects the mixer to the library and restores the saved mix.
