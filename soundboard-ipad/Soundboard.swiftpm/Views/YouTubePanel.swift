@@ -106,10 +106,18 @@ struct YouTubePanel: View {
                     Label("Save Full Audio", systemImage: "square.and.arrow.down")
                 }
                 .disabled(controller.isRecording || !controller.hasVideo)
-                Toggle("Play out loud", isOn: $listenWhileSaving)
-                    .fixedSize()
-                    .font(.subheadline)
-                    .disabled(controller.isRecording)
+                if AppAudioRecorder.isAvailable {
+                    // The app records what it plays, so saving is always audible.
+                    Text("Plays while saving. Turn the volume down if you don't want to hear it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                } else {
+                    Toggle("Play out loud", isOn: $listenWhileSaving)
+                        .fixedSize()
+                        .font(.subheadline)
+                        .disabled(controller.isRecording)
+                }
             }
 
             status

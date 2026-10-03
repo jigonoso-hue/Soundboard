@@ -128,6 +128,8 @@ enum CaptureScript {
       if (adShowing()) { cancelCapture = null; throw new Error('The ad didn\'t finish. Try again.'); }
     }
 
+    if (options.native) return runNative(video, start, end, () => cancelled);
+
     const nodes = tap(video);
     try { await ctx.resume(); } catch (e) { /* checked by the watchdog below */ }
 
@@ -238,6 +240,59 @@ enum CaptureScript {
         if (stalledFor > 30000) finish('The video stopped playing. Check your connection and try again.');
         else if (video.paused) video.play().catch(() => {});
       }, 500);
+
+      video.play().catch((e) => finish('Couldn\'t start playback: ' + e.message));
+    });
+  }
+  // The app records its own audio output (ReplayKit). The page only plays
+  // [start, end] and reports the video's clock 20 times a second so the app
+  // can tell which audio belongs to the clip; ads are reported as not playing.
+  async function runNative(video, start, end, wasCancelled) {
+    const savedRate = video.playbackRate;
+    video.pause();
+    video.playbackRate = 1;
+    const seekTarget = Math.max(0, start - 0.4);
+    const seeked = new Promise((resolve) => video.addEventListener('seeked', resolve, { once: true }));
+    video.currentTime = seekTarget;
+    await Promise.race([seeked, sleep(3000)]);
+
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      let ticker = null;
+      let endedAt = 0;
+      let last = -1;
+      let stalledFor = 0;
+      const finish = (error) => {
+        if (finished) return;
+        finished = true;
+        clearInterval(ticker);
+        cancelCapture = null;
+        video.pause();
+        video.playbackRate = savedRate;
+        if (error) return reject(new Error(error));
+        post({ type: 'done', title: videoTitle(), url: location.href, start, end });
+        resolve();
+      };
+      cancelCapture = () => finish('Capture cancelled.');
+      if (wasCancelled()) return finish('Capture cancelled.');
+
+      ticker = setInterval(() => {
+        const ad = adShowing();
+        const t = video.currentTime;
+        const playing = !video.paused && !video.seeking && !ad && video.readyState >= 3;
+        post({ type: 'clock', time: t, playing });
+        post({ type: 'progress', time: t, fraction: Math.max(0, Math.min(1, (t - start) / (end - start))) });
+        if (!ad && (t >= end || video.ended)) {
+          // Keep going briefly so the last moments reach the recorder.
+          if (!endedAt) endedAt = Date.now();
+          else if (Date.now() - endedAt > 500) finish();
+          return;
+        }
+        stalledFor = (t !== last || ad) ? 0 : stalledFor + 50;
+        last = t;
+        if (stalledFor > 30000) finish('The video stopped playing. Check your connection and try again.');
+        else if (video.paused && !ad && stalledFor % 500 === 0) video.play().catch(() => {});
+      }, 50);
 
       video.play().catch((e) => finish('Couldn\'t start playback: ' + e.message));
     });

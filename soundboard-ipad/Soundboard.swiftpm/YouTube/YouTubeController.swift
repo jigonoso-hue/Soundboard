@@ -31,6 +31,8 @@ final class YouTubeController: ObservableObject {
 
     let webView: WKWebView
     private var writer: CaptureWriter?
+    /// Records the app's own audio (used on iPadOS, where the page can't tap YouTube's audio).
+    private var recorder: AppAudioRecorder?
     private var pendingName = ""
     private var pendingFull = false
     private var label = ""
@@ -125,12 +127,70 @@ final class YouTubeController: ObservableObject {
         capture = .recording(0, "\(label)…")
         // Keep the screen awake: iPadOS pauses web audio when the iPad locks.
         UIApplication.shared.isIdleTimerDisabled = true
+        guard AppAudioRecorder.isAvailable else {
+            runPageCapture(start: start, end: end, listen: listen, native: false)
+            return
+        }
+        // iPadOS asks once for permission to record the app's audio.
+        let recorder = AppAudioRecorder(start: start, end: end)
+        self.recorder = recorder
+        capture = .recording(0, "Starting the recorder…")
+        recorder.begin { [weak self] error in
+            guard let self else { return }
+            if let error {
+                self.recorder = nil
+                self.fail(error.localizedDescription)
+                return
+            }
+            self.capture = .recording(0, "\(self.label)…")
+            self.runPageCapture(start: start, end: end, listen: listen, native: true)
+        }
+    }
+
+    private func runPageCapture(start: Double, end: Double, listen: Bool, native: Bool) {
         Task {
-            let js = "window.__sb ? window.__sb.capture(\(start), \(end), { listen: \(listen) }) : 'missing'"
+            let js = "window.__sb ? window.__sb.capture(\(start), \(end), { listen: \(listen), native: \(native) }) : 'missing'"
             let result = try? await webView.evaluateJavaScript(js)
             if (result as? String) != "ok" {
                 fail("This page isn't ready yet. Wait for it to load, then try again.")
             }
+        }
+    }
+
+    /// Saves what the native recorder captured.
+    private func finishNative(_ recorder: AppAudioRecorder, message: [String: Any]) {
+        self.recorder = nil
+        recorder.finish { [weak self] result, error in
+            guard let self else { return }
+            UIApplication.shared.isIdleTimerDisabled = false
+            if let error { return self.fail("Couldn't save the audio: \(error.localizedDescription)") }
+            guard let result else {
+                return self.fail("No audio was recorded. Make sure the video plays, then try again.")
+            }
+            guard result.peak > 0.0005 else {
+                try? FileManager.default.removeItem(at: result.file)
+                return self.fail("Only silence was recorded. Check that the video's sound isn't muted on the page, then try again.")
+            }
+            self.save(file: result.file, seconds: Double(result.frames) / result.sampleRate, message: message)
+        }
+    }
+
+    private func save(file: URL, seconds: Double, message: [String: Any]) {
+        defer { try? FileManager.default.removeItem(at: file) }
+        let pageTitle = message["title"] as? String ?? ""
+        let source = SoundSource(
+            title: pageTitle,
+            url: message["url"] as? String ?? "",
+            start: (message["start"] as? NSNumber)?.doubleValue ?? 0,
+            end: (message["end"] as? NSNumber)?.doubleValue ?? 0,
+            full: pendingFull ? true : nil
+        )
+        let name = pendingName.isEmpty ? (pageTitle.isEmpty ? "YouTube audio" : pageTitle) : pendingName
+        do {
+            try onCaptured?(file, name, source)
+            capture = .done("Saved “\(name)” (\(TimeText.format(seconds))).")
+        } catch {
+            capture = .failed(error.localizedDescription)
         }
     }
 
@@ -145,6 +205,8 @@ final class YouTubeController: ObservableObject {
     private func fail(_ message: String) {
         writer?.discard()
         writer = nil
+        recorder?.cancel()
+        recorder = nil
         UIApplication.shared.isIdleTimerDisabled = false
         capture = .failed(message)
     }
@@ -193,28 +255,21 @@ final class YouTubeController: ObservableObject {
                 ? "\(label)… \(TimeText.format(time)) / \(TimeText.format(duration)), in real time"
                 : "\(label)… the clip plays in real time."
             capture = .recording((message["fraction"] as? NSNumber)?.doubleValue ?? 0, detail)
+        case "clock":
+            let time = (message["time"] as? NSNumber)?.doubleValue ?? 0
+            let playing = message["playing"] as? Bool ?? false
+            recorder?.updateClock(media: time, playing: playing)
         case "done":
+            if let recorder {
+                capture = .recording(1, "Finishing…")
+                finishNative(recorder, message: message)
+                return
+            }
             guard let writer else { return fail("No audio was captured.") }
             self.writer = nil
             UIApplication.shared.isIdleTimerDisabled = false
-            let pageTitle = message["title"] as? String ?? ""
-            let source = SoundSource(
-                title: pageTitle,
-                url: message["url"] as? String ?? "",
-                start: (message["start"] as? NSNumber)?.doubleValue ?? 0,
-                end: (message["end"] as? NSNumber)?.doubleValue ?? 0,
-                full: pendingFull ? true : nil
-            )
-            let name = pendingName.isEmpty ? (pageTitle.isEmpty ? "YouTube audio" : pageTitle) : pendingName
             let seconds = Double(writer.frames) / writer.sampleRate
-            let file = writer.finish()
-            defer { try? FileManager.default.removeItem(at: file) }
-            do {
-                try onCaptured?(file, name, source)
-                capture = .done("Saved “\(name)” (\(TimeText.format(seconds))).")
-            } catch {
-                capture = .failed(error.localizedDescription)
-            }
+            save(file: writer.finish(), seconds: seconds, message: message)
         case "error":
             fail(message["message"] as? String ?? "Capture failed.")
         default:

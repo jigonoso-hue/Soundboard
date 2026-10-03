@@ -55,6 +55,8 @@ Apps installed with a free Apple ID stop opening after 7 days. Run it from Xcode
 
 The app plays the selected range once and records the audio as it plays, so a 5-second clip takes about 5 seconds. Clips can be up to 2 minutes long.
 
+The first time, iPadOS asks for permission to record the screen. Choose **Allow**: the app only keeps its own audio (iPadOS doesn't let the app capture YouTube's sound any other way), and a recording indicator shows while it records. The audio plays out loud while it records; turn the volume down if you don't want to hear it.
+
 **If a capture gives an error or silence**, use the fallback, which always works:
 
 1. Start iPad **Screen Recording** from Control Center.
