@@ -55,7 +55,7 @@ Apps installed with a free Apple ID stop opening after 7 days. Run it from Xcode
 
 The app plays the selected range once and records the audio as it plays, so a 5-second clip takes about 5 seconds. Clips can be up to 2 minutes long.
 
-The first time, iPadOS asks for permission to record the screen. Choose **Allow**: the app only keeps its own audio (iPadOS doesn't let the app capture YouTube's sound any other way), and a recording indicator shows while it records. The audio plays out loud while it records; turn the volume down if you don't want to hear it.
+The app saves the audio that YouTube's player downloads, so nothing needs to play out loud: the video plays muted and sped up until the selected part has downloaded, and a part you've already watched saves almost instantly. If a page doesn't allow that, the app falls back to recording its own audio, which asks for permission to record the screen the first time.
 
 **If a capture gives an error or silence**, use the fallback, which always works:
 
@@ -69,11 +69,10 @@ The **Ambience** strip at the top of the board lists the built-in loops. Tap a l
 
 ## Saving a whole video's audio
 
-Open a video and tap **Save Full Audio**. iPadOS doesn't allow downloading YouTube files directly, so the app plays the video once from start to finish and records it. A 4-minute song takes about 4 minutes, and a one-hour mix takes an hour.
+Open a video and tap **Save Full Audio**. The app saves the audio YouTube's player downloads: the video plays muted at double speed until all of it has downloaded, so a 4-minute song takes about 2 minutes.
 
-- By default it records silently. Turn on **Play out loud** to listen while it saves.
 - Ads that play before or during the video are skipped automatically.
-- Keep the app open while it records. The screen stays awake on its own, but switching apps or locking the iPad pauses the recording.
+- Keep the app open while it saves. The screen stays awake on its own, but switching apps or locking the iPad pauses it.
 - Saves can be up to 3 hours long, and are stored as compressed `.m4a` files (about 1.4 MB per minute).
 
 For faster full downloads, use the Mac app. It downloads at full speed using yt-dlp, a free YouTube downloader you install yourself.

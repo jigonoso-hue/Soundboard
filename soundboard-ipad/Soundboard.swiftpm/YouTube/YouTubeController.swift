@@ -33,6 +33,12 @@ final class YouTubeController: ObservableObject {
     private var writer: CaptureWriter?
     /// Records the app's own audio (used on iPadOS, where the page can't tap YouTube's audio).
     private var recorder: AppAudioRecorder?
+    /// The downloaded-audio file being received from the page.
+    private var segmentFile: FileHandle?
+    private var segmentURL: URL?
+    private var segmentRange: (start: Double, end: Double) = (0, 0)
+    /// Set while saving downloaded audio; used to fall back to recording.
+    private var segmentRequest: (start: Double, end: Double, listen: Bool)?
     private var pendingName = ""
     private var pendingFull = false
     private var label = ""
@@ -49,6 +55,8 @@ final class YouTubeController: ObservableObject {
         // Without a Safari token YouTube serves a reduced page.
         config.applicationNameForUserAgent = "Version/17.0 Safari/605.1.15"
         let content = WKUserContentController()
+        // Must run before YouTube's player starts, to see the audio it downloads.
+        content.addUserScript(WKUserScript(source: SegmentScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.addUserScript(WKUserScript(source: CaptureScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         config.userContentController = content
 
@@ -127,6 +135,20 @@ final class YouTubeController: ObservableObject {
         capture = .recording(0, "\(label)…")
         // Keep the screen awake: iPadOS pauses web audio when the iPad locks.
         UIApplication.shared.isIdleTimerDisabled = true
+        // Best: save the audio the player downloads. If this page can't, record instead.
+        segmentRequest = (start, end, listen)
+        Task {
+            let js = "window.__sbSeg ? window.__sbSeg.capture(\(start), \(end), {}) : 'missing'"
+            let result = try? await webView.evaluateJavaScript(js)
+            if (result as? String) != "ok" { fallBackToRecording() }
+        }
+    }
+
+    /// When the downloaded audio isn't available: record what plays instead.
+    private func fallBackToRecording() {
+        guard let request = segmentRequest else { return }
+        segmentRequest = nil
+        let start = request.start, end = request.end, listen = request.listen
         guard AppAudioRecorder.isAvailable else {
             runPageCapture(start: start, end: end, listen: listen, native: false)
             return
@@ -203,6 +225,8 @@ final class YouTubeController: ObservableObject {
     }
 
     private func fail(_ message: String) {
+        segmentRequest = nil
+        closeSegmentFile(delete: true)
         writer?.discard()
         writer = nil
         recorder?.cancel()
@@ -221,7 +245,36 @@ final class YouTubeController: ObservableObject {
     }
 
     func cancelCapture() {
+        webView.evaluateJavaScript("window.__sbSeg && window.__sbSeg.cancel()", completionHandler: nil)
         webView.evaluateJavaScript("window.__sb && window.__sb.cancel()", completionHandler: nil)
+    }
+
+    // MARK: Downloaded audio
+
+    private func closeSegmentFile(delete: Bool) {
+        try? segmentFile?.close()
+        segmentFile = nil
+        if delete, let url = segmentURL { try? FileManager.default.removeItem(at: url) }
+        if delete { segmentURL = nil }
+    }
+
+    private func finishSegments(message: [String: Any]) {
+        guard let url = segmentURL else { return fail("No audio was downloaded.") }
+        closeSegmentFile(delete: false)
+        segmentURL = nil
+        segmentRequest = nil
+        let range = segmentRange
+        capture = .recording(1, "Saving…")
+        Task {
+            defer { try? FileManager.default.removeItem(at: url) }
+            do {
+                let clip = try await ClipExporter.exportAudio(from: url, start: range.start, end: range.end)
+                UIApplication.shared.isIdleTimerDisabled = false
+                save(file: clip, seconds: range.end - range.start, message: message)
+            } catch {
+                fail("Couldn't save the audio: \(error.localizedDescription)")
+            }
+        }
     }
 
     fileprivate func handle(_ body: Any) {
@@ -251,10 +304,34 @@ final class YouTubeController: ObservableObject {
             guard isRecording else { return }
             let time = (message["time"] as? NSNumber)?.doubleValue ?? currentTime
             currentTime = time
-            let detail = pendingFull
-                ? "\(label)… \(TimeText.format(time)) / \(TimeText.format(duration)), in real time"
-                : "\(label)… the clip plays in real time."
+            let fraction = (message["fraction"] as? NSNumber)?.doubleValue ?? 0
+            let detail = segmentRequest != nil
+                ? "Downloading the audio… \(Int(fraction * 100))%"
+                : pendingFull
+                    ? "\(label)… \(TimeText.format(time)) / \(TimeText.format(duration)), in real time"
+                    : "\(label)… the clip plays in real time."
             capture = .recording((message["fraction"] as? NSNumber)?.doubleValue ?? 0, detail)
+        case "segments-unavailable":
+            fallBackToRecording()
+        case "segments-start":
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+            segmentURL = url
+            segmentFile = try? FileHandle(forWritingTo: url)
+            segmentRange = (
+                (message["relStart"] as? NSNumber)?.doubleValue ?? 0,
+                (message["relEnd"] as? NSNumber)?.doubleValue ?? 0
+            )
+            if segmentFile == nil { fail("Couldn't create the audio file.") }
+        case "segments-chunk":
+            guard let file = segmentFile, let base64 = message["data"] as? String, let chunk = Data(base64Encoded: base64) else { return }
+            do {
+                try file.write(contentsOf: chunk)
+            } catch {
+                fail("Couldn't save the audio: \(error.localizedDescription)")
+            }
+        case "segments-done":
+            finishSegments(message: message)
         case "clock":
             let time = (message["time"] as? NSNumber)?.doubleValue ?? 0
             let playing = message["playing"] as? Bool ?? false

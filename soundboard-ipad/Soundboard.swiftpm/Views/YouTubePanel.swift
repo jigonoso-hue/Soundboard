@@ -107,8 +107,8 @@ struct YouTubePanel: View {
                 }
                 .disabled(controller.isRecording || !controller.hasVideo)
                 if AppAudioRecorder.isAvailable {
-                    // The app records what it plays, so saving is always audible.
-                    Text("Plays while saving. Turn the volume down if you don't want to hear it.")
+                    // The app saves the audio the player downloads, muted and sped up.
+                    Text("Saves quietly: the video plays muted and sped up while the audio downloads.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
