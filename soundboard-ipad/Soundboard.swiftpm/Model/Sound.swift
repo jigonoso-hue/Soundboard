@@ -19,6 +19,58 @@ struct Sound: Identifiable, Codable, Equatable {
     var source: SoundSource?
     /// nil = play once; otherwise replay this many seconds after it ends (0 = immediately).
     var repeatGap: Double? = nil
+    /// Tags such as "horror" or "tavern" (nil in libraries made before tags).
+    var tags: [String]? = nil
+    /// Clip (a short effect, shown as a tile) or full sound (a song or long track, shown as a row).
+    var kind: SoundKind? = nil
+    /// Length in seconds, measured when the sound is added.
+    var duration: Double? = nil
+
+    var tagList: [String] { tags ?? [] }
+
+    /// Sounds at least a minute long count as full sounds unless the user says otherwise.
+    var isFull: Bool {
+        (kind ?? ((duration ?? 0) >= SoundKind.fullSoundSeconds ? .full : .clip)) == .full
+    }
+}
+
+enum SoundKind: String, Codable, CaseIterable {
+    case clip, full
+
+    static let fullSoundSeconds = 60.0
+
+    var label: String { self == .clip ? "Clip" : "Full sound" }
+    var icon: String { self == .clip ? "scissors" : "note" }
+}
+
+/// Tag names and colours, shared by the filters, chips and pickers.
+enum TagStyle {
+    static let premade = ["surprise", "comedy", "horror", "shock", "suspense", "combat", "magic", "creature",
+                          "weather", "nature", "tavern", "music", "victory", "sad", "mystery"]
+
+    private static let presetColors: [String: UInt32] = [
+        "surprise": 0xFFB347, "comedy": 0xFFE156, "horror": 0xFF5D73, "shock": 0xD58BFF, "suspense": 0x8B8CFF,
+        "combat": 0xFF8A5C, "magic": 0x5EC8FF, "creature": 0x6EE7B7, "weather": 0x7DD3FC, "nature": 0x86EFAC,
+        "tavern": 0xF5A742, "music": 0xF472B6, "victory": 0xFACC15, "sad": 0x94A3B8, "mystery": 0xA78BFA,
+    ]
+
+    static func color(_ tag: String) -> Color {
+        if let hex = presetColors[tag] { return Color(hex: hex) }
+        var hash: UInt32 = 0
+        for scalar in tag.unicodeScalars { hash = hash &* 31 &+ scalar.value }
+        return Color(hue: Double(hash % 360) / 360, saturation: 0.55, brightness: 0.95)
+    }
+
+    /// Lowercase letters, numbers, spaces, & ' and -, at most 24 characters (same rule as the Mac app).
+    static func clean(_ name: String) -> String {
+        let allowed = name.lowercased().unicodeScalars.filter {
+            CharacterSet.alphanumerics.contains($0) || " &'-".unicodeScalars.contains($0)
+        }
+        let collapsed = String(String.UnicodeScalarView(allowed))
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        return String(collapsed.prefix(24))
+    }
 }
 
 enum Palette {
@@ -39,6 +91,33 @@ extension Color {
             green: Double((hex >> 8) & 0xFF) / 255,
             blue: Double(hex & 0xFF) / 255
         )
+    }
+
+    /// "#rrggbb" → colour; nil if it isn't one.
+    init?(hexString: String) {
+        let digits = hexString.hasPrefix("#") ? String(hexString.dropFirst()) : hexString
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        self.init(hex: value)
+    }
+
+    /// "#rrggbb" for storing a colour the user picked.
+    var hexString: String {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        let clamp = { (v: CGFloat) in Int((min(1, max(0, v)) * 255).rounded()) }
+        return String(format: "#%02x%02x%02x", clamp(r), clamp(g), clamp(b))
+    }
+}
+
+/// Hex colour strings as stored in bashes and kits.
+enum HexColor {
+    static func isValid(_ value: String) -> Bool {
+        value.count == 7 && value.hasPrefix("#") && UInt32(value.dropFirst(), radix: 16) != nil
+    }
+
+    static func clean(_ value: String?, fallback: String) -> String {
+        guard let value, isValid(value) else { return fallback }
+        return value.lowercased()
     }
 }
 

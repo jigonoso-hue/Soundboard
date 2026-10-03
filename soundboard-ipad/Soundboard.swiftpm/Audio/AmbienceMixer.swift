@@ -19,7 +19,8 @@ struct BuiltinLoop: Identifiable, Equatable {
 }
 
 /// Looping background layers (built-in loops or library sounds), each with
-/// its own volume, faded in and out under the soundboard.
+/// its own volume, faded in and out under the soundboard. Layers live in the
+/// ambience strip and in scene kits' ambience sections; both play through here.
 @MainActor
 final class AmbienceMixer: ObservableObject {
     static let fade: TimeInterval = 1.5
@@ -33,6 +34,8 @@ final class AmbienceMixer: ObservableObject {
     let builtins: [BuiltinLoop]
     private weak var store: SoundStore?
     private var players: [String: AVAudioPlayer] = [:]
+    /// Layers playing from scene kits, by voice id.
+    private var external: [String: AmbienceLayer] = [:]
     private var stateURL: URL?
 
     private struct SavedState: Codable {
@@ -144,8 +147,53 @@ final class AmbienceMixer: ObservableObject {
         save()
     }
 
+    /// Stops every layer, including ones started from scene kits.
     func stopAll() {
         for id in playing { stop(id) }
+        external.removeAll()
+    }
+
+    /// Whether any of the strip's own layers is playing.
+    var stripPlaying: Bool {
+        layers.contains { playing.contains($0.id) }
+    }
+
+    /// How many scene-kit layers are playing.
+    var kitLayersPlaying: Int {
+        external.keys.filter { playing.contains($0) }.count
+    }
+
+    // MARK: Scene kit layers
+
+    func isPlaying(voice id: String) -> Bool {
+        playing.contains(id)
+    }
+
+    func startVoice(_ id: String, kind: AmbienceLayer.Kind, ref: String, volume: Double) {
+        guard !playing.contains(id) else { return }
+        let layer = AmbienceLayer(id: id, kind: kind, ref: ref, volume: volume)
+        external[id] = layer
+        start(layer)
+    }
+
+    func stopVoice(_ id: String) {
+        external[id] = nil
+        stop(id)
+    }
+
+    func toggleVoice(_ id: String, kind: AmbienceLayer.Kind, ref: String, volume: Double) {
+        if playing.contains(id) { stopVoice(id) } else { startVoice(id, kind: kind, ref: ref, volume: volume) }
+    }
+
+    func setVoiceVolume(_ id: String, volume: Double) {
+        guard var layer = external[id] else { return }
+        layer.volume = volume
+        external[id] = layer
+        players[id]?.volume = Float(volume * masterVolume)
+    }
+
+    func name(kind: AmbienceLayer.Kind, ref: String) -> String {
+        name(of: AmbienceLayer(id: "", kind: kind, ref: ref, volume: 0))
     }
 
     /// Drops layers whose library sound was deleted.
@@ -153,10 +201,19 @@ final class AmbienceMixer: ObservableObject {
         guard let store else { return }
         let ids = Set(store.sounds.map { $0.id.uuidString })
         let missing = layers.filter { $0.kind == .sound && !ids.contains($0.ref) }
+        syncExternal()
         guard !missing.isEmpty else { return }
         for layer in missing { stop(layer.id, fade: 0.3) }
         layers.removeAll { layer in missing.contains { $0.id == layer.id } }
         save()
+    }
+
+    private func syncExternal() {
+        guard let store else { return }
+        let ids = Set(store.sounds.map { $0.id.uuidString })
+        for (id, layer) in external where layer.kind == .sound && !ids.contains(layer.ref) {
+            stopVoice(id)
+        }
     }
 
     // MARK: Playback
@@ -196,7 +253,7 @@ final class AmbienceMixer: ObservableObject {
     }
 
     private func applyVolumes() {
-        for layer in layers {
+        for layer in layers + Array(external.values) {
             players[layer.id]?.volume = Float(layer.volume * masterVolume)
         }
     }

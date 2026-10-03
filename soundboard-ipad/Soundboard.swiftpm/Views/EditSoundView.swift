@@ -6,6 +6,11 @@ struct EditSoundView: View {
     var onDelete: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+
+    private var lengthNote: String {
+        guard let duration = sound.duration else { return "" }
+        return " This one is \(TimeText.format(duration)) long."
+    }
     @State private var confirmDelete = false
 
     var body: some View {
@@ -13,6 +18,23 @@ struct EditSoundView: View {
             Form {
                 Section("Name") {
                     TextField("Name", text: $sound.name)
+                }
+                Section {
+                    KindPicker(kind: Binding(
+                        get: { sound.isFull ? .full : .clip },
+                        set: { sound.kind = $0 }
+                    ))
+                } header: {
+                    Text("Type")
+                } footer: {
+                    Text("Clips are short effects, shown as tiles. Full sounds are songs and long tracks, shown as rows with a timer." + lengthNote)
+                }
+                Section("Tags") {
+                    TagPicker(selected: Binding(
+                        get: { sound.tagList },
+                        set: { sound.tags = $0 }
+                    ))
+                    .padding(.vertical, 4)
                 }
                 Section("Color") {
                     HStack(spacing: 12) {

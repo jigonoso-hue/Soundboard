@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The row of ambience layers shown above the soundboard.
+/// The row of ambience layers shown under the board.
 struct AmbienceStrip: View {
-    @ObservedObject var mixer: AmbienceMixer
-    @ObservedObject var store: SoundStore
+    @EnvironmentObject private var mixer: AmbienceMixer
+    @EnvironmentObject private var store: SoundStore
     @AppStorage("ambienceCollapsed") private var collapsed = false
 
     private let activeColor = Color(hex: 0x6EE7B7)
@@ -26,6 +26,12 @@ struct AmbienceStrip: View {
                     .frame(maxWidth: 160)
 
                 addMenu
+
+                if mixer.kitLayersPlaying > 0 {
+                    Text("+ \(mixer.kitLayersPlaying) from scene kits")
+                        .font(.caption)
+                        .foregroundStyle(activeColor)
+                }
 
                 Spacer(minLength: 0)
 

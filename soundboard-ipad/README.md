@@ -2,6 +2,17 @@
 
 The iPad version of the soundboard: a native SwiftUI app with the same features as the Mac app.
 
+- **Sidebar.** Scene Kits at the top. Under them, the library views (**All**, **Clips**, **Full Sounds**, **Bashes**) with counts, and collapsible **Tags** filters.
+- **Clips vs Full Sounds.** Short effects show as tiles, and songs and long tracks show as rows with a timer. Sounds a minute or longer count as full sounds automatically. You can change the type in a sound's editor.
+- **Tags.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic and more) plus your own. After you add sounds, the app asks you to name and tag them. Filter by tags in the sidebar (**Match any** or **Match all**). Search matches names and tags. Sort by your order, name, newest or longest.
+- **Bashes.** Several sounds fired together with one tap. The full-screen editor has a timeline: drag sounds left or right to set when they start, and up or down to layer them on lanes. Tap a sound to set its volume or make it repeat (with a gap, and a number of plays or until stopped). Give it a name and a cover: an icon or a photo.
+- **Scene Kits.** A board for one scene, such as "Tavern Brawl". It's made of sections:
+  - A new kit starts with Bashes, Sound Effects, Music and Ambience sections.
+  - **Customize Layout** lets you move sections by their title bar and resize them from the corner, on a 12-column grid.
+  - **Add** opens a library panel with search, type and tag filters. Tap to add or remove, or drag onto any section.
+  - Drag items between sections, or long-press an item → **Move to Section**.
+  - **Ambience sections** hold looping layers (built-in loops or your own sounds), each with its own on/off and volume.
+- **Icons.** The same 100 tabletop-game icons as the Mac app, for bash covers and scene kits. Search them, browse by group, and pick any background colour and icon colour.
 - **Your own sounds.** Tap **+** to add audio from the Files app, or pick a video from Files or Photos and trim out the part you want.
 - **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer.
 - **Save full audio from YouTube.** Save a whole video's audio, such as a song or a tavern mix, to your library.
@@ -73,11 +84,16 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 
 | File | Purpose |
 | --- | --- |
-| `Model/SoundStore.swift` | Sound storage (files + `library.json`) |
+| `Model/SoundStore.swift` | Sound storage (files + `library.json`) and tags (`tags.json`) |
+| `Model/Sound.swift` | Sound, kinds, tag colours |
+| `Model/Bash.swift` | Bashes and their storage (`bashes.json` + `covers/`) |
+| `Model/SceneKit.swift` | Scene kits, sections and layout (`kits.json`) |
+| `Model/Icons.swift`, `Model/IconData.swift` | The icon set. `IconData.swift` is generated from the Mac app's icons by `tools/generate-ios-icons.py` |
+| `Audio/BashPlayer.swift` | Bash playback, timed on the audio clock |
 | `Audio/SoundPlayer.swift` | Playback, volumes, progress |
 | `Audio/AudioFiles.swift` | Streaming .m4a encoding of captures and trimming audio out of videos |
 | `Audio/AmbienceMixer.swift` | Ambience layers |
 | `Resources/Ambience/` | Built-in loops (made by `tools/generate-ambience.py`) |
 | `YouTube/YouTubeController.swift` | The embedded YouTube view and capture bridge |
 | `YouTube/CaptureScript.swift` | JavaScript injected into YouTube that records the video's audio |
-| `Views/` | Board, ambience strip, YouTube panel, trim and edit screens |
+| `Views/` | Sidebar, library board, scene kit board and library panel, bash editor, icon picker, ambience strip, YouTube panel, trim and edit screens |
