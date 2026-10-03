@@ -1,4 +1,4 @@
-/* global AudioUtils, Tags */
+/* global AudioUtils, Tags, Kits */
 const api = window.soundboard;
 const $ = (sel) => document.querySelector(sel);
 
@@ -14,7 +14,7 @@ const playing = new Map(); // sound id -> Set<HTMLAudioElement>
 // ---------- Preferences (per-machine conveniences) ----------
 
 function loadPrefs() {
-  const defaults = { master: 1, noOverlap: false, outputDevice: '', browserOpen: false, view: 'all', tagFilter: [], tagMode: 'any', sort: 'custom' };
+  const defaults = { master: 1, noOverlap: false, outputDevice: '', browserOpen: false, view: 'all', tagFilter: [], tagMode: 'any', sort: 'custom', tagsOpen: false };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem('prefs') || '{}') }; } catch { return defaults; }
 }
 function savePrefs() {
@@ -122,7 +122,9 @@ const isFull = (sound) => sound.kind === 'full';
 function filteredSounds() {
   const search = $('#filter').value.trim().toLowerCase();
   const tags = prefs.tagFilter;
+  const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
   let list = sounds.filter((s) => {
+    if (kit && !kit.items.some((i) => i.type === 'sound' && i.id === s.id)) return false;
     if (search && !s.name.toLowerCase().includes(search) && !(s.tags || []).some((t) => t.includes(search))) return false;
     if (!tags.length) return true;
     const own = s.tags || [];
@@ -153,8 +155,10 @@ function render() {
 
   const totalClips = sounds.filter((s) => !isFull(s)).length;
   const totalFull = sounds.length - totalClips;
-  $('#clips-count').textContent = filtering ? `${clips.length} of ${totalClips}` : `${totalClips}`;
-  $('#full-count').textContent = filtering ? `${full.length} of ${totalFull}` : `${totalFull}`;
+  const inKit = typeof Kits !== 'undefined' && !!Kits.activeKit();
+  // Inside a kit, count only the kit's own sounds.
+  $('#clips-count').textContent = inKit ? `${clips.length}` : filtering ? `${clips.length} of ${totalClips}` : `${totalClips}`;
+  $('#full-count').textContent = inKit ? `${full.length}` : filtering ? `${full.length} of ${totalFull}` : `${totalFull}`;
   const emptyText = (n, total, what) => (n ? '' : total ? `No ${what} match your filters.` : what === 'clips'
     ? 'No clips yet. Short sound effects you add show up here as tiles.'
     : 'No full sounds yet. Songs and long tracks (a minute or more, or saved with “Save Full Audio”) show up here.');
@@ -163,13 +167,25 @@ function render() {
   $('#full-empty').textContent = emptyText(full.length, totalFull, 'full sounds');
   $('#full-empty').classList.toggle('hidden', !!full.length);
 
-  // Which blocks the current view shows.
-  $('#bashes').classList.toggle('hidden', !(view === 'all' || view === 'bashes'));
-  $('#clips-block').classList.toggle('hidden', !(view === 'all' || view === 'clips') || !sounds.length);
-  $('#full-block').classList.toggle('hidden', !(view === 'all' || view === 'full') || !sounds.length);
-  $('#empty').classList.toggle('hidden', sounds.length > 0 || view === 'bashes');
+  // Which blocks the current view shows. A scene kit shows all three, limited to its items.
+  const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
+  if (kit) {
+    const inKit = (type) => kit.items.some((i) => i.type === type);
+    const kitSounds = sounds.filter((s) => kit.items.some((i) => i.type === 'sound' && i.id === s.id));
+    $('#bashes').classList.toggle('hidden', !inKit('bash'));
+    $('#clips-block').classList.toggle('hidden', !kitSounds.some((s) => !isFull(s)));
+    $('#full-block').classList.toggle('hidden', !kitSounds.some(isFull));
+    $('#empty').classList.add('hidden');
+  } else {
+    $('#bashes').classList.toggle('hidden', !(view === 'all' || view === 'bashes'));
+    $('#clips-block').classList.toggle('hidden', !(view === 'all' || view === 'clips') || !sounds.length);
+    $('#full-block').classList.toggle('hidden', !(view === 'all' || view === 'full') || !sounds.length);
+    $('#empty').classList.toggle('hidden', sounds.length > 0 || view === 'bashes');
+  }
+  $('#bash-new').classList.toggle('hidden', !!kit);
+  if (typeof Kits !== 'undefined') { Kits.renderSidebar(); Kits.renderHeader(); }
 
-  for (const btn of document.querySelectorAll('.view-btn')) btn.classList.toggle('active', btn.dataset.view === view);
+  for (const btn of document.querySelectorAll('.side-nav .view-btn')) btn.classList.toggle('active', btn.dataset.view === view);
   document.querySelector('[data-count="all"]').textContent = sounds.length;
   document.querySelector('[data-count="clips"]').textContent = totalClips;
   document.querySelector('[data-count="full"]').textContent = totalFull;
@@ -235,6 +251,13 @@ function renderTagFilters() {
   row.appendChild(btn);
   host.appendChild(row);
   $('#tag-mode').textContent = prefs.tagMode === 'all' ? 'Match all' : 'Match any';
+  // Collapsible: hidden until opened, but always say when filters are on.
+  const open = !!prefs.tagsOpen;
+  $('#tags-section').classList.toggle('collapsed', !open);
+  $('#tags-toggle').setAttribute('aria-expanded', String(open));
+  $('#tags-toggle .caret').textContent = open ? '▾' : '▸';
+  const active = prefs.tagFilter.length;
+  $('#tags-active').textContent = active ? `· ${active} active` : '';
 }
 
 function renderActiveFilters() {
@@ -263,9 +286,10 @@ function toggleTagFilter(tag) {
   render();
 }
 
-for (const btn of document.querySelectorAll('.view-btn')) {
+for (const btn of document.querySelectorAll('.side-nav .view-btn')) {
   btn.addEventListener('click', () => { prefs.view = btn.dataset.view; savePrefs(); render(); });
 }
+$('#tags-toggle').addEventListener('click', () => { prefs.tagsOpen = !prefs.tagsOpen; savePrefs(); render(); });
 $('#tag-mode').addEventListener('click', () => { prefs.tagMode = prefs.tagMode === 'all' ? 'any' : 'all'; savePrefs(); render(); });
 $('#sort').value = prefs.sort;
 $('#sort').addEventListener('change', (e) => { prefs.sort = e.target.value; savePrefs(); render(); });
@@ -347,6 +371,7 @@ function makeTrack(sound) {
   progress.className = 'tile-progress';
 
   row.append(playBtn, info, meta, edit, progress);
+  addKitRemove(row, sound);
   row.addEventListener('click', () => play(sound.id));
   row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
@@ -356,6 +381,17 @@ function makeTrack(sound) {
     playBtn.textContent = '■';
   }
   return row;
+}
+
+// While viewing a scene kit, each sound gets a small button to take it out of the kit.
+function addKitRemove(el, sound) {
+  if (typeof Kits === 'undefined' || !Kits.activeKit()) return;
+  const btn = document.createElement('button');
+  btn.className = 'kit-remove';
+  btn.textContent = '−';
+  btn.title = `Remove from this scene kit (stays in your library)`;
+  btn.addEventListener('click', (e) => { e.stopPropagation(); Kits.removeFromActive('sound', sound.id); });
+  el.appendChild(btn);
 }
 
 // Drag a tile or row onto another of the same kind to reorder.
@@ -446,6 +482,7 @@ function makeTile(sound) {
 
   addReorder(tile, sound);
 
+  addKitRemove(tile, sound);
   if (playing.has(sound.id)) tile.classList.add('playing');
   return tile;
 }
@@ -454,6 +491,7 @@ let soundsLoaded = false;
 
 async function refresh() {
   [sounds] = await Promise.all([api.list(), Tags.load()]);
+  if (typeof Kits !== 'undefined') await Kits.load();
   soundsLoaded = true;
   render();
   measureMissingDurations();
@@ -908,4 +946,6 @@ function setDownloadUi(active, status, isError = false) {
 updateClipLength();
 setBrowserOpen(prefs.browserOpen);
 loadOutputDevices();
-refresh();
+// Wait for every script (tags, kits, bashes…) to load before the first render.
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', refresh, { once: true });
+else refresh();

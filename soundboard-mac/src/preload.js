@@ -11,6 +11,16 @@ contextBridge.exposeInMainWorld('soundboard', {
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
   onHotkey: (callback) => ipcRenderer.on('hotkey:play', (_e, id) => callback(id)),
   readSound: (id) => ipcRenderer.invoke('sounds:read', id),
+  kits: {
+    list: () => ipcRenderer.invoke('kits:list'),
+    create: (options) => ipcRenderer.invoke('kits:create', options),
+    update: (id, changes) => ipcRenderer.invoke('kits:update', id, changes),
+    addItems: (id, items) => ipcRenderer.invoke('kits:add-items', id, items),
+    removeItem: (id, item) => ipcRenderer.invoke('kits:remove-item', id, item),
+    duplicate: (id) => ipcRenderer.invoke('kits:duplicate', id),
+    remove: (id) => ipcRenderer.invoke('kits:remove', id),
+    onChanged: (callback) => ipcRenderer.on('kits:changed', (_e, list) => callback(list)),
+  },
   editor: {
     setDirty: (dirty) => ipcRenderer.invoke('bash-editor:set-dirty', dirty),
     onCloseRequested: (callback) => ipcRenderer.on('bash-editor:close-requested', () => callback()),

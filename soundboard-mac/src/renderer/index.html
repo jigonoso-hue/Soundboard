@@ -11,6 +11,15 @@
     <aside id="sidebar">
       <div class="side-top">Soundboard</div>
 
+      <div class="kits-section">
+        <div class="side-head">
+          <span>Scene Kits</span>
+          <button id="kit-new" class="mini" title="Create a scene kit">+ New</button>
+        </div>
+        <div id="kit-list" class="kit-list"></div>
+      </div>
+
+      <div class="side-head library-head"><span>Library</span></div>
       <nav class="side-nav" aria-label="Views">
         <button class="view-btn" data-view="all"><span class="view-icon">◎</span> All <span class="count" data-count="all"></span></button>
         <button class="view-btn" data-view="clips"><span class="view-icon">✂</span> Clips <span class="count" data-count="clips"></span></button>
@@ -18,9 +27,11 @@
         <button class="view-btn" data-view="bashes"><span class="view-icon">⚡</span> Bashes <span class="count" data-count="bashes"></span></button>
       </nav>
 
-      <div class="side-section">
+      <div id="tags-section" class="side-section">
         <div class="side-head">
-          <span>Tags</span>
+          <button id="tags-toggle" class="side-toggle" aria-expanded="false" title="Show or hide the tag filters">
+            <span class="caret">▸</span> Tags <span id="tags-active" class="tags-active"></span>
+          </button>
           <button id="tag-mode" class="mini" title="Whether a sound needs any or all of the selected tags">Match any</button>
         </div>
         <div id="tag-filters" class="tag-filters"></div>
@@ -58,6 +69,22 @@
       <div id="active-filters" class="active-filters hidden"></div>
 
       <div id="content" class="content">
+        <section id="kit-header" class="kit-header hidden">
+          <div id="kit-header-badge"></div>
+          <div class="kit-header-info">
+            <div class="muted small kit-eyebrow">Scene Kit</div>
+            <h1 id="kit-header-name"></h1>
+            <div id="kit-header-meta" class="muted"></div>
+          </div>
+          <div class="kit-header-actions">
+            <button data-kit-action="add" class="primary">+ Add from Library</button>
+            <button data-kit-action="edit">Edit</button>
+            <button data-kit-action="duplicate">Duplicate</button>
+            <button data-kit-action="delete" class="danger">Delete</button>
+          </div>
+          <p id="kit-empty" class="muted kit-empty hidden">This kit is empty. Click <b>+ Add from Library</b> to pick clips, full sounds and bashes for this scene.</p>
+        </section>
+
         <section id="bashes" class="block">
           <div class="block-head bash-header">
             <button id="bash-collapse" class="plain block-title" title="Show/hide bashes">▾ Bashes</button>
@@ -165,6 +192,7 @@
       <div class="dialog-tools">
         <button type="button" id="edit-ambience" title="Loop this sound as a background layer">Add to Ambience</button>
         <select id="edit-bash" title="Add this sound to a bash"><option value="">Add to Bash…</option></select>
+        <button type="button" id="edit-kit" title="Add this sound to a scene kit">Add to Scene Kit…</button>
         <button type="button" id="edit-reveal">Show in Finder</button>
       </div>
       <div class="dialog-actions">
@@ -179,8 +207,67 @@
   <div id="bash-menu" class="popup-menu hidden" role="menu">
     <button data-action="edit" role="menuitem">Edit…</button>
     <button data-action="duplicate" role="menuitem">Duplicate</button>
+    <button data-action="kit" role="menuitem">Add to Scene Kit…</button>
+    <button data-action="unkit" role="menuitem">Remove from this Kit</button>
     <button data-action="delete" role="menuitem" class="danger">Delete</button>
   </div>
+
+  <div id="kit-menu" class="popup-menu hidden" role="menu">
+    <button data-action="add" role="menuitem">Add from Library…</button>
+    <button data-action="edit" role="menuitem">Rename / Restyle…</button>
+    <button data-action="duplicate" role="menuitem">Duplicate</button>
+    <button data-action="delete" role="menuitem" class="danger">Delete</button>
+  </div>
+
+  <dialog id="kit-dialog">
+    <form method="dialog">
+      <h2 id="kit-dialog-title">New Scene Kit</h2>
+      <div class="kit-dialog-top">
+        <div id="kit-preview"></div>
+        <label>Name <input id="kit-name" maxlength="60"></label>
+      </div>
+      <label>Icon <div id="kit-icons" class="icon-grid kit-icons"></div></label>
+      <label>Color <div id="kit-colors" class="swatches"></div></label>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="kit-add-dialog" class="wide">
+    <form method="dialog">
+      <h2 id="kit-add-title">Add to kit</h2>
+      <div class="kit-add-tools">
+        <input id="kit-add-search" type="search" placeholder="Search names and tags…">
+        <div id="kit-add-filter" class="segmented">
+          <button type="button" data-filter="all">All</button>
+          <button type="button" data-filter="clip">✂ Clips</button>
+          <button type="button" data-filter="full">♫ Full</button>
+          <button type="button" data-filter="bash">⚡ Bashes</button>
+        </div>
+      </div>
+      <div id="kit-add-list" class="kit-add-list"></div>
+      <div class="dialog-actions">
+        <span id="kit-add-count" class="muted small"></span>
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="kit-choose-dialog">
+    <form method="dialog">
+      <h2 id="kit-choose-title">Add to a Scene Kit</h2>
+      <div id="kit-choose-list" class="kit-choose-list"></div>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="tag-dialog" class="wide">
     <form method="dialog">
@@ -204,6 +291,7 @@
   <script src="app.js"></script>
   <script src="ambience.js"></script>
   <script src="bash-common.js"></script>
+  <script src="kits.js"></script>
   <script src="bashes-board.js"></script>
 </body>
 </html>

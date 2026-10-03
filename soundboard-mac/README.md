@@ -5,6 +5,7 @@ A desktop soundboard for your Mac. You can:
 - **Add your own sounds.** Click **+ Add Sounds** or drag audio files (mp3, wav, m4a, aac, ogg, opus, flac, aiff, caf, webm) onto the board. You're asked to tag them as they're added.
 - **Clips and Full Sounds.** Short effects are *Clips*, shown as tiles. Songs and long tracks are *Full Sounds*, shown as rows with a play button, a timer and a progress bar.
 - **Tags and filters.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic, creature, weather, nature, tavern, music, victory, sad, mystery) plus your own. A sound can have several. Filter from the sidebar by one or more tags, search names and tags, and sort.
+- **Scene Kits.** Collect clips, full songs and Bashes from your whole library into a kit for a scene, such as "Tavern Brawl" or "Dragon's Lair", and open it from the sidebar.
 - **Bashes.** Named groups of sounds that play together with one click, each with a cover image or icon. Every Bash opens in its own editor window, with a timeline for choosing when each sound starts and layering sounds.
 - **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer, such as a song you saved from YouTube.
 - **Save full audio from YouTube.** Save a whole video's audio track, such as a song or a one-hour tavern mix, to your library.
@@ -43,12 +44,23 @@ The app plays the selected range once and records the video's audio while it pla
 ## Layout
 
 - **Sidebar (left):**
-  - Views: **All**, **Clips**, **Full Sounds**, **Bashes**.
-  - Your **tags**, with a count for each.
+  - **Scene Kits**, with an item count for each.
+  - **Library** views: **All**, **Clips**, **Full Sounds**, **Bashes**.
+  - **Tags**, a dropdown: click **Tags** to show or hide the tag filters. When it's collapsed with filters on, it shows how many are active (for example "Tags · 2 active").
   - **Master volume**, **Output** device and **Restart instead of overlap**.
 - **Top bar:** search, sort, **+ Add Sounds**, **▶ YouTube** and **■ Stop All**.
 - **Main area:** Bashes, then Clips (tiles), then Full Sounds (rows).
 - **Ambience:** a mixer docked at the bottom. Click its title to collapse it.
+
+### Scene Kits
+
+A Scene Kit gathers everything you need for one scene from across your library: clips, full songs and Bashes. A sound can be in any number of kits. Kits only point at your sounds, so removing something from a kit, or deleting a kit, never deletes the sound.
+
+- **Creating a kit:** click **+ New** next to *Scene Kits* in the sidebar. Give the kit a name, pick an icon and a color, then tick the sounds and Bashes to include. The checklist can be searched by name or tag and filtered to Clips, Full sounds or Bashes.
+- **Opening a kit:** click it in the sidebar. Its page shows its Bashes, Clips and Full Sounds, styled the same as the library. Search and tag filters work inside the kit too.
+- **Adding more:** use **+ Add from Library** on the kit page. You can also use **Add to Scene Kit…** in a sound's editor, or **⋯ → Add to Scene Kit…** on a Bash.
+- **Removing:** hover a sound in the kit and click **−**, or use **⋯ → Remove from this Kit** on a Bash.
+- **Managing kits:** **Edit** renames a kit or changes its icon and color. **Duplicate** copies it as a starting point for a similar scene, and **Delete** removes it. The same options are on the kit's right-click menu in the sidebar.
 
 ### Clips vs Full Sounds
 
@@ -132,6 +144,8 @@ npm test   # unit tests for the library (incl. tags), bashes and audio helpers
 | `src/preload.js` | Safe API exposed to the UI |
 | `src/ytdlp.js` | Runs your installed yt-dlp to save full audio |
 | `src/bashes.js` | Bash storage (`bashes.json` + `covers/`) |
+| `src/kits.js` | Scene Kit storage (`kits.json`) |
+| `src/renderer/kits.js` | Scene Kits sidebar, kit page and dialogs |
 | `src/renderer/bashes-board.js` | Bash cards on the main board |
 | `src/renderer/bash-editor.*` | Bash editor window (timeline) |
 | `src/renderer/bash-common.js` | Bash playback engine, covers, waveforms |

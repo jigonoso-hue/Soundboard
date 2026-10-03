@@ -1,4 +1,4 @@
-/* global api, $, sounds, toast, editingId, BashCommon */
+/* global api, $, sounds, toast, editingId, BashCommon, Kits */
 // The Bashes row on the main board: cards with covers that play a whole bash.
 const Bashes = (() => {
   const player = new BashCommon.BashPlayer(api);
@@ -18,14 +18,16 @@ const Bashes = (() => {
     host.classList.toggle('hidden', collapsed);
     $('#bash-collapse').textContent = `${collapsed ? '▸' : '▾'} Bashes`;
 
-    if (!list.length) {
+    const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
+    const shown = kit ? list.filter((b) => kit.items.some((i) => i.type === 'bash' && i.id === b.id)) : list;
+    if (!shown.length && !kit) {
       const empty = document.createElement('p');
       empty.className = 'muted small bash-empty';
       empty.textContent = 'No bashes yet. A bash layers several sounds and plays them with one click — try “Ambush!” with a war horn, shouting and clashing swords.';
       host.appendChild(empty);
     }
 
-    for (const bash of list) {
+    for (const bash of shown) {
       const card = document.createElement('div');
       card.className = 'bash-card';
       card.dataset.id = bash.id;
@@ -107,6 +109,7 @@ const Bashes = (() => {
   function openMenu(id, anchor) {
     menuFor = id;
     const menu = $('#bash-menu');
+    menu.querySelector('[data-action="unkit"]').classList.toggle('hidden', !(typeof Kits !== 'undefined' && Kits.activeKit()));
     const rect = anchor.getBoundingClientRect();
     menu.style.left = `${Math.min(window.innerWidth - 170, rect.left)}px`;
     menu.style.top = `${rect.bottom + 4}px`;
@@ -126,6 +129,8 @@ const Bashes = (() => {
     if (!action || !id) return;
     const bash = list.find((b) => b.id === id);
     if (action === 'edit') api.bashes.openEditor(id);
+    if (action === 'kit' && bash) Kits.chooseKitFor({ type: 'bash', id }, bash.name);
+    if (action === 'unkit') Kits.removeFromActive('bash', id);
     if (action === 'duplicate') { await api.bashes.duplicate(id); await reload(); }
     if (action === 'delete' && bash && confirm(`Delete the bash “${bash.name}”? Its sounds stay in your library.`)) {
       if (player.state()?.bashId === id) player.stop();

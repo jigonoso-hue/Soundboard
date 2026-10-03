@@ -5,6 +5,7 @@ const fs = require('fs');
 const { Library, AUDIO_EXTENSIONS } = require('./library');
 const { YtDlp } = require('./ytdlp');
 const { BashStore, COVER_TYPES } = require('./bashes');
+const { KitStore, KIT_ICONS, KIT_COLORS } = require('./kits');
 
 const AMBIENCE_DIR = path.join(__dirname, 'ambience');
 
@@ -19,6 +20,7 @@ app.userAgentFallback = app.userAgentFallback.replace(/\s(Electron|clipboard-sou
 
 let library;
 let bashes;
+let kits;
 let ytdlp;
 const editors = new Map(); // bash id -> editor window
 let mainWindow;
@@ -174,6 +176,7 @@ function registerIpc() {
     syncHotkeys();
     broadcast('sounds:changed', null, e.sender);
     if (bashes.pruneSound(id)) broadcast('bashes:changed', bashes.list());
+    if (kits.prune('sound', id)) broadcast('kits:changed', kits.list());
   });
 
   ipcMain.handle('sounds:reorder', (_e, ids) => library.reorder(ids));
@@ -252,6 +255,7 @@ function registerIpc() {
   });
   ipcMain.handle('bashes:remove', (e, id) => {
     bashes.remove(id);
+    if (kits.prune('bash', id)) broadcast('kits:changed', kits.list());
     const editor = editors.get(id);
     if (editor && !editor.isDestroyed()) editor.close();
     bashesChanged(e.sender);
@@ -294,6 +298,16 @@ function registerIpc() {
     return `data:image/${mime};base64,${fs.readFileSync(p).toString('base64')}`;
   });
 
+  // ---- Scene Kits ----
+  const kitsChanged = (sender) => broadcast('kits:changed', kits.list(), sender);
+  ipcMain.handle('kits:list', () => ({ kits: kits.list(), icons: KIT_ICONS, colors: KIT_COLORS }));
+  ipcMain.handle('kits:create', (e, options) => { const kit = kits.create(options); kitsChanged(e.sender); return kit; });
+  ipcMain.handle('kits:update', (e, id, changes) => { const kit = kits.update(id, changes); kitsChanged(e.sender); return kit; });
+  ipcMain.handle('kits:add-items', (e, id, items) => { const kit = kits.addItems(id, items); kitsChanged(e.sender); return kit; });
+  ipcMain.handle('kits:remove-item', (e, id, item) => { const kit = kits.removeItem(id, item); kitsChanged(e.sender); return kit; });
+  ipcMain.handle('kits:duplicate', (e, id) => { const kit = kits.duplicate(id); kitsChanged(e.sender); return kit; });
+  ipcMain.handle('kits:remove', (e, id) => { kits.remove(id); kitsChanged(e.sender); });
+
   ipcMain.handle('shell:open-external', (_e, url) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
   });
@@ -302,6 +316,7 @@ function registerIpc() {
 app.whenReady().then(() => {
   library = new Library(path.join(app.getPath('userData'), 'sounds'));
   bashes = new BashStore(library.dir);
+  kits = new KitStore(library.dir);
 
   ytdlp = new YtDlp();
 
