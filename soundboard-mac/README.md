@@ -52,29 +52,52 @@ The app plays the selected range once and records the video's audio while it pla
 - **Main area:** Bashes, then Clips (tiles), then Full Sounds (rows).
 - **Ambience:** a mixer docked at the bottom. Click its title to collapse it.
 
+### Icons
+
+The app has its own set of 100 icons for tabletop games, so it doesn't use emoji. They come in these groups:
+- **Combat:** swords, axes, bows, shields.
+- **Magic:** wands, potions, spellbooks, runes.
+- **Creatures:** dragons, skulls, ghosts, tentacles.
+- **People:** party, rogue, masks, moods.
+- **Places:** castles, taverns, caves, dungeon gates, ships.
+- **Nature and weather:** storms, wind, waves, campfires.
+- **Treasure:** chests, coins, d20 and d6 dice.
+- **Music.**
+- The interface icons.
+
+When you choose an icon for a Bash cover or a Scene Kit, you can search the set or browse it by group. You can also pick any **background** colour and any **icon colour**, either from presets or with the custom colour wheel. Bashes and kits made in earlier versions keep their look: their emoji are switched to the matching icon.
+
 ### Scene Kits
 
 A Scene Kit is a board for one scene, such as "Tavern Brawl" or "Dragon's Lair". It holds clips, full songs and Bashes from your whole library. Kits only point at your sounds: a sound can be in many kits, and removing it from a kit (or deleting the kit) never deletes the sound.
 
-**Sections.** A kit is made of sections. A new kit starts with three, already laid out: **Bashes** across the top, **Sound Effects** (clips) on the left, and **Music** (full sounds) on the right. Inside a section, Bashes appear as cards, clips as tiles and songs as rows with a timer.
+**Sections.** A kit is made of sections. A new kit starts with four, already laid out: **Bashes** across the top, **Sound Effects** (clips) on the left, **Music** (full sounds) on the right, and **Ambience** along the bottom. Inside a section, Bashes appear as cards, clips as tiles and songs as rows with a timer.
+
+**Ambience sections.** An ambience section holds looping layers for the scene, such as the built-in rain, thunderstorm or campfire loops, or any sound from your library. Each layer is a card:
+- Click it to fade it in or out.
+- Its slider sets its volume.
+- **Stop** in the section's title bar fades out all of the section's layers.
+- **＋ Add** opens the library panel with the built-in loops and your sounds. You can also drag a sound from the panel onto the section.
+
+While a kit with an ambience section is open, the ambience strip at the bottom of the window is hidden. It comes back when you leave the kit, and its **Stop Ambience** button also stops layers started from kits. Ambience sections can be moved and resized like any other, and a kit can have more than one.
 
 **Adding sounds.** Click **＋ Add** on any section, or **＋ Add from Library** at the top of the kit. A library panel opens on the right, already filtered to what that section is for. It has:
 - Search by name or tag.
 - Filters for **All / Clips / Full / Bashes**, and for tags.
-- **Click to add or remove:** click an item to add it to the section (it shows ✓), and click again to remove it. The **Adding to** menu at the top switches which section you're filling.
+- **Click to add or remove:** click an item to add it to the section (it turns green), and click again to remove it. The **Adding to** menu at the top switches which section you're filling.
 - **Dragging:** drag any item from the panel onto any section.
 
 **Organizing items.**
 - Drag a sound or Bash from one section to another to move it.
-- Hover an item and click **−** to take it out of that section.
+- Hover an item and click **×** to take it out of that section.
 
-**Customizing the layout.** Click **✥ Customize Layout**:
+**Customizing the layout.** Click **Customize Layout**:
 - **Move** a section by dragging its title bar.
 - **Resize** it by dragging its bottom-right corner.
 - Sections snap to a 12-column grid and slide up to fill gaps.
-- **＋ Section** adds a new section.
+- **＋ Section** adds a new section: a **Sound section** or an **Ambience section**.
 
-Click **✓ Done** to lock the layout, so nothing moves by accident during a session.
+Click **Done** to lock the layout, so nothing moves by accident during a session.
 
 **Section options (⋯).**
 - **Rename** it (double-clicking the title also works).
@@ -82,7 +105,7 @@ Click **✓ Done** to lock the layout, so nothing moves by accident during a ses
 - **Meant for:** sets which items the add panel shows first (clips, full sounds, Bashes or anything).
 - **Remove section.**
 
-**Kit options:** **Edit** (name, icon, color), **Duplicate** and **Delete** are at the top of the kit, and on its right-click menu in the sidebar. You can also add a single sound with **Add to Scene Kit…** in its editor, or a Bash from its **⋯** menu. These go into the section that suits them.
+**Kit options:** **Edit** (name, icon, icon colour, background colour), **Duplicate** and **Delete** are at the top of the kit, and on its right-click menu in the sidebar. You can also add a single sound with **Add to Scene Kit…** in its editor, or a Bash from its **⋯** menu. These go into the section that suits them.
 
 ### Clips vs Full Sounds
 
@@ -118,7 +141,7 @@ In the editor window:
   - **plays** is how many times it plays in total. Leave it empty to repeat until the Bash is stopped.
   - Repeats show as dashed copies on the timeline. A Bash with an endless repeat shows **∞** as its length, and its card pulses while it plays. Stop it by clicking the card again, pressing **Stop All**, or pressing Esc.
 - **Playback:** Space or **▶ Play** plays from the playhead. Click the ruler to move the playhead.
-- **Cover and name:** click the cover at the top left to pick an icon and color, or **Upload image…** to use your own picture as album art. Edit the name next to the cover.
+- **Cover and name:** click the cover at the top left to pick an icon, an icon colour and a background colour, or **Upload image…** to use your own picture as album art. Edit the name next to the cover.
 - **Zoom** changes the timeline scale.
 - **Saving:** the editor opens as its own smaller window in front of the main app. Changes aren't saved until you click **Save** (or press ⌘S), which saves and closes the editor. Until then, **● Unsaved changes** shows at the top.
 - **Closing:** **Close** (or ⌘W, or the window's red button) closes the editor. With unsaved changes it asks first: **Save**, **Don't Save** or **Keep Editing**. If you don't save a brand-new Bash, it's removed.
@@ -147,7 +170,7 @@ The download runs in the background at full speed, not in real time, and the aud
 
 ## Notes
 
-- While a sound plays, its tile shows **■ Stop**, which stops just that sound. Right-click a tile, or click its **⋯** button, to edit or delete it.
+- While a sound plays, its tile shows a **Stop** button, which stops just that sound. Right-click a tile, or click its **⋯** button, to edit or delete it.
 - **Repeat:** in a sound's edit dialog, turn on **Repeat when finished** and set how many seconds to wait before it replays (0 = immediately). That's good for heartbeats, footsteps or a dripping tap. Click the tile again, or press Stop All, to stop it. Repeating tiles show ↻.
 - A hotkey must include ⌘, ⌥ or ⌃, or be an F-key, so it doesn't block normal typing in other apps.
 - Google sometimes blocks sign-in inside embedded browsers. YouTube works fine without signing in.
@@ -167,7 +190,10 @@ npm test   # unit tests for the library (incl. tags), bashes and audio helpers
 | `src/ytdlp.js` | Runs your installed yt-dlp to save full audio |
 | `src/bashes.js` | Bash storage (`bashes.json` + `covers/`) |
 | `src/kits.js` | Scene Kit storage (`kits.json`) |
-| `src/renderer/kits.js` | Scene Kits sidebar, kit page and dialogs |
+| `src/renderer/kits.js` | Scene Kits sidebar, kit page (including ambience sections) and dialogs |
+| `src/renderer/icons.js` | The app's 100-icon set |
+| `src/renderer/icon-picker.*` | Icon picker with icon and background colours |
+| `src/icon-ids.js` | Validates stored icon choices and converts old emoji |
 | `src/renderer/bashes-board.js` | Bash cards on the main board |
 | `src/renderer/bash-editor.*` | Bash editor window (timeline) |
 | `src/renderer/bash-common.js` | Bash playback engine, covers, waveforms |

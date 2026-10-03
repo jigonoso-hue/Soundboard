@@ -111,7 +111,7 @@ function updateTile(id, audio) {
       : (total ? AudioUtils.formatTime(total) : '');
   }
   const button = tile.querySelector('.track-play');
-  if (button) button.textContent = isPlaying ? '■' : '▶';
+  if (button) Icons.set(button, isPlaying ? 'stop' : 'play');
 }
 
 // ---------- Board rendering ----------
@@ -224,7 +224,7 @@ function renderTagFilters() {
     if (custom.has(tag)) {
       const del = document.createElement('button');
       del.className = 'tag-delete';
-      del.textContent = '×';
+      Icons.set(del, 'close', '', { size: 11 });
       del.title = `Delete the “${tag}” tag`;
       del.addEventListener('click', async () => {
         if (!confirm(`Delete the tag “${tag}”? It will be removed from ${counts.get(tag) || 0} sound(s). The sounds themselves stay.`)) return;
@@ -331,7 +331,7 @@ function makeTrack(sound, { reorder = true } = {}) {
 
   const playBtn = document.createElement('button');
   playBtn.className = 'track-play';
-  playBtn.textContent = '▶';
+  Icons.set(playBtn, 'play');
   playBtn.title = 'Play / stop';
   playBtn.addEventListener('click', (e) => { e.stopPropagation(); play(sound.id); });
 
@@ -347,7 +347,7 @@ function makeTrack(sound, { reorder = true } = {}) {
   if (sound.repeat) {
     const rep = document.createElement('span');
     rep.className = 'tile-hotkey';
-    rep.textContent = sound.repeat.gap ? `↻ ${sound.repeat.gap}s` : '↻';
+    Icons.set(rep, 'repeat', sound.repeat.gap ? `${sound.repeat.gap}s` : '', { size: 11 });
     meta.appendChild(rep);
   }
   if (sound.hotkey) {
@@ -363,7 +363,7 @@ function makeTrack(sound, { reorder = true } = {}) {
 
   const edit = document.createElement('button');
   edit.className = 'track-edit';
-  edit.textContent = '⋯';
+  Icons.set(edit, 'more');
   edit.title = 'Edit';
   edit.addEventListener('click', (e) => { e.stopPropagation(); openEditor(sound.id); });
 
@@ -377,7 +377,7 @@ function makeTrack(sound, { reorder = true } = {}) {
   if (reorder) addReorder(row, sound);
   if (playing.has(sound.id)) {
     row.classList.add('playing');
-    playBtn.textContent = '■';
+    Icons.set(playBtn, 'stop');
   }
   return row;
 }
@@ -431,7 +431,7 @@ function makeTile(sound, { reorder = true } = {}) {
     if (sound.repeat) {
       const rep = document.createElement('span');
       rep.className = 'tile-hotkey';
-      rep.textContent = sound.repeat.gap ? `↻ ${sound.repeat.gap}s` : '↻';
+      Icons.set(rep, 'repeat', sound.repeat.gap ? `${sound.repeat.gap}s` : '', { size: 11 });
       rep.title = sound.repeat.gap ? `Repeats ${sound.repeat.gap}s after it ends` : 'Repeats until stopped';
       badges.appendChild(rep);
     }
@@ -447,7 +447,7 @@ function makeTile(sound, { reorder = true } = {}) {
 
   const edit = document.createElement('button');
   edit.className = 'tile-edit';
-  edit.textContent = '⋯';
+  Icons.set(edit, 'more');
   edit.title = 'Edit';
   edit.addEventListener('click', (e) => { e.stopPropagation(); openEditor(sound.id); });
   tile.appendChild(edit);
@@ -455,7 +455,7 @@ function makeTile(sound, { reorder = true } = {}) {
   // Visible only while this sound is playing (or waiting to repeat).
   const stopBtn = document.createElement('button');
   stopBtn.className = 'tile-stop';
-  stopBtn.textContent = '■ Stop';
+  Icons.set(stopBtn, 'stop', 'Stop', { size: 12 });
   stopBtn.title = 'Stop this sound';
   stopBtn.addEventListener('click', (e) => { e.stopPropagation(); stop(sound.id); });
   tile.appendChild(stopBtn);
@@ -921,7 +921,8 @@ api.onDownloadProgress((jobId, progress) => {
 });
 
 function setDownloadUi(active, status, isError = false) {
-  $('#save-full').textContent = active ? 'Cancel Download' : '⬇ Save Full Audio';
+  if (active) $('#save-full').textContent = 'Cancel Download';
+  else Icons.set($('#save-full'), 'download', 'Save Full Audio');
   $('#capture-clip').disabled = active;
   $('#clip-status').textContent = status;
   $('#clip-status').classList.toggle('error-text', isError);

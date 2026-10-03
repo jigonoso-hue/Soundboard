@@ -5,13 +5,14 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' sound: blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
   <title>Bash</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="icon-picker.css">
   <link rel="stylesheet" href="bash-editor.css">
 </head>
 <body class="editor">
   <header class="ed-top">
     <button id="cover-btn" class="ed-cover bash-cover" title="Change the cover"></button>
     <input id="bash-name" maxlength="80" aria-label="Bash name" placeholder="Bash name">
-    <button id="play-btn" class="primary" title="Play from the playhead (Space)">▶ Play</button>
+    <button id="play-btn" class="primary" title="Play from the playhead (Space)"><i data-icon="play"></i> Play</button>
     <span id="time" class="mono muted">0:00.0 / 0:00.0</span>
     <span id="dirty" class="dirty hidden" title="Click Save to keep your changes">● Unsaved changes</span>
     <span class="spacer"></span>
@@ -65,11 +66,11 @@
   </div>
 
   <div id="cover-popover" class="popover hidden">
-    <div class="muted small">Icon</div>
-    <div id="icon-grid" class="icon-grid"></div>
-    <div class="muted small">Color</div>
-    <div id="color-grid" class="swatches"></div>
-    <button id="upload-cover">Upload image…</button>
+    <div id="cover-picker"></div>
+    <div class="cover-upload">
+      <span class="muted small">Or use your own picture</span>
+      <button id="upload-cover">Upload image…</button>
+    </div>
   </div>
 
   <dialog id="confirm-close">
@@ -87,6 +88,8 @@
 
   <div id="toast" class="hidden"></div>
 
+  <script src="icons.js"></script>
+  <script src="icon-picker.js"></script>
   <script src="audio-utils.js"></script>
   <script src="bash-common.js"></script>
   <script src="bash-editor.js"></script>

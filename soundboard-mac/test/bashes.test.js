@@ -23,12 +23,12 @@ test('update validates clips and persists', () => {
   store.update(bash.id, {
     name: '  Dragon Attack  ',
     clips: [{ id: 'x', soundId: 'a', offset: 2.34567, volume: 3, lane: 1.7 }, { soundId: 'b', offset: -5 }, { bogus: true }],
-    cover: { type: 'icon', icon: '🐉', color: '#ff0000' },
+    cover: { type: 'icon', icon: 'dragon', color: '#ff0000', iconColor: '#00ff00' },
   });
   const reloaded = new BashStore(dir).get(bash.id);
   assert.equal(reloaded.name, 'Dragon Attack');
   assert.deepEqual(reloaded.clips.map((c) => [c.soundId, c.offset, c.volume, c.lane]), [['a', 2.346, 1, 1], ['b', 0, 1, 0]]);
-  assert.deepEqual(reloaded.cover, { type: 'icon', icon: '🐉', color: '#ff0000' });
+  assert.deepEqual(reloaded.cover, { type: 'icon', icon: 'dragon', color: '#ff0000', iconColor: '#00ff00' });
 });
 
 test('image covers are stored, replaced and cleaned up', () => {
@@ -45,7 +45,7 @@ test('image covers are stored, replaced and cleaned up', () => {
 
   const second = store.setCoverImage(bash.id, Buffer.from('png2'), 'jpg');
   assert.ok(!fs.existsSync(firstPath));
-  store.update(bash.id, { cover: { type: 'icon', icon: '🎲', color: '#123456' } });
+  store.update(bash.id, { cover: { type: 'icon', icon: 'd20', color: '#123456' } });
   assert.ok(!fs.existsSync(store.coverPath(second.cover.file)));
   assert.throws(() => store.setCoverImage(bash.id, Buffer.from(''), 'exe'));
   assert.equal(store.coverPath('../x'), null);
@@ -83,4 +83,15 @@ test('clips can repeat', () => {
   assert.deepEqual(clips.map((x) => x.repeat), [{ gap: 0, times: 0 }, { gap: 1.3, times: 4 }, { gap: 0, times: 0 }]);
   store.update(bash.id, { clips: [{ ...a, repeat: null }] });
   assert.equal(store.get(bash.id).clips[0].repeat, null);
+});
+
+test('emoji covers from older versions become icons', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-'));
+  fs.writeFileSync(path.join(dir, 'bashes.json'), JSON.stringify([
+    { id: 'a', name: 'Old', cover: { type: 'icon', icon: '🐉', color: '#ff0000' }, clips: [] },
+    { id: 'b', name: 'Odd', cover: { type: 'icon', icon: '🦄', color: '#ff0000' }, clips: [] },
+  ]));
+  const store = new BashStore(dir);
+  assert.deepEqual(store.get('a').cover, { type: 'icon', icon: 'dragon', color: '#ff0000', iconColor: '#ffffff' });
+  assert.equal(store.get('b').cover.icon, 'crossed-swords');
 });

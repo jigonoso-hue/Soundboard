@@ -12,8 +12,8 @@ const ids = (section) => section.items.map((i) => `${i.type}:${i.id}`);
 test('new kits start with generic sections laid out on the grid', () => {
   const kit = new KitStore(tmp()).create({ name: '  Tavern Brawl ' });
   assert.equal(kit.name, 'Tavern Brawl');
-  assert.deepEqual(titles(kit), ['Bashes:bashes:0,0,12,4', 'Sound Effects:clips:0,4,7,8', 'Music:full:7,4,5,8']);
-  assert.ok(kit.sections.every((s) => s.id && s.size === 'm' && s.items.length === 0));
+  assert.deepEqual(titles(kit), ['Bashes:bashes:0,0,12,4', 'Sound Effects:clips:0,4,7,8', 'Music:full:7,4,5,8', 'Ambience:ambience:0,12,12,5']);
+  assert.ok(kit.sections.every((s) => s.id && s.size === 'm' && s.items.length === 0 && s.layers.length === 0));
 });
 
 test('adding items: to a chosen section, or to the best-suited one', () => {
@@ -47,9 +47,9 @@ test('layout and section edits are validated', () => {
   sections.push({ title: 'Extra', kind: 'mixed', x: 3, y: 20, w: 3, h: 3, items: [{ type: 'sound', id: 'a' }, { type: 'sound', id: 'a' }, { type: 'x', id: 'b' }] });
   const saved = store.update(kit.id, { sections });
   assert.deepEqual(saved.sections[0], { ...saved.sections[0], title: 'Fights', x: 8, w: 4, h: 2, size: 'm', kind: 'mixed' });
-  assert.equal(saved.sections[3].title, 'Extra');
-  assert.ok(saved.sections[3].id);
-  assert.deepEqual(ids(saved.sections[3]), ['sound:a']);
+  assert.equal(saved.sections[4].title, 'Extra');
+  assert.ok(saved.sections[4].id);
+  assert.deepEqual(ids(saved.sections[4]), ['sound:a']);
 });
 
 test('prune, duplicate, delete', () => {
@@ -60,10 +60,11 @@ test('prune, duplicate, delete', () => {
   assert.equal(store.prune('sound', 'a'), true);
   assert.deepEqual(store.get(kit.id).sections.flatMap(ids), ['bash:a']);
   assert.equal(store.prune('sound', 'zzz'), false);
-  store.update(kit.id, { icon: '💀', color: '#123456' });
+  store.update(kit.id, { icon: 'skull', color: '#123456', iconColor: '#FF0000' });
   const copy = store.duplicate(kit.id);
   assert.equal(copy.name, 'Dungeon copy');
-  assert.equal(copy.icon, '💀');
+  assert.equal(copy.icon, 'skull');
+  assert.equal(copy.iconColor, '#ff0000');
   assert.deepEqual(copy.sections.flatMap(ids), ['bash:a']);
   assert.notEqual(copy.sections[0].id, store.get(kit.id).sections[0].id);
   store.remove(kit.id);
@@ -80,5 +81,41 @@ test('older flat kits are converted into sections', () => {
   store.finishMigration([{ id: 'clip1', kind: 'clip' }, { id: 'song1', kind: 'full' }]);
   const kit = new KitStore(dir).get('old');
   assert.equal(kit.migrated, undefined);
-  assert.deepEqual(kit.sections.map(ids), [['bash:b1'], ['sound:clip1'], ['sound:song1']]);
+  assert.deepEqual(kit.sections.map(ids), [['bash:b1'], ['sound:clip1'], ['sound:song1'], []]);
+  assert.equal(kit.icon, 'jolly-roger'); // emoji icons become icons from the app's set
+  assert.equal(kit.iconColor, '#ffffff');
+});
+
+test('icons must come from the icon set', () => {
+  const store = new KitStore(tmp());
+  const kit = store.create();
+  assert.equal(store.update(kit.id, { icon: 'dragon', iconColor: 'red' }).iconColor, '#ffffff');
+  assert.equal(store.get(kit.id).icon, 'dragon');
+  assert.equal(store.update(kit.id, { icon: '<svg onload=x>' }).icon, 'mug');
+});
+
+test('ambience sections hold layers, not items', () => {
+  const store = new KitStore(tmp());
+  const kit = store.create();
+  const amb = kit.sections.find((s) => s.kind === 'ambience');
+  amb.layers = [
+    { kind: 'builtin', ref: 'rain.wav', volume: 2 },
+    { kind: 'builtin', ref: 'rain.wav', volume: 0.5 },
+    { kind: 'builtin', ref: '../secret.wav' },
+    { kind: 'sound', ref: 'song', volume: 0.4 },
+  ];
+  amb.items = [{ type: 'sound', id: 'x' }];
+  let saved = store.update(kit.id, { sections: kit.sections }).sections.find((s) => s.kind === 'ambience');
+  assert.deepEqual(saved.layers.map((l) => `${l.kind}:${l.ref}:${l.volume}`), ['builtin:rain.wav:1', 'sound:song:0.4']);
+  assert.ok(saved.layers.every((l) => l.id));
+  assert.deepEqual(saved.items, []);
+
+  // Items never land in an ambience section, even when it's asked for.
+  store.addItems(kit.id, [{ type: 'sound', id: 'boom' }], amb.id, [{ id: 'boom', kind: 'clip' }]);
+  assert.deepEqual(store.get(kit.id).sections.map(ids), [[], ['sound:boom'], [], []]);
+
+  // Deleting a sound removes its layers too.
+  assert.equal(store.prune('sound', 'song'), true);
+  saved = store.get(kit.id).sections.find((s) => s.kind === 'ambience');
+  assert.deepEqual(saved.layers.map((l) => l.ref), ['rain.wav']);
 });

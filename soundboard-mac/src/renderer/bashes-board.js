@@ -46,7 +46,7 @@ const Bashes = (() => {
     BashCommon.renderCover(cover, bash, api);
     const play = document.createElement('div');
     play.className = 'bash-play';
-    play.textContent = '▶';
+    Icons.set(play, 'play', '', { size: 22 });
     cover.appendChild(play);
 
     const info = document.createElement('div');
@@ -57,12 +57,12 @@ const Bashes = (() => {
     const meta = document.createElement('div');
     meta.className = 'muted small';
     const count = soundCount(bash);
-    meta.textContent = count ? `${count} sound${count > 1 ? 's' : ''}` : 'Empty — click ⋯ to edit';
+    meta.textContent = count ? `${count} sound${count > 1 ? 's' : ''}` : 'Empty, double-click to edit';
     info.append(name, meta);
 
     const more = document.createElement('button');
     more.className = 'bash-more';
-    more.textContent = '⋯';
+    Icons.set(more, 'more');
     more.title = 'Edit, duplicate or delete';
     more.addEventListener('click', (e) => { e.stopPropagation(); openMenu(bash.id, more); });
 
@@ -98,7 +98,8 @@ const Bashes = (() => {
     for (const card of document.querySelectorAll('.bash-card')) {
       const playing = state && state.bashId === card.dataset.id;
       card.classList.toggle('playing', !!playing);
-      card.querySelector('.bash-play').textContent = playing ? '■' : '▶';
+      const button = card.querySelector('.bash-play');
+      if (button.dataset.state !== String(!!playing)) { button.dataset.state = String(!!playing); Icons.set(button, playing ? 'stop' : 'play', '', { size: 22 }); }
       const endless = playing && !Number.isFinite(state.duration);
       card.classList.toggle('endless', !!endless);
       card.querySelector('.bash-progress').style.width = !playing ? '0'

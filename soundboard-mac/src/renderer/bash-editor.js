@@ -1,4 +1,4 @@
-/* global AudioUtils, BashCommon */
+/* global AudioUtils, BashCommon, IconPicker, Icons */
 // Bash editor window: arrange when each sound starts and layer them on a timeline.
 const api = window.soundboard;
 const $ = (sel) => document.querySelector(sel);
@@ -205,7 +205,7 @@ function renderTimeline() {
     if (clip.repeat) {
       const rep = document.createElement('span');
       rep.className = 'clip-repeat';
-      rep.textContent = clip.repeat.times ? `↻ ×${clip.repeat.times}` : '↻ ∞';
+      Icons.set(rep, 'repeat', clip.repeat.times ? `×${clip.repeat.times}` : '∞', { size: 10 });
       el.appendChild(rep);
     }
 
@@ -235,7 +235,7 @@ function drawRepeats(host, clip, sound, width) {
     ghost.style.top = `${clip.lane * LANE_HEIGHT + 5}px`;
     ghost.style.width = `${Math.max(6, length * pps)}px`;
     ghost.style.height = `${LANE_HEIGHT - 10}px`;
-    ghost.textContent = '↻';
+    Icons.set(ghost, 'repeat', '', { size: 12 });
     host.appendChild(ghost);
   }
 }
@@ -292,7 +292,11 @@ function renderTime() {
   const position = state ? state.position : cursor;
   const total = totalDuration();
   $('#time').textContent = `${AudioUtils.formatTime(position)} / ${Number.isFinite(total) ? AudioUtils.formatTime(total) : '∞ (repeats until stopped)'}`;
-  $('#play-btn').textContent = state ? '■ Stop' : '▶ Play';
+  const button = $('#play-btn');
+  if (button.dataset.state !== String(!!state)) {
+    button.dataset.state = String(!!state);
+    Icons.set(button, state ? 'stop' : 'play', state ? 'Stop' : 'Play');
+  }
 }
 
 function positionPlayhead() {
@@ -606,39 +610,20 @@ function renderCoverButton() {
 }
 
 function showCoverPopover() {
-  const pop = $('#cover-popover');
-  const icons = $('#icon-grid');
-  const colors = $('#color-grid');
-  icons.textContent = '';
-  colors.textContent = '';
-  const current = bash.cover.type === 'icon' ? bash.cover : { icon: null, color: BashCommon.ICON_COLORS[0] };
-  for (const icon of BashCommon.ICONS) {
-    const b = document.createElement('button');
-    b.textContent = icon;
-    b.className = 'icon-choice' + (icon === current.icon ? ' selected' : '');
-    b.addEventListener('click', () => setIconCover(icon, current.color));
-    icons.appendChild(b);
-  }
-  for (const color of BashCommon.ICON_COLORS) {
-    const b = document.createElement('button');
-    b.className = 'swatch' + (color === current.color ? ' selected' : '');
-    b.style.background = color;
-    b.title = color;
-    b.addEventListener('click', () => setIconCover(current.icon || BashCommon.ICONS[0], color));
-    colors.appendChild(b);
-  }
-  pop.classList.remove('hidden');
+  const current = bash.cover.type === 'icon' ? bash.cover : { icon: BashCommon.ICONS[0], color: BashCommon.ICON_COLORS[0] };
+  const picker = IconPicker.create(current, { onChange: setIconCover });
+  $('#cover-picker').replaceChildren(picker.element);
+  $('#cover-popover').classList.remove('hidden');
 }
 
 function hideCoverPopover() {
   $('#cover-popover').classList.add('hidden');
 }
 
-function setIconCover(icon, color) {
+function setIconCover({ icon, color, iconColor }) {
   pendingCover = null;
-  bash.cover = { type: 'icon', icon, color };
+  bash.cover = { type: 'icon', icon, color, iconColor };
   renderCoverButton();
-  showCoverPopover();
   markDirty();
 }
 

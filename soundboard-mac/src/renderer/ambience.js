@@ -1,6 +1,8 @@
-/* global api, $, sounds, soundsLoaded, prefs, toast */
+/* global api, $, sounds, soundsLoaded, prefs, toast, Kits */
 // Ambience: looping background layers (built-in or from the library) with
-// their own volumes, mixed under the soundboard.
+// their own volumes, mixed under the soundboard. Layers live in the dock at
+// the bottom of the window and in scene kits' ambience sections; both play
+// through the engine here.
 const Ambience = (() => {
   const FADE = 1.5;
   const ctx = new AudioContext();
@@ -14,6 +16,9 @@ const Ambience = (() => {
   // Persisted: { volume, collapsed, layers: [{ id, kind: 'builtin'|'sound', ref, volume, on }] }
   let state = { volume: 0.8, collapsed: false, layers: [] };
   const voices = new Map(); // layer id -> { gain, stop() }
+  const external = new Map(); // voice id -> layer, for layers in scene kits
+  const listeners = new Set();
+  const notify = () => { for (const fn of listeners) fn(); };
   const buffers = new Map(); // built-in file -> Promise<AudioBuffer>
 
   function layerUrl(layer) {
@@ -79,9 +84,11 @@ const Ambience = (() => {
       }
     } catch (err) {
       voices.delete(layer.id);
+      external.delete(layer.id);
       gain.disconnect();
       layer.on = false;
       render();
+      notify();
       toast(`Couldn't play “${layerName(layer)}”.`, true);
       return;
     }
@@ -115,8 +122,11 @@ const Ambience = (() => {
     host.textContent = '';
     host.classList.toggle('hidden', state.collapsed);
     $('#amb-collapse').textContent = `${state.collapsed ? '▸' : '▾'} Ambience`;
-    const playing = state.layers.filter((l) => l.on).length;
+    const playing = state.layers.filter((l) => l.on).length + external.size;
     $('#amb-collapse').classList.toggle('active', playing > 0);
+    $('#amb-collapse').title = external.size
+      ? `Show/hide ambience layers (${external.size} playing from scene kits)` : 'Show/hide ambience layers';
+    syncDock();
 
     for (const layer of state.layers) {
       const card = document.createElement('div');
@@ -144,7 +154,7 @@ const Ambience = (() => {
 
       const remove = document.createElement('button');
       remove.className = 'layer-remove';
-      remove.textContent = '×';
+      Icons.set(remove, 'close', '', { size: 12 });
       remove.title = 'Remove layer';
       remove.addEventListener('click', () => {
         stopVoice(layer.id, 0.3);
@@ -209,13 +219,27 @@ const Ambience = (() => {
     save();
   });
 
-  $('#amb-stop').addEventListener('click', () => {
+  // Stops every ambience layer, including the ones started from scene kits.
+  function stopAll() {
     for (const layer of state.layers) {
       if (layer.on) { layer.on = false; stopVoice(layer.id); }
     }
+    for (const id of [...external.keys()]) stopVoice(id);
+    external.clear();
     save();
     render();
-  });
+    notify();
+  }
+  $('#amb-stop').addEventListener('click', stopAll);
+
+  // While a scene kit with its own ambience section is open, that section
+  // replaces the dock (unless the dock still has layers playing).
+  function syncDock() {
+    const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
+    const kitHasAmbience = !!kit && kit.sections.some((s) => s.kind === 'ambience');
+    const dockPlaying = state.layers.some((l) => l.on);
+    $('#ambience').classList.toggle('hidden', kitHasAmbience && !dockPlaying);
+  }
 
   $('#amb-collapse').addEventListener('click', () => {
     state.collapsed = !state.collapsed;
@@ -259,6 +283,9 @@ const Ambience = (() => {
       if (!soundsLoaded) { render(); return; }
       const ids = new Set(sounds.map((s) => s.id));
       for (const layer of state.layers.filter((l) => l.kind === 'sound' && !ids.has(l.ref))) stopVoice(layer.id, 0.3);
+      for (const [id, layer] of external) {
+        if (layer.kind === 'sound' && !ids.has(layer.ref)) { stopVoice(id, 0.3); external.delete(id); notify(); }
+      }
       const before = state.layers.length;
       state.layers = state.layers.filter((l) => l.kind !== 'sound' || ids.has(l.ref));
       if (state.layers.length !== before) save();
@@ -269,5 +296,36 @@ const Ambience = (() => {
     },
     setOutputDevice,
     state: () => state,
+    syncDock,
+    stopAll,
+    // For scene kits' ambience sections. `id` names the voice; `layer` is
+    // { kind: 'builtin'|'sound', ref, volume }.
+    builtins: () => builtins,
+    layerName: (layer) => layerName(layer),
+    isPlaying: (id) => voices.has(id),
+    playingCount: () => voices.size,
+    start(id, layer) {
+      if (voices.has(id)) return;
+      const voice = { ...layer, id };
+      external.set(id, voice);
+      startVoice(voice);
+      render();
+      notify();
+    },
+    stop(id) {
+      if (!external.has(id)) return;
+      external.delete(id);
+      stopVoice(id);
+      render();
+      notify();
+    },
+    setVolume(id, volume) {
+      const layer = external.get(id);
+      if (!layer) return;
+      layer.volume = volume;
+      const voice = voices.get(id);
+      if (voice) voice.gain.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
+    },
+    onChange(fn) { listeners.add(fn); },
   };
 })();

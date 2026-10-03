@@ -5,8 +5,9 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { cleanIcon, cleanColor } = require('./icon-ids');
 
-const ICONS = ['⚔️', '🐉', '🍺', '🔥', '🌲', '🏰', '💀', '🌊', '⚡', '🎲', '🧙', '🌙', '👑', '🕯️', '🗡️', '🛡️', '🐺', '👻', '⛈️', '🎻'];
+const ICONS = ['crossed-swords', 'dragon', 'mug', 'flame', 'pine', 'castle', 'skull', 'wave', 'bolt', 'd20', 'wizard-hat', 'moon', 'crown', 'candle', 'dagger', 'shield', 'paw', 'ghost', 'storm', 'lute'];
 const ICON_COLORS = ['#7c6cff', '#ff5d73', '#ffb347', '#6ee7b7', '#5ec8ff', '#d58bff', '#8a6a4f', '#3f4a5a'];
 const COVER_TYPES = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
 const MAX_OFFSET = 60 * 60;
@@ -136,8 +137,9 @@ function normalize(bash) {
     ? { type: 'image', file: bash.cover.file }
     : {
       type: 'icon',
-      icon: typeof bash.cover?.icon === 'string' && bash.cover.icon.length <= 8 ? bash.cover.icon : ICONS[0],
-      color: /^#[0-9a-f]{6}$/i.test(bash.cover?.color || '') ? bash.cover.color : ICON_COLORS[0],
+      icon: cleanIcon(bash.cover?.icon, ICONS[0]),
+      color: cleanColor(bash.cover?.color, ICON_COLORS[0]),
+      iconColor: cleanColor(bash.cover?.iconColor, '#ffffff'),
     };
   const clips = (Array.isArray(bash.clips) ? bash.clips : [])
     .filter((c) => c && typeof c.soundId === 'string')

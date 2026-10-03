@@ -1,11 +1,13 @@
-/* global api, $, sounds, prefs, savePrefs, render, toast, isFull, editingId, AudioUtils, Tags, Bashes, makeTile, makeTrack, matchesFilters */
+/* global api, $, Icons, IconPicker, Ambience, sounds, prefs, savePrefs, render, toast, isFull, editingId, AudioUtils, Tags, Bashes, makeTile, makeTrack, matchesFilters */
 // Scene Kits: customizable boards of sections holding sounds and bashes
 // from the whole library. Sections live on a 12-column grid and can be
-// moved and resized in "Customize Layout" mode.
+// moved and resized in "Customize Layout" mode. Ambience sections hold
+// looping layers that play through the Ambience engine.
 const Kits = (() => {
   const ROW = 34; // px per grid row
   const GAP = 12; // px between grid cells
-  const KIND_LABEL = { bashes: '⚡ Bashes', clips: '✂ Clips', full: '♫ Full sounds', mixed: '◎ Anything' };
+  const KINDS = { bashes: ['bolt', 'Bashes'], clips: ['scissors', 'Clips'], full: ['note', 'Full sounds'], mixed: ['grid', 'Anything'] };
+  const isAmbience = (section) => section.kind === 'ambience';
 
   let list = [];
   let icons = [];
@@ -18,6 +20,7 @@ const Kits = (() => {
   const activeKit = () => list.find((k) => k.id === activeId()) || null;
   const bashList = () => (typeof Bashes !== 'undefined' ? Bashes.all() : []);
   const allItems = (kit) => kit.sections.flatMap((s) => s.items);
+  const allLayers = (kit) => kit.sections.flatMap((s) => s.layers || []);
   const inSection = (section, type, id) => section.items.some((i) => i.type === type && i.id === id);
 
   async function load() {
@@ -44,7 +47,8 @@ const Kits = (() => {
       if (!soundIds.has(item.id)) continue;
       if (isFull(sounds.find((s) => s.id === item.id))) full++; else clips++;
     }
-    return { clips, full, bashes, total: clips + full + bashes };
+    const layers = allLayers(kit).length;
+    return { clips, full, bashes, layers, total: clips + full + bashes + layers };
   }
 
   function describe(c) {
@@ -52,6 +56,7 @@ const Kits = (() => {
     if (c.clips) parts.push(`${c.clips} clip${c.clips > 1 ? 's' : ''}`);
     if (c.full) parts.push(`${c.full} full sound${c.full > 1 ? 's' : ''}`);
     if (c.bashes) parts.push(`${c.bashes} bash${c.bashes > 1 ? 'es' : ''}`);
+    if (c.layers) parts.push(`${c.layers} ambience layer${c.layers > 1 ? 's' : ''}`);
     return parts.join(' · ') || 'Empty — add sounds from your library';
   }
 
@@ -59,7 +64,7 @@ const Kits = (() => {
     const el = document.createElement('span');
     el.className = `kit-badge ${size}`;
     el.style.setProperty('--kit-color', kit.color);
-    el.textContent = kit.icon;
+    el.appendChild(Icons.el(kit.icon, { size: size === 'large' ? 44 : 15, color: kit.iconColor || '#ffffff' }));
     return el;
   }
 
@@ -121,7 +126,8 @@ const Kits = (() => {
     $('#kit-header-badge').replaceChildren(badge(kit, 'large'));
     $('#kit-header-name').textContent = kit.name;
     $('#kit-header-meta').textContent = describe(counts(kit));
-    $('#kit-layout-btn').textContent = editing ? '✓ Done' : '✥ Customize Layout';
+    if (editing) $('#kit-layout-btn').textContent = 'Done';
+    else Icons.set($('#kit-layout-btn'), 'grid', 'Customize Layout');
     $('#kit-layout-btn').classList.toggle('primary', editing);
     $('#kit-layout-hint').classList.toggle('hidden', !editing);
   }
@@ -150,6 +156,7 @@ const Kits = (() => {
     const kit = activeKit();
     const board = $('#kit-board');
     board.classList.toggle('hidden', !kit);
+    syncDock();
     if (!kit) return;
     board.classList.toggle('editing', editing);
     board.textContent = '';
@@ -159,9 +166,13 @@ const Kits = (() => {
     if (drawer.open) renderDrawer();
   }
 
+  function syncDock() {
+    if (typeof Ambience !== 'undefined') Ambience.syncDock();
+  }
+
   function makeSection(kit, section) {
     const el = document.createElement('section');
-    el.className = `kit-section size-${section.size}` + (drawer.open && drawer.target === section.id ? ' targeted' : '');
+    el.className = `kit-section size-${section.size}` + (isAmbience(section) ? ' ambience-section' : '') + (drawer.open && drawer.target === section.id ? ' targeted' : '');
     el.dataset.id = section.id;
     place(el, section);
 
@@ -174,18 +185,29 @@ const Kits = (() => {
     title.addEventListener('dblclick', () => renameSection(kit, section));
     const count = document.createElement('span');
     count.className = 'count';
-    count.textContent = section.items.length || '';
+    count.textContent = (isAmbience(section) ? section.layers.length : section.items.length) || '';
     const add = document.createElement('button');
     add.className = 'mini section-add';
-    add.textContent = '＋ Add';
-    add.title = 'Add sounds and bashes to this section';
+    Icons.set(add, 'plus', 'Add', { size: 12 });
+    add.title = isAmbience(section) ? 'Add looping layers to this section' : 'Add sounds and bashes to this section';
     add.addEventListener('click', (e) => { e.stopPropagation(); openDrawer(section.id); });
     const more = document.createElement('button');
     more.className = 'mini section-more';
-    more.textContent = '⋯';
+    Icons.set(more, 'more', '', { size: 14 });
     more.title = 'Section options';
     more.addEventListener('click', (e) => { e.stopPropagation(); openSectionMenu(kit, section, more); });
-    head.append(title, count, add, more);
+    if (isAmbience(section)) {
+      title.prepend(Icons.el('layers', { size: 14, className: 'section-kind-icon' }));
+      const stop = document.createElement('button');
+      stop.className = 'mini section-stop';
+      Icons.set(stop, 'stop', 'Stop', { size: 11 });
+      stop.title = 'Fade out every layer in this section';
+      stop.disabled = !section.layers.some((l) => Ambience.isPlaying(voiceId(section, l)));
+      stop.addEventListener('click', (e) => { e.stopPropagation(); for (const l of section.layers) Ambience.stop(voiceId(section, l)); });
+      head.append(title, count, stop, add, more);
+    } else {
+      head.append(title, count, add, more);
+    }
     head.addEventListener('pointerdown', (e) => {
       if (!editing || e.button !== 0 || e.target.closest('button')) return;
       startMove(e, kit, section, el);
@@ -193,7 +215,7 @@ const Kits = (() => {
 
     const body = document.createElement('div');
     body.className = 'kit-section-body';
-    fillSection(kit, section, body);
+    if (isAmbience(section)) fillAmbience(kit, section, body); else fillSection(kit, section, body);
 
     el.append(head, body);
     if (editing) {
@@ -207,7 +229,7 @@ const Kits = (() => {
     // Drops from the library drawer or from another section.
     el.addEventListener('dragover', (e) => {
       const types = e.dataTransfer.types;
-      if (types.includes('application/x-kit-item')) {
+      if (types.includes('application/x-kit-item') || (isAmbience(section) && types.includes('application/x-kit-layer'))) {
         e.preventDefault();
         el.classList.add('drop-hover');
       }
@@ -215,6 +237,7 @@ const Kits = (() => {
     el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop-hover'); });
     el.addEventListener('drop', (e) => {
       el.classList.remove('drop-hover');
+      if (isAmbience(section)) { dropOnAmbience(e, kit, section); return; }
       const raw = e.dataTransfer.getData('application/x-kit-item');
       if (!raw) return;
       e.preventDefault();
@@ -251,7 +274,7 @@ const Kits = (() => {
     if (!section.items.length) {
       const empty = document.createElement('button');
       empty.className = 'section-empty';
-      empty.innerHTML = '<span>＋</span> Add from your library';
+      Icons.set(empty, 'plus', 'Add from your library', { size: 16 });
       empty.addEventListener('click', () => openDrawer(section.id));
       body.appendChild(empty);
       return;
@@ -289,7 +312,7 @@ const Kits = (() => {
   function decorate(el, kit, section, item) {
     const remove = document.createElement('button');
     remove.className = 'kit-remove';
-    remove.textContent = '−';
+    Icons.set(remove, 'close', '', { size: 10 });
     remove.title = `Remove from “${section.title}” (stays in your library)`;
     remove.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -306,6 +329,131 @@ const Kits = (() => {
     });
     el.addEventListener('dragend', () => el.classList.remove('dragging'));
     return el;
+  }
+
+  // ---------- Ambience sections ----------
+
+  // Voices are named per section, so one loop can play in two kits at once.
+  const voiceId = (section, layer) => `kit-${section.id}-${layer.id}`;
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `l${Date.now()}${Math.random().toString(16).slice(2)}`);
+
+  // A fitting icon for a built-in loop, from its file name.
+  function layerIcon(layer) {
+    if (layer.kind === 'sound') return 'note';
+    const name = layer.ref;
+    const match = [['thunder', 'storm'], ['storm', 'wave'], ['rain', 'rain'], ['wind', 'wind'], ['ocean', 'wave'], ['sea', 'wave'],
+      ['campfire', 'campfire'], ['fire', 'flame'], ['cave', 'cave'], ['night', 'moon'], ['forest', 'pine'], ['drone', 'eye']];
+    return (match.find(([word]) => name.includes(word)) || [null, 'layers'])[1];
+  }
+
+  function hasLayer(section, kind, ref) {
+    return section.layers.some((l) => l.kind === kind && l.ref === ref);
+  }
+
+  function addLayer(kit, section, kind, ref) {
+    if (hasLayer(section, kind, ref)) return;
+    section.layers.push({ id: newId(), kind, ref, volume: 0.7 });
+    saveSections(kit, true);
+  }
+
+  function removeLayer(kit, section, layer) {
+    Ambience.stop(voiceId(section, layer));
+    section.layers = section.layers.filter((l) => l !== layer);
+    saveSections(kit, true);
+  }
+
+  function dropOnAmbience(e, kit, section) {
+    const rawLayer = e.dataTransfer.getData('application/x-kit-layer');
+    const rawItem = e.dataTransfer.getData('application/x-kit-item');
+    if (rawLayer) {
+      e.preventDefault();
+      const { kind, ref } = JSON.parse(rawLayer);
+      addLayer(kit, section, kind, ref);
+    } else if (rawItem) {
+      const { type, id } = JSON.parse(rawItem);
+      if (type !== 'sound') { toast('Bashes can’t be ambience layers. Drop a sound or a built-in loop here.', true); return; }
+      e.preventDefault();
+      addLayer(kit, section, 'sound', id);
+    }
+    render();
+  }
+
+  function fillAmbience(kit, section, body) {
+    const soundIds = new Set(sounds.map((s) => s.id));
+    const layers = section.layers.filter((l) => l.kind === 'builtin' || soundIds.has(l.ref));
+    if (!layers.length) {
+      const empty = document.createElement('button');
+      empty.className = 'section-empty';
+      Icons.set(empty, 'layers', 'Add rain, wind, a campfire or your own loops', { size: 16 });
+      empty.addEventListener('click', () => openDrawer(section.id));
+      body.appendChild(empty);
+      return;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'section-layers';
+    for (const layer of layers) {
+      const id = voiceId(section, layer);
+      const on = Ambience.isPlaying(id);
+      const card = document.createElement('div');
+      card.className = 'kit-layer' + (on ? ' on' : '');
+      card.dataset.layer = layer.id;
+
+      const toggle = document.createElement('button');
+      toggle.className = 'kit-layer-toggle';
+      toggle.title = on ? 'Click to fade out' : 'Click to fade in';
+      toggle.append(Icons.el(layerIcon(layer), { size: 20, className: 'kit-layer-icon' }));
+      const name = document.createElement('span');
+      name.className = 'kit-layer-name';
+      name.textContent = Ambience.layerName(layer);
+      const status = document.createElement('span');
+      status.className = 'kit-layer-status';
+      status.textContent = on ? 'Playing' : 'Off';
+      const text = document.createElement('span');
+      text.className = 'kit-layer-text';
+      text.append(name, status);
+      toggle.append(text);
+      toggle.addEventListener('click', () => {
+        if (Ambience.isPlaying(id)) Ambience.stop(id);
+        else Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume });
+      });
+
+      const volume = document.createElement('input');
+      volume.type = 'range';
+      volume.min = 0;
+      volume.max = 1;
+      volume.step = 0.01;
+      volume.value = layer.volume;
+      volume.title = 'Layer volume';
+      volume.addEventListener('input', () => {
+        layer.volume = Number(volume.value);
+        Ambience.setVolume(id, layer.volume);
+        saveSections(kit);
+      });
+
+      const remove = document.createElement('button');
+      remove.className = 'kit-remove';
+      Icons.set(remove, 'close', '', { size: 10 });
+      remove.title = `Remove from “${section.title}”`;
+      remove.addEventListener('click', (e) => { e.stopPropagation(); removeLayer(kit, section, layer); render(); });
+
+      card.append(toggle, volume, remove);
+      wrap.appendChild(card);
+    }
+    body.appendChild(wrap);
+  }
+
+  // Playing state changes (from here, the dock, or a failed load).
+  if (typeof Ambience !== 'undefined') {
+    Ambience.onChange(() => {
+      const kit = activeKit();
+      if (!kit || !kit.sections.some(isAmbience)) return;
+      for (const section of kit.sections.filter(isAmbience)) {
+        const node = $('#kit-board').querySelector(`.kit-section[data-id="${section.id}"]`);
+        if (!node) continue;
+        const fresh = makeSection(kit, section);
+        node.replaceWith(fresh);
+      }
+    });
   }
 
   // ---------- Moving and resizing (Customize Layout) ----------
@@ -400,9 +548,9 @@ const Kits = (() => {
   function openSectionMenu(kit, section, anchor) {
     const menu = $('#section-menu');
     menu.textContent = '';
-    const add = (label, fn, cls = '') => {
+    const add = (label, fn, cls = '', icon = null) => {
       const b = document.createElement('button');
-      b.textContent = label;
+      if (icon) Icons.set(b, icon, label, { size: 13 }); else b.textContent = label;
       if (cls) b.className = cls;
       b.addEventListener('click', () => { menu.classList.add('hidden'); fn(); });
       menu.appendChild(b);
@@ -413,28 +561,56 @@ const Kits = (() => {
       h.textContent = text;
       menu.appendChild(h);
     };
-    add('＋ Add from library…', () => openDrawer(section.id));
+    add(isAmbience(section) ? 'Add layers…' : 'Add from library…', () => openDrawer(section.id));
     add('Rename…', () => renameSection(kit, section));
-    heading('Item size');
-    for (const [size, label] of [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) {
-      add(`${section.size === size ? '✓ ' : '   '}${label}`, () => { section.size = size; saveSections(kit, true); renderBoard(); });
-    }
-    heading('Meant for');
-    for (const kind of ['clips', 'full', 'bashes', 'mixed']) {
-      add(`${section.kind === kind ? '✓ ' : '   '}${KIND_LABEL[kind]}`, () => { section.kind = kind; saveSections(kit, true); });
+    if (!isAmbience(section)) {
+      heading('Item size');
+      for (const [size, label] of [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) {
+        add(label, () => { section.size = size; saveSections(kit, true); renderBoard(); }, section.size === size ? 'checked' : '');
+      }
+      heading('Meant for');
+      for (const kind of ['clips', 'full', 'bashes', 'mixed']) {
+        add(KINDS[kind][1], () => { section.kind = kind; saveSections(kit, true); }, section.kind === kind ? 'checked' : '', KINDS[kind][0]);
+      }
     }
     add('Remove section', () => {
-      const n = section.items.length;
-      if (n && !confirm(`Remove the “${section.title}” section and its ${n} item(s) from this kit? They stay in your library.`)) return;
+      const n = isAmbience(section) ? section.layers.length : section.items.length;
+      const what = isAmbience(section) ? 'layer(s)' : 'item(s)';
+      if (n && !confirm(`Remove the “${section.title}” section and its ${n} ${what} from this kit? Your library isn't changed.`)) return;
+      if (isAmbience(section)) for (const l of section.layers) Ambience.stop(voiceId(section, l));
       kit.sections = kit.sections.filter((s) => s !== section);
       compact(kit.sections, null);
       saveSections(kit, true);
       render();
     }, 'danger');
+    showMenuAt(menu, anchor);
+  }
+
+  function showMenuAt(menu, anchor) {
     const rect = anchor.getBoundingClientRect();
-    menu.style.left = `${Math.min(window.innerWidth - 200, rect.left)}px`;
-    menu.style.top = `${Math.min(window.innerHeight - 360, rect.bottom + 4)}px`;
+    menu.style.left = `${Math.min(window.innerWidth - 220, rect.left)}px`;
+    menu.style.top = `${Math.max(8, Math.min(window.innerHeight - 360, rect.bottom + 4))}px`;
     menu.classList.remove('hidden');
+  }
+
+  // "+ Section": a sound section or an ambience section.
+  function openAddSectionMenu(kit, anchor) {
+    const menu = $('#section-menu');
+    menu.textContent = '';
+    const option = (icon, label, hint, kind) => {
+      const b = document.createElement('button');
+      b.className = 'menu-option';
+      Icons.set(b, icon, label, { size: 16 });
+      const small = document.createElement('span');
+      small.className = 'muted small menu-hint';
+      small.textContent = hint;
+      b.appendChild(small);
+      b.addEventListener('click', () => { menu.classList.add('hidden'); addSection(kit, kind); });
+      menu.appendChild(b);
+    };
+    option('grid', 'Sound section', 'Clips, full sounds and bashes', 'mixed');
+    option('layers', 'Ambience section', 'Looping background layers', 'ambience');
+    showMenuAt(menu, anchor);
   }
 
   // Electron has no window.prompt(), so use a small dialog.
@@ -457,10 +633,10 @@ const Kits = (() => {
     renderBoard();
   }
 
-  function addSection(kit) {
+  function addSection(kit, kind = 'mixed') {
     const bottom = kit.sections.reduce((max, s) => Math.max(max, s.y + s.h), 0);
-    const id = crypto.randomUUID ? crypto.randomUUID() : `s${Date.now()}${Math.random().toString(16).slice(2)}`;
-    const section = { id, title: 'New Section', kind: 'mixed', x: 0, y: bottom, w: 6, h: 6, size: 'm', items: [] };
+    const ambience = kind === 'ambience';
+    const section = { id: newId(), title: ambience ? 'Ambience' : 'New Section', kind, x: 0, y: bottom, w: ambience ? 12 : 6, h: ambience ? 5 : 6, size: 'm', items: [], layers: [] };
     kit.sections.push(section);
     editing = true;
     saveSections(kit, true);
@@ -480,7 +656,7 @@ const Kits = (() => {
     const changedTarget = drawer.target !== section.id;
     drawer.open = true;
     drawer.target = section.id;
-    if (changedTarget) drawer.type = section.kind === 'mixed' ? 'all' : section.kind;
+    if (changedTarget) drawer.type = ['mixed', 'ambience'].includes(section.kind) ? 'all' : section.kind;
     $('#kit-drawer').classList.remove('hidden');
     renderBoard();
     $('#drawer-search').focus();
@@ -504,11 +680,12 @@ const Kits = (() => {
     for (const s of kit.sections) {
       const opt = document.createElement('option');
       opt.value = s.id;
-      opt.textContent = s.title;
+      opt.textContent = isAmbience(s) ? `${s.title} (ambience)` : s.title;
       select.appendChild(opt);
     }
     select.value = section.id;
 
+    $('#drawer-types').classList.toggle('hidden', isAmbience(section));
     for (const b of document.querySelectorAll('#drawer-types button')) b.classList.toggle('active', b.dataset.type === drawer.type);
 
     const tagHost = $('#drawer-tags');
@@ -523,6 +700,8 @@ const Kits = (() => {
     }
 
     const search = drawer.search.trim().toLowerCase();
+    if (isAmbience(section)) { renderAmbienceDrawer(kit, section, search); return; }
+    $('.drawer-hint').textContent = 'Click to add or remove. You can also drag items onto any section.';
     const rows = [
       ...bashList().map((b) => ({ type: 'bash', id: b.id, kind: 'bashes', name: b.name, tags: [], meta: `${b.clips.length} sound${b.clips.length === 1 ? '' : 's'}` })),
       ...sounds.map((s) => ({ type: 'sound', id: s.id, kind: isFull(s) ? 'full' : 'clips', name: s.name, tags: s.tags || [], meta: s.duration ? AudioUtils.formatTime(s.duration).replace(/\.\d$/, '') : '' })),
@@ -541,7 +720,7 @@ const Kits = (() => {
       el.title = added ? `In “${section.title}”. Click to remove.` : `Click to add to “${section.title}”, or drag onto any section.`;
       const icon = document.createElement('span');
       icon.className = `kind-icon kind-${row.kind}`;
-      icon.textContent = row.kind === 'bashes' ? '⚡' : row.kind === 'full' ? '♫' : '✂';
+      icon.appendChild(Icons.el(KINDS[row.kind][0], { size: 15 }));
       const info = document.createElement('div');
       info.className = 'drawer-info';
       const name = document.createElement('div');
@@ -557,7 +736,8 @@ const Kits = (() => {
       info.append(name, sub);
       const action = document.createElement('span');
       action.className = 'drawer-action';
-      action.textContent = added ? '✓' : '＋';
+      Icons.set(action, added ? 'close' : 'plus', '', { size: 14 });
+      action.title = added ? 'Remove' : 'Add';
       el.append(icon, info, action);
       el.addEventListener('click', () => {
         if (inSection(section, row.type, row.id)) section.items = section.items.filter((i) => !(i.type === row.type && i.id === row.id));
@@ -575,13 +755,77 @@ const Kits = (() => {
     host.scrollTop = scroll;
   }
 
+  // The drawer for an ambience section: built-in loops, then library sounds.
+  function renderAmbienceDrawer(kit, section, search) {
+    $('.drawer-hint').textContent = 'Click to add or remove a layer. You can also drag them onto any ambience section.';
+    const matches = (name, tags = []) => (!search || name.toLowerCase().includes(search) || tags.some((t) => t.includes(search)))
+      && (!drawer.tags.size || tags.some((t) => drawer.tags.has(t)));
+    const groups = [
+      ['Built-in loops', Ambience.builtins().filter((b) => !drawer.tags.size && matches(b.name))
+        .map((b) => ({ kind: 'builtin', ref: b.file, name: b.name, tags: [], meta: 'loop' }))],
+      // Longer sounds first: they make better beds than one-shot effects.
+      ['Your sounds', [...sounds].sort((a, b) => Number(isFull(b)) - Number(isFull(a)))
+        .filter((s) => matches(s.name, s.tags || []))
+        .map((s) => ({ kind: 'sound', ref: s.id, name: s.name, tags: s.tags || [], meta: s.duration ? AudioUtils.formatTime(s.duration).replace(/\.\d$/, '') : '' }))],
+    ];
+    const host = $('#drawer-list');
+    const scroll = host.scrollTop;
+    host.textContent = '';
+    for (const [label, rows] of groups) {
+      if (!rows.length) continue;
+      const heading = document.createElement('div');
+      heading.className = 'drawer-group';
+      heading.textContent = label;
+      host.appendChild(heading);
+      for (const row of rows) {
+        const added = hasLayer(section, row.kind, row.ref);
+        const el = document.createElement('div');
+        el.className = 'drawer-row' + (added ? ' added' : '');
+        el.draggable = true;
+        el.title = added ? `In “${section.title}”. Click to remove.` : `Click to add to “${section.title}”.`;
+        const icon = document.createElement('span');
+        icon.className = 'kind-icon kind-ambience';
+        icon.appendChild(Icons.el(layerIcon(row), { size: 15 }));
+        const info = document.createElement('div');
+        info.className = 'drawer-info';
+        const name = document.createElement('div');
+        name.className = 'drawer-name';
+        name.textContent = row.name;
+        const sub = document.createElement('div');
+        sub.className = 'tag-line';
+        for (const t of row.tags.slice(0, 3)) sub.appendChild(Tags.chip(t, { small: true }));
+        const meta = document.createElement('span');
+        meta.className = 'muted small mono';
+        meta.textContent = row.meta;
+        sub.appendChild(meta);
+        info.append(name, sub);
+        const action = document.createElement('span');
+        action.className = 'drawer-action';
+        Icons.set(action, added ? 'close' : 'plus', '', { size: 14 });
+        el.append(icon, info, action);
+        el.addEventListener('click', () => {
+          const existing = section.layers.find((l) => l.kind === row.kind && l.ref === row.ref);
+          if (existing) removeLayer(kit, section, existing); else addLayer(kit, section, row.kind, row.ref);
+          render();
+        });
+        el.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('application/x-kit-layer', JSON.stringify({ kind: row.kind, ref: row.ref }));
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+        host.appendChild(el);
+      }
+    }
+    if (!host.children.length) host.innerHTML = '<p class="muted small" style="padding:12px">Nothing matches. Try another search or clear the tag filters.</p>';
+    host.scrollTop = scroll;
+  }
+
   $('#drawer-close').addEventListener('click', () => closeDrawer());
   $('#drawer-target').addEventListener('change', (e) => {
     const kit = activeKit();
     const section = kit && kit.sections.find((s) => s.id === e.target.value);
     if (!section) return;
     drawer.target = section.id;
-    drawer.type = section.kind === 'mixed' ? 'all' : section.kind;
+    drawer.type = ['mixed', 'ambience'].includes(section.kind) ? 'all' : section.kind;
     renderBoard();
   });
   $('#drawer-search').addEventListener('input', (e) => { drawer.search = e.target.value; renderDrawer(); });
@@ -593,44 +837,26 @@ const Kits = (() => {
 
   async function editKit(kit) {
     const dialog = $('#kit-dialog');
-    let icon = kit ? kit.icon : icons[list.length % icons.length];
-    let color = kit ? kit.color : colors[list.length % colors.length];
+    let choice = kit
+      ? { icon: kit.icon, color: kit.color, iconColor: kit.iconColor || '#ffffff' }
+      : { icon: icons[list.length % icons.length], color: colors[list.length % colors.length], iconColor: '#ffffff' };
     $('#kit-dialog-title').textContent = kit ? 'Edit Scene Kit' : 'New Scene Kit';
     $('#kit-name').value = kit ? kit.name : '';
     $('#kit-name').placeholder = 'e.g. Tavern Brawl, Dragon’s Lair, Haunted Forest';
-    const iconGrid = $('#kit-icons');
-    const colorGrid = $('#kit-colors');
-    const draw = () => {
-      iconGrid.textContent = '';
-      for (const i of icons) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'icon-choice' + (i === icon ? ' selected' : '');
-        b.textContent = i;
-        b.addEventListener('click', () => { icon = i; draw(); });
-        iconGrid.appendChild(b);
-      }
-      colorGrid.textContent = '';
-      for (const c of colors) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'swatch' + (c === color ? ' selected' : '');
-        b.style.background = c;
-        b.addEventListener('click', () => { color = c; draw(); });
-        colorGrid.appendChild(b);
-      }
-      $('#kit-preview').replaceChildren(badge({ icon, color }, 'large'));
-    };
-    draw();
+    const preview = () => $('#kit-preview').replaceChildren(badge(choice, 'large'));
+    const picker = IconPicker.create(choice, { backgrounds: colors, onChange: (value) => { choice = value; preview(); } });
+    $('#kit-icon-picker').replaceChildren(picker.element);
+    preview();
     dialog.returnValue = '';
     dialog.showModal();
     $('#kit-name').focus();
     await new Promise((resolve) => dialog.addEventListener('close', resolve, { once: true }));
     if (dialog.returnValue !== 'save') return null;
     const name = $('#kit-name').value.trim() || (kit ? kit.name : undefined);
+    const { icon, color, iconColor } = choice;
     const saved = kit
-      ? await api.kits.update(kit.id, { name, icon, color })
-      : await api.kits.update((await api.kits.create({ name })).id, { icon, color });
+      ? await api.kits.update(kit.id, { name, icon, color, iconColor })
+      : await api.kits.update((await api.kits.create({ name })).id, { icon, color, iconColor });
     await refreshKits();
     return saved;
   }
@@ -699,7 +925,7 @@ const Kits = (() => {
       if (drawer.open && action === 'library') closeDrawer(); else openDrawer(drawer.target);
     }
     if (action === 'layout') { editing = !editing; render(); }
-    if (action === 'section') addSection(kit);
+    if (action === 'section') openAddSectionMenu(kit, document.querySelector('[data-kit-action="section"]'));
     if (action === 'edit') await editKit(kit);
     if (action === 'duplicate') { const copy = await api.kits.duplicate(id); await refreshKits(); open(copy.id); }
     if (action === 'delete' && confirm(`Delete the scene kit “${kit.name}”? The sounds and bashes in it stay in your library.`)) {
@@ -717,7 +943,7 @@ const Kits = (() => {
   });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#kit-menu')) $('#kit-menu').classList.add('hidden');
-    if (!e.target.closest('#section-menu, .section-more')) $('#section-menu').classList.add('hidden');
+    if (!e.target.closest('#section-menu, .section-more, [data-kit-action="section"]')) $('#section-menu').classList.add('hidden');
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;

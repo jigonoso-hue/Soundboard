@@ -5,6 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' sound: blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
   <title>Soundboard</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="icon-picker.css">
 </head>
 <body>
   <div id="app">
@@ -21,10 +22,10 @@
 
       <div class="side-head library-head"><span>Library</span></div>
       <nav class="side-nav" aria-label="Views">
-        <button class="view-btn" data-view="all"><span class="view-icon">◎</span> All <span class="count" data-count="all"></span></button>
-        <button class="view-btn" data-view="clips"><span class="view-icon">✂</span> Clips <span class="count" data-count="clips"></span></button>
-        <button class="view-btn" data-view="full"><span class="view-icon">♫</span> Full Sounds <span class="count" data-count="full"></span></button>
-        <button class="view-btn" data-view="bashes"><span class="view-icon">⚡</span> Bashes <span class="count" data-count="bashes"></span></button>
+        <button class="view-btn" data-view="all"><i class="view-icon" data-icon="grid"></i> All <span class="count" data-count="all"></span></button>
+        <button class="view-btn" data-view="clips"><i class="view-icon" data-icon="scissors"></i> Clips <span class="count" data-count="clips"></span></button>
+        <button class="view-btn" data-view="full"><i class="view-icon" data-icon="note"></i> Full Sounds <span class="count" data-count="full"></span></button>
+        <button class="view-btn" data-view="bashes"><i class="view-icon" data-icon="bolt"></i> Bashes <span class="count" data-count="bashes"></span></button>
       </nav>
 
       <div id="tags-section" class="side-section">
@@ -61,9 +62,9 @@
           <option value="longest">Longest first</option>
         </select>
         <span class="spacer"></span>
-        <button id="add-btn" class="primary" title="Add audio files">+ Add Sounds</button>
-        <button id="toggle-yt" title="Show/hide the YouTube browser">▶ YouTube</button>
-        <button id="stop-all" class="danger" title="Stop every sound effect and bash (Esc)">■ Stop All</button>
+        <button id="add-btn" class="primary" title="Add audio files"><i data-icon="plus"></i> Add Sounds</button>
+        <button id="toggle-yt" title="Show/hide the YouTube browser"><i data-icon="video"></i> YouTube</button>
+        <button id="stop-all" class="danger" title="Stop every sound effect and bash (Esc)"><i data-icon="stop"></i> Stop All</button>
       </header>
 
       <div id="active-filters" class="active-filters hidden"></div>
@@ -78,13 +79,13 @@
             <div id="kit-header-meta" class="muted"></div>
           </div>
           <div class="kit-header-actions">
-            <button data-kit-action="library" class="primary" title="Open your library to add sounds and bashes">＋ Add from Library</button>
-            <button data-kit-action="layout" id="kit-layout-btn" title="Move and resize sections">✥ Customize Layout</button>
-            <button data-kit-action="section" title="Add a new section to this kit">＋ Section</button>
+            <button data-kit-action="library" class="primary" title="Open your library to add sounds and bashes"><i data-icon="plus"></i> Add from Library</button>
+            <button data-kit-action="layout" id="kit-layout-btn" title="Move and resize sections"><i data-icon="grid"></i> Customize Layout</button>
+            <button data-kit-action="section" title="Add a new section to this kit"><i data-icon="plus"></i> Section</button>
             <span class="spacer"></span>
-            <button data-kit-action="edit">Edit</button>
+            <button data-kit-action="edit"><i data-icon="edit"></i> Edit</button>
             <button data-kit-action="duplicate">Duplicate</button>
-            <button data-kit-action="delete" class="danger">Delete</button>
+            <button data-kit-action="delete" class="danger"><i data-icon="trash"></i> Delete</button>
           </div>
           <p id="kit-layout-hint" class="muted small kit-layout-hint hidden">Drag a section by its title bar to move it, or drag its bottom-right corner to resize it. Click <b>Done</b> when finished.</p>
         </section>
@@ -102,7 +103,7 @@
 
         <section id="clips-block" class="block">
           <div class="block-head">
-            <h2 class="block-title">✂ Clips</h2>
+            <h2 class="block-title"><i data-icon="scissors"></i> Clips</h2>
             <span id="clips-count" class="muted small"></span>
           </div>
           <div id="grid" class="grid"></div>
@@ -111,7 +112,7 @@
 
         <section id="full-block" class="block">
           <div class="block-head">
-            <h2 class="block-title">♫ Full Sounds</h2>
+            <h2 class="block-title"><i data-icon="note"></i> Full Sounds</h2>
             <span id="full-count" class="muted small"></span>
           </div>
           <div id="full-list" class="full-list"></div>
@@ -130,14 +131,14 @@
             <div class="muted small">Adding to</div>
             <select id="drawer-target" title="Which section to add to"></select>
           </div>
-          <button id="drawer-close" class="mini" title="Close">✕</button>
+          <button id="drawer-close" class="mini" title="Close"><i data-icon="close"></i></button>
         </div>
         <input id="drawer-search" type="search" placeholder="Search names and tags…">
         <div id="drawer-types" class="segmented drawer-types">
           <button type="button" data-type="all">All</button>
-          <button type="button" data-type="clips">✂ Clips</button>
-          <button type="button" data-type="full">♫ Full</button>
-          <button type="button" data-type="bashes">⚡ Bashes</button>
+          <button type="button" data-type="clips"><i data-icon="scissors"></i> Clips</button>
+          <button type="button" data-type="full"><i data-icon="note"></i> Full</button>
+          <button type="button" data-type="bashes"><i data-icon="bolt"></i> Bashes</button>
         </div>
         <div id="drawer-tags" class="chip-row drawer-tags"></div>
         <div id="drawer-list" class="drawer-list"></div>
@@ -150,7 +151,7 @@
           <button id="amb-collapse" class="plain block-title" title="Show/hide ambience layers">▾ Ambience</button>
           <label class="muted">Volume <input id="amb-volume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
           <select id="amb-add" title="Add an ambience layer"><option value="">+ Add layer…</option></select>
-          <button id="amb-stop">Stop Ambience</button>
+          <button id="amb-stop"><i data-icon="stop"></i> Stop Ambience</button>
         </div>
         <div id="amb-layers" class="amb-layers"></div>
       </section>
@@ -162,7 +163,7 @@
       <form id="yt-search" class="nav">
         <button type="button" id="yt-back" title="Back">‹</button>
         <button type="button" id="yt-forward" title="Forward">›</button>
-        <button type="button" id="yt-home" title="YouTube home">⌂</button>
+        <button type="button" id="yt-home" title="YouTube home">Home</button>
         <input id="yt-query" type="search" placeholder="Search YouTube or paste a video link…">
         <button type="submit">Search</button>
       </form>
@@ -181,7 +182,7 @@
         <div class="clip-row">
           <input id="clip-name" placeholder="Sound name (defaults to video title)">
           <button id="preview-clip" title="Play the selected range in the video">Preview</button>
-          <button id="capture-clip" class="primary">✂ Create Sound</button>
+          <button id="capture-clip" class="primary"><i data-icon="scissors"></i> Create Sound</button>
           <button id="cancel-capture" class="hidden">Cancel</button>
           <button id="save-full" title="Download this video's whole audio track into your library">⬇ Save Full Audio</button>
         </div>
@@ -267,8 +268,7 @@
         <div id="kit-preview"></div>
         <label>Name <input id="kit-name" maxlength="60"></label>
       </div>
-      <label>Icon <div id="kit-icons" class="icon-grid kit-icons"></div></label>
-      <label>Color <div id="kit-colors" class="swatches"></div></label>
+      <div id="kit-icon-picker"></div>
       <div class="dialog-actions">
         <span class="spacer"></span>
         <button value="cancel" formnovalidate>Cancel</button>
@@ -305,6 +305,8 @@
 
   <div id="toast" class="hidden"></div>
 
+  <script src="icons.js"></script>
+  <script src="icon-picker.js"></script>
   <script src="audio-utils.js"></script>
   <script src="tags.js"></script>
   <script src="app.js"></script>

@@ -159,10 +159,10 @@ const Tags = (() => {
     let value = initial;
     const el = document.createElement('div');
     el.className = 'segmented';
-    const buttons = [['clip', '✂ Clip'], ['full', '♫ Full sound']].map(([v, label]) => {
+    const buttons = [['clip', 'scissors', 'Clip'], ['full', 'note', 'Full sound']].map(([v, icon, label]) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = label;
+      Icons.set(b, icon, label, { size: 13 });
       b.title = v === 'clip' ? 'A short effect: shown as a tile' : 'A song or long track: shown as a row with a timer';
       b.addEventListener('click', () => { value = v; sync(); });
       el.appendChild(b);

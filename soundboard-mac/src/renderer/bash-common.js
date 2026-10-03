@@ -1,8 +1,8 @@
-/* global window, document, AudioContext */
+/* global window, document, AudioContext, Icons */
 // Shared by the main board and the bash editor windows: bash playback,
 // waveform peaks and cover rendering.
 (function (root) {
-  const ICONS = ['⚔️', '🐉', '🍺', '🔥', '🌲', '🏰', '💀', '🌊', '⚡', '🎲', '🧙', '🌙', '👑', '🕯️', '🗡️', '🛡️', '🐺', '👻', '⛈️', '🎻'];
+  const ICONS = ['crossed-swords', 'dragon', 'mug', 'flame', 'pine', 'castle', 'skull', 'wave', 'bolt', 'd20', 'wizard-hat', 'moon', 'crown', 'candle', 'dagger', 'shield', 'paw', 'ghost', 'storm', 'lute'];
   const ICON_COLORS = ['#7c6cff', '#ff5d73', '#ffb347', '#6ee7b7', '#5ec8ff', '#d58bff', '#8a6a4f', '#3f4a5a'];
 
   function readPrefs() {
@@ -176,10 +176,7 @@
     const icon = bash.cover.icon || ICONS[0];
     const color = bash.cover.color || ICON_COLORS[0];
     el.style.background = `linear-gradient(140deg, ${color}, color-mix(in srgb, ${color} 45%, #111))`;
-    const span = document.createElement('span');
-    span.className = 'cover-icon';
-    span.textContent = icon;
-    el.appendChild(span);
+    el.appendChild(Icons.el(icon, { size: 24, color: bash.cover.iconColor || '#ffffff', className: 'cover-icon' }));
   }
 
   // Min/max peaks for drawing a waveform `columns` wide.
