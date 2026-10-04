@@ -40,7 +40,8 @@ youtubeAdBlocker();
   {{"trigger": {{"url-filter": "^https?://m\\\\.youtube\\\\.com/api/stats/ads"}}, "action": {{"type": "block"}}}},
   {{"trigger": {{"url-filter": "^https?://m\\\\.youtube\\\\.com/get_midroll_"}}, "action": {{"type": "block"}}}},
   {{"trigger": {{"url-filter": "^https?://m\\\\.youtube\\\\.com/ptracking"}}, "action": {{"type": "block"}}}}
-]"""#
+]
+"""#
 }}
 ''')
 print(f'Wrote {OUT.relative_to(ROOT)}')
