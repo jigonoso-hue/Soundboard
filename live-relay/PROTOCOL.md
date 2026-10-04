@@ -50,6 +50,9 @@ On the local network the host assigns peer ids itself.
 | `hello {name, device, v: 1}` | First message after connecting |
 | `ping {id, t0}` | Clock sync; `t0` is the listener's clock in ms |
 | `need {hash, i}` | Request chunk `i` of a file |
+| `cue {id}` or `cue {hash}` | Play one of the player's chosen sounds for everyone (see Players' sounds) |
+| `offer {sounds: [{hash, ext, name}]}` | The player's own chosen sounds, at most five |
+| `chunk {…}` / `missing {hash}` | Answers to the host's `need` for an offered sound |
 
 ### Host → listener
 
@@ -67,6 +70,9 @@ On the local network the host assigns peer ids itself.
 | `stopAll {}` | Stop all sounds (not ambience) |
 | `ambience {layers: […]}` | The full ambience state (below) |
 | `bye {}` | The host ended the session |
+| `rules {playerSounds, limit}` | Whether players may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
+| `catalog {sounds: [{id, name, color}]}` | The GM's sounds players may choose from (when `playerSounds` is `"gm"`) |
+| `need {hash, i}` | Request chunk `i` of a sound the player offered |
 
 The listener estimates the clock offset from a few `ping`/`pong` round trips
 (`offset = t1 − (t0 + t2) / 2`, keeping the sample with the shortest round trip)
@@ -86,7 +92,8 @@ and converts host times to its own clock.
   "loop": false,           // repeat with no gap
   "gap": 3,                // optional: repeat after this many seconds
   "buzz": false,           // vibrate phones when it starts
-  "whisper": false         // sent only to this listener
+  "whisper": false,        // sent only to some listeners
+  "by": "Sam"              // optional: the player who played it
 }
 ```
 
@@ -107,8 +114,27 @@ The listener fades in layers it isn't playing, fades out layers that are gone,
 and adjusts volumes. Built-in loops ship with every copy of the app, so they
 need no transfer.
 
+## Players' sounds
+
+The GM decides whether players may play sounds for everyone, and can change it
+during the session (`rules`):
+
+- `"gm"`: each player picks up to five of the GM's sounds from the `catalog`
+  and sends `cue {id}` to play one.
+- `"own"`: each player picks up to five sounds from their own library and
+  `offer`s them. The host fetches them from the player with `need` (the same
+  chunk transfer as the other direction), then the player sends `cue {hash}`.
+
+The host checks every cue (the right mode, at most five different sounds per
+player, at most one cue every 300 ms), then plays it on its own device and
+sends `play` to everyone, a quarter of a second ahead with `by` set to the
+player's name, so all devices start together.
+
 ## Host-only features
 
-- **GM-only sounds** are never sent to listeners.
-- **Whispers** are `play` messages sent to a single listener, with `whisper: true`.
-- **Buzz** marks a sound as a big impact; phones vibrate when it starts.
+- **GM-only sounds** are never sent to listeners, nor offered in the catalog.
+- **Whispers** are `play` messages sent to one or more chosen listeners, with
+  `whisper: true`.
+- **Buzz** marks a sound as a big impact; phones vibrate when it starts (a
+  notification while the app is in the background). **Emphasis** sets `buzz`
+  on the GM's next sound.

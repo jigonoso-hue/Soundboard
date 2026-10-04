@@ -9,7 +9,11 @@ const Live = (() => {
   let bonjour = true;
   let tab = 'broadcast';
   let sessions = [];
-  let whisperTo = null; // { peer, name } while a whisper is armed
+  // Armed for the next sound: whisper targets (peer id → name) and emphasis (vibrate phones).
+  const whisper = new Map();
+  let emphasis = false;
+  let armedRun = null; // the bash run they apply to: { runId, to, emphasis }
+  const seenRuns = new Set();
   let busy = false;
   let error = '';
 
@@ -48,7 +52,7 @@ const Live = (() => {
   // A sound tile or row started playing.
   function soundPlayed(sound) {
     if (!hosting() || !sound || sound.gmOnly) {
-      if (hosting() && sound && sound.gmOnly && whisperTo) toast('GM-only sounds can’t be whispered.', true);
+      if (hosting() && sound && sound.gmOnly && whisper.size) toast('GM-only sounds can’t be whispered.', true);
       return;
     }
     const event = {
@@ -62,14 +66,16 @@ const Live = (() => {
       cat: category(sound),
       loop: !!sound.repeat && !sound.repeat.gap,
       gap: sound.repeat && sound.repeat.gap ? sound.repeat.gap : 0,
-      buzz: !!sound.buzz,
+      buzz: !!sound.buzz || emphasis,
       dur: sound.duration || 0,
     };
-    if (whisperTo) {
-      event.to = whisperTo.peer;
-      toast(`Whispered “${sound.name}” to ${whisperTo.name}.`);
-      setWhisper(null);
+    if (whisper.size) {
+      event.to = [...whisper.keys()];
+      toast(`Whispered “${sound.name}” to ${[...whisper.values()].join(', ')}.`);
+    } else if (emphasis) {
+      toast(`“${sound.name}” played with emphasis.`);
     }
+    disarm();
     api.live.hostEvent(event);
   }
 
@@ -87,11 +93,22 @@ const Live = (() => {
   }
 
   // Bash clips arrive one play at a time from the bash player.
+  // An armed whisper or emphasis applies to every clip of the next bash.
   Bashes.player.onSchedule = ({ runId, sound, at, volume, dur }) => {
     if (!hosting() || !sound || sound.gmOnly) return;
+    if (!seenRuns.has(runId)) {
+      if (seenRuns.size > 200) seenRuns.clear();
+      seenRuns.add(runId);
+      if (whisper.size || emphasis) {
+        armedRun = { runId, to: whisper.size ? [...whisper.keys()] : null, emphasis };
+        disarm();
+      }
+    }
+    const armed = armedRun && armedRun.runId === runId ? armedRun : null;
     api.live.hostEvent({
       t: 'play', pid: pid(), group: `b:${runId}`, soundId: sound.id, name: sound.name,
-      at, volume: Math.min(1, volume), cat: 'sfx', buzz: !!sound.buzz, dur,
+      at, volume: Math.min(1, volume), cat: 'sfx', buzz: !!sound.buzz || !!(armed && armed.emphasis), dur,
+      ...(armed && armed.to ? { to: armed.to } : {}),
     });
   };
   Bashes.player.onStop = (runId) => {
@@ -149,17 +166,66 @@ const Live = (() => {
     return [...new Set(ids)].filter((id) => known.has(id) && !gmOnly.has(id));
   }
 
-  function setWhisper(target) {
-    whisperTo = target;
+  function disarm() {
+    whisper.clear();
+    emphasis = false;
+    renderArmed();
+  }
+
+  // The banner and toolbar buttons for what's armed for the next sound.
+  function renderArmed() {
     const bar = $('#whisper-bar');
     bar.textContent = '';
-    bar.classList.toggle('hidden', !target);
-    if (!target) return;
-    bar.append(el('span', null, `Whisper armed: the next sound you play goes only to ${target.name}.`));
+    const armed = whisper.size > 0 || emphasis;
+    bar.classList.toggle('hidden', !armed);
+    bar.classList.toggle('emphasis-only', armed && !whisper.size);
+    $('#whisper-btn').classList.toggle('hidden', !hosting());
+    $('#emphasis-btn').classList.toggle('hidden', !hosting());
+    $('#whisper-btn').classList.toggle('active', whisper.size > 0);
+    $('#emphasis-btn').classList.toggle('active', emphasis);
+    $('#whisper-label').textContent = whisper.size ? `Whisper (${whisper.size})` : 'Whisper';
+    if (!armed) return;
+    const parts = [];
+    if (whisper.size) parts.push(`whispers to ${[...whisper.values()].join(', ')}`);
+    if (emphasis) parts.push('vibrates phones');
+    bar.append(el('span', null, `Next sound ${parts.join(' and ')}.`));
     const cancel = el('button', 'mini', 'Cancel');
-    cancel.addEventListener('click', () => setWhisper(null));
+    cancel.addEventListener('click', disarm);
     bar.append(cancel);
   }
+
+  // The Whisper drop-down: tick one or more listeners.
+  function openWhisperMenu() {
+    const menu = $('#whisper-menu');
+    menu.textContent = '';
+    menu.append(el('div', 'menu-title', 'Whisper the next sound to…'));
+    const peers = status.peers || [];
+    if (!peers.length) menu.append(el('div', 'muted small menu-empty', 'No one has tuned in yet.'));
+    for (const peer of peers) {
+      const label = el('label', 'menu-check');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = whisper.has(peer.peer);
+      box.addEventListener('change', () => {
+        if (box.checked) whisper.set(peer.peer, peer.name); else whisper.delete(peer.peer);
+        renderArmed();
+      });
+      label.append(box, el('span', null, peer.name));
+      menu.append(label);
+    }
+    const rect = $('#whisper-btn').getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 6}px`;
+    menu.style.left = `${Math.max(8, rect.right - 240)}px`;
+    menu.classList.remove('hidden');
+  }
+
+  $('#whisper-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if ($('#whisper-menu').classList.contains('hidden')) openWhisperMenu(); else $('#whisper-menu').classList.add('hidden');
+  });
+  $('#whisper-menu').addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => $('#whisper-menu').classList.add('hidden'));
+  $('#emphasis-btn').addEventListener('click', () => { emphasis = !emphasis; renderArmed(); });
 
   // ---------------------------------------------------------------------
   // Listener: plays what the host sends, with its own volume sliders.
@@ -321,7 +387,10 @@ const Live = (() => {
     if (next && next.error) error = next.error;
     if (was === 'listen' && status.role !== 'listen') Mirror.stopAll(true);
     if (status.role === 'host' && was !== 'host') { lastScene = undefined; syncHostState(true); }
-    if (status.role !== 'host') setWhisper(null);
+    if (status.role !== 'host') { whisper.clear(); emphasis = false; $('#whisper-menu').classList.add('hidden'); }
+    // Drop whisper targets who left.
+    for (const peer of [...whisper.keys()]) if (!(status.peers || []).some((p) => p.peer === peer)) whisper.delete(peer);
+    renderArmed();
     renderButton();
     if ($('#live-dialog').open) renderDialog();
     if (status.role === 'listen' && status.state === 'ended' && status.error) toast(status.error);
@@ -475,14 +544,16 @@ const Live = (() => {
       const who = el('span');
       who.append(el('b', null, peer.name));
       if (peer.device) who.append(el('span', 'muted small', ` · ${peer.device}`));
-      const whisper = el('button', whisperTo && whisperTo.peer === peer.peer ? 'active' : '', 'Whisper…');
-      whisper.type = 'button';
-      whisper.title = 'The next sound you play goes only to this player';
-      whisper.addEventListener('click', () => {
-        setWhisper({ peer: peer.peer, name: peer.name });
+      const whisperButton = el('button', whisper.has(peer.peer) ? 'active' : '', 'Whisper…');
+      whisperButton.type = 'button';
+      whisperButton.title = 'The next sound you play goes only to this player';
+      whisperButton.addEventListener('click', () => {
+        whisper.clear();
+        whisper.set(peer.peer, peer.name);
+        renderArmed();
         $('#live-dialog').close();
       });
-      row.append(who, whisper);
+      row.append(who, whisperButton);
       list.append(row);
     }
     body.append(list);

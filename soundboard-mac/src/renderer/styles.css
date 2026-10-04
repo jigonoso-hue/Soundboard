@@ -929,3 +929,12 @@ dialog input.live-code-input { text-transform: uppercase; letter-spacing: 0.15em
 #live-body > button { margin-top: 12px; }
 body.live-buzz #app { animation: live-buzz 0.35s linear; }
 @keyframes live-buzz { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+#whisper-btn.active { border-color: #b07cff; color: #d9c2ff; }
+#emphasis-btn.active { border-color: #ff6a3d; color: #ffb59c; }
+.whisper-bar.emphasis-only { background: color-mix(in srgb, #ff6a3d 18%, transparent); border-color: #ff6a3d; }
+.whisper-menu { min-width: 240px; padding: 6px; }
+.whisper-menu .menu-title { font-weight: 600; padding: 6px 8px 8px; }
+.whisper-menu .menu-empty { padding: 4px 8px 8px; }
+.whisper-menu .menu-check { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.whisper-menu .menu-check:hover { background: var(--panel-2); }
+.whisper-menu .menu-check input { accent-color: #b07cff; }

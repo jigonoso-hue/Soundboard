@@ -64,6 +64,8 @@
         <span class="spacer"></span>
         <button id="add-btn" class="primary" title="Add audio files"><i data-icon="plus"></i> Add Sounds</button>
         <button id="toggle-yt" title="Show/hide the YouTube browser"><i data-icon="video"></i> YouTube</button>
+        <button id="whisper-btn" class="hidden" title="Whisper: the next sound goes only to the players you tick"><i data-icon="speech"></i> <span id="whisper-label">Whisper</span></button>
+        <button id="emphasis-btn" class="hidden" title="Emphasis: the next sound vibrates players' phones"><i data-icon="bolt"></i> Emphasis</button>
         <button id="live-btn" title="Live Session: play to your players' devices"><i data-icon="speaker"></i> <span id="live-label">Live</span></button>
         <button id="stop-all" class="danger" title="Stop every sound effect and bash (Esc)"><i data-icon="stop"></i> Stop All</button>
       </header>
@@ -254,6 +256,7 @@
   </div>
 
   <div id="section-menu" class="popup-menu hidden" role="menu"></div>
+  <div id="whisper-menu" class="popup-menu whisper-menu hidden"></div>
 
   <dialog id="text-dialog">
     <form method="dialog">

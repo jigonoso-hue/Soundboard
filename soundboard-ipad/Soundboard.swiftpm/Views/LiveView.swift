@@ -40,6 +40,15 @@ struct LiveView: View {
                 live.error = nil
                 live.browse(live.role == .idle && newTab == .tuneIn)
             }
+            .onChange(of: live.role) { _, role in
+                // Tuning in opens the full-screen stage once this sheet has closed.
+                guard role == .listener else { return }
+                dismiss()
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    if live.role == .listener { live.showStage = true }
+                }
+            }
         }
     }
 
@@ -72,6 +81,7 @@ struct LiveView: View {
                  ? "Players on the same Wi-Fi find your session under Tune In."
                  : "Players anywhere join with a code, through a relay server.")
         }
+        playerSoundsSection
         Section {
             Button {
                 live.startHosting()
@@ -125,6 +135,23 @@ struct LiveView: View {
                 .disabled(live.busy)
         } header: {
             Text("Online session")
+        }
+    }
+
+    /// Whether players may play sounds for everyone, and from whose soundboard.
+    private var playerSoundsSection: some View {
+        Section {
+            Picker("Player sounds", selection: $live.playerSounds) {
+                ForEach(PlayerSounds.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+        } header: {
+            Text("Players' sounds")
+        } footer: {
+            switch live.playerSounds {
+            case .off: Text("Only you play sounds.")
+            case .own: Text("Each player picks up to \(PlayerSounds.limit) sounds from their own library. When they play one, everyone hears it. You can still use all your sounds.")
+            case .gm: Text("Each player picks up to \(PlayerSounds.limit) of your sounds (not GM-only ones). When they play one, everyone hears it. You can still use all your sounds.")
+            }
         }
     }
 
@@ -183,7 +210,7 @@ struct LiveView: View {
                     }
                     Spacer()
                     Button {
-                        live.whisperTo = peer
+                        live.whisperTargets = [peer.id]
                         dismiss()
                     } label: {
                         Label("Whisper", systemImage: "ear")
@@ -196,6 +223,7 @@ struct LiveView: View {
         } footer: {
             Text("Whisper sends the next sound you play to that player only. Mark sounds GM only or Buzz in each sound's Edit screen.")
         }
+        playerSoundsSection
         Section {
             Button("End Session", role: .destructive) { live.leave() }
         }
@@ -255,20 +283,48 @@ struct LiveView: View {
     }
 }
 
-/// The toolbar button that opens the Live sheet, showing whether a session is on.
-struct LiveButton: View {
+/// The toolbar's Live controls. While broadcasting: Whisper (choose listeners
+/// for the next sound) and Emphasis (the next sound vibrates phones), then the
+/// button that opens the Live sheet.
+struct LiveControls: View {
     @EnvironmentObject private var live: LiveSession
     @Binding var showLive: Bool
+    @State private var choosingWhisper = false
 
     var body: some View {
-        Button {
-            showLive = true
-        } label: {
-            Label(label, systemImage: "dot.radiowaves.left.and.right")
-                .symbolEffect(.pulse, isActive: live.role != .idle)
+        HStack(spacing: 14) {
+            if live.role == .host {
+                Button {
+                    choosingWhisper = true
+                } label: {
+                    Label(live.whisperTargets.isEmpty ? "Whisper" : "Whisper (\(live.whisperTargets.count))",
+                          systemImage: live.whisperTargets.isEmpty ? "ear" : "ear.fill")
+                }
+                .tint(live.whisperTargets.isEmpty ? nil : Color(hex: 0xB07CFF))
+                .popover(isPresented: $choosingWhisper) {
+                    WhisperPicker()
+                        .presentationCompactAdaptation(.popover)
+                }
+                .accessibilityLabel("Whisper the next sound")
+
+                Button {
+                    live.emphasis.toggle()
+                } label: {
+                    Label("Emphasis", systemImage: live.emphasis ? "iphone.radiowaves.left.and.right.circle.fill" : "iphone.radiowaves.left.and.right")
+                }
+                .tint(live.emphasis ? Color(hex: 0xFF6A3D) : nil)
+                .accessibilityLabel("Emphasis: the next sound vibrates players' phones")
+                .accessibilityAddTraits(live.emphasis ? .isSelected : [])
+            }
+            Button {
+                showLive = true
+            } label: {
+                Label(label, systemImage: "dot.radiowaves.left.and.right")
+                    .symbolEffect(.pulse, isActive: live.role != .idle)
+            }
+            .tint(live.role == .idle ? nil : Color(hex: 0xFF6A3D))
+            .accessibilityLabel("Live Session")
         }
-        .tint(live.role == .idle ? nil : Color(hex: 0xFF6A3D))
-        .accessibilityLabel("Live Session")
     }
 
     private var label: String {
@@ -277,5 +333,53 @@ struct LiveButton: View {
         case .listener: return "Tuned In"
         case .idle: return "Live"
         }
+    }
+}
+
+/// The Whisper drop-down: tick one or more listeners. The next sound you play
+/// goes only to them, then whispering switches off again.
+struct WhisperPicker: View {
+    @EnvironmentObject private var live: LiveSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Whisper the next sound to…")
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+            if live.peers.isEmpty {
+                Text("No one has tuned in yet.")
+                    .foregroundStyle(.secondary)
+                    .padding(16)
+            }
+            ForEach(live.peers) { peer in
+                Button {
+                    if live.whisperTargets.contains(peer.id) {
+                        live.whisperTargets.remove(peer.id)
+                    } else {
+                        live.whisperTargets.insert(peer.id)
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: live.whisperTargets.contains(peer.id) ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(live.whisperTargets.contains(peer.id) ? Color(hex: 0xB07CFF) : .secondary)
+                        Text(peer.name)
+                        Spacer()
+                        Text(peer.device).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            if !live.whisperTargets.isEmpty {
+                Divider()
+                Button("Don't Whisper") { live.whisperTargets = [] }
+                    .padding(16)
+            }
+        }
+        .frame(minWidth: 280)
     }
 }

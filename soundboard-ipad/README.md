@@ -89,11 +89,18 @@ Play to your players' own devices, or tune in to your GM's. Tap the **Live** but
 
 **Broadcast (the GM).** Name the session and choose **At the table** (players on the same Wi-Fi find it) or **Online** (players join with a 5-character code through a relay server; see [`live-relay/`](../live-relay/README.md)). Everything you play goes to listeners: sounds, bashes, ambience and the open scene kit's name.
 
-- **Whisper:** in the Live sheet, tap **Whisper** next to a player. The next sound you play goes only to them; a banner shows while it's armed.
-- **GM only:** turn it on in a sound's Edit screen and it plays only on your device. Tiles show a **GM** badge.
-- **Buzz:** turn it on in a sound's Edit screen for big hits. Listeners' iPhones vibrate when it plays.
+While broadcasting, two buttons join the toolbar:
 
-**Tune In (a player).** Enter your name, then pick a nearby session or enter the GM's code. You get your own sliders for overall volume, music, effects and ambience. Sounds keep playing with the screen locked or while you use another app.
+- **Whisper:** a drop-down of everyone tuned in. Tick one or more players, and the next sound (or bash) you play goes only to them. Then it switches off again.
+- **Emphasis:** the next sound (or bash) makes players' phones vibrate. Then it switches off again.
+
+A banner shows what's armed, with Cancel.
+
+- **GM only:** turn it on in a sound's Edit screen and it plays only on your device. Tiles show a **GM** badge.
+- **Buzz:** turn it on in a sound's Edit screen for big hits. Players' iPhones vibrate whenever it plays. With the app open the phone vibrates and the stage shakes; in the background or locked, a notification vibrates the phone.
+- **Players' sounds:** in the Live sheet (before or during the session), choose **Off**, **Their own sounds** or **My soundboard**. Each player picks up to 5 sounds (from their own library, or from yours, minus GM-only ones); when they tap one, everyone hears it, you included. You can still use all your sounds.
+
+**Tune In (a player).** Enter your name, then pick a nearby session or enter the GM's code. The app switches to a full-screen stage until you leave: radio waves pulse while sounds play, it shows the GM's session and scene and what's playing, whispers glow purple and buzzes shake the screen. **Volumes** has your sliders for overall volume, music, effects and ambience. When the GM allows players' sounds, your pads sit at the bottom (**Choose** picks up to 5). Sounds keep playing with the screen locked or while you use another app. Allow notifications when asked, so Buzz can vibrate a locked phone.
 
 The first time you broadcast or look for sessions, iOS asks to use the local network: tap **Allow**. Online sessions need the relay at a secure (`wss://` or `https://`) address.
 
@@ -136,7 +143,9 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Live/LiveNet.swift` | Live Session networking: WebSockets, the local server and Bonjour browser, the relay connection |
 | `Live/LiveEngines.swift` | Live Session host and listener logic (files, clock sync, commands) |
 | `Live/MirrorPlayer.swift` | Plays what a Live Session host sends, with the listener's volumes and haptics |
-| `Live/LiveSession.swift` | Live Session state, forwarding what the board plays while hosting |
+| `Live/LiveSession.swift` | Live Session state, forwarding what the board plays while hosting, whispers, emphasis, players' sounds and buzz |
+| `Views/LiveView.swift` | The Live sheet and the toolbar's Live, Whisper and Emphasis controls |
+| `Views/ListenerStageView.swift` | The full-screen stage players see while tuned in, their sound pads and volumes |
 | `YouTube/YouTubeController.swift` | The embedded YouTube view and capture bridge |
 | `YouTube/SegmentScript.swift` | Saves the audio YouTube's player downloads |
 | `YouTube/AdBlockScript.swift` | YouTube ad blocker (generated from the Mac app by `tools/sync-adblock.py`) |

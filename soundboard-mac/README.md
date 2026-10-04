@@ -176,9 +176,12 @@ Play to your players' own devices. Click **Live** in the toolbar.
 
 Everything you play is sent to listeners: sounds, full sounds, bashes, ambience (strip and scene kit layers) and the name of the open scene kit. Players who join late pick up looping and still-playing sounds part-way through.
 
-- **Whisper:** in the Live window, click **Whisper…** next to a player. The next sound you play goes only to them.
+- **Whisper:** while broadcasting, click **Whisper** in the toolbar and tick one or more players. The next sound (or bash) you play goes only to them, then whispering switches off. (Or click **Whisper…** next to a player in the Live window.)
+- **Emphasis:** click **Emphasis** in the toolbar and the next sound (or bash) makes players' phones vibrate.
 - **GM only:** tick it in a sound's Edit window, and it plays only on your device. Tiles show a **GM** badge.
 - **Buzz:** tick it in a sound's Edit window for big hits. Listeners' phones vibrate when it plays (a Mac shakes its window instead).
+
+**Players' sounds** (players playing up to 5 sounds for everyone) are set up from the iPhone/iPad app; a Mac in the session hears them but doesn't offer them yet.
 
 **Tune In (a player).** Enter your name, then pick a session on this Wi-Fi or enter the GM's code. You get your own volume sliders for music, effects and ambience, and a "Now playing" list. Stop All stops what's playing on your device only.
 

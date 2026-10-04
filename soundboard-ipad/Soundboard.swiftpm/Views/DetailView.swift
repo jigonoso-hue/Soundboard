@@ -59,8 +59,8 @@ struct DetailView: View {
         .toolbar { toolbar }
         .themedNavigationBar(themes.theme)
         .safeAreaInset(edge: .top, spacing: 0) {
-            if let target = live.whisperTo {
-                WhisperBanner(name: target.name) { live.whisperTo = nil }
+            if !live.whisperTargets.isEmpty || live.emphasis {
+                ArmedBanner(whisperNames: live.whisperNames, emphasis: live.emphasis) { live.disarm() }
             }
         }
         .sheet(isPresented: $showLive) {
@@ -126,7 +126,7 @@ struct DetailView: View {
     private var toolbar: some ToolbarContent {
         if destination == .options {
             ToolbarItem(placement: .topBarTrailing) {
-                LiveButton(showLive: $showLive)
+                LiveControls(showLive: $showLive)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -140,7 +140,7 @@ struct DetailView: View {
         } else if kit != nil {
             // In a scene kit: just the master volume, Live and Stop All.
             ToolbarItemGroup(placement: .topBarTrailing) {
-                LiveButton(showLive: $showLive)
+                LiveControls(showLive: $showLive)
                 HStack(spacing: 6) {
                     Image(systemName: "speaker.fill").font(.caption).foregroundStyle(.secondary)
                     Slider(value: $player.masterVolume, in: 0...1)
@@ -164,7 +164,7 @@ struct DetailView: View {
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
-            LiveButton(showLive: $showLive)
+            LiveControls(showLive: $showLive)
             Button {
                 showSettings = true
             } label: {
@@ -304,16 +304,16 @@ struct PickedMovie: Transferable {
     }
 }
 
-/// Shown while a whisper is armed: the next sound goes to one listener only.
-struct WhisperBanner: View {
-    let name: String
+/// Shown while a whisper or emphasis is armed for the next sound.
+struct ArmedBanner: View {
+    let whisperNames: [String]
+    let emphasis: Bool
     let onCancel: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "ear")
-            Text("Whisper armed: the next sound you play goes only to \(name).")
-                .font(.callout)
+            Image(systemName: whisperNames.isEmpty ? "iphone.radiowaves.left.and.right" : "ear")
+            Text(text).font(.callout)
             Spacer(minLength: 8)
             Button("Cancel", action: onCancel)
                 .buttonStyle(.bordered)
@@ -321,9 +321,18 @@ struct WhisperBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color(hex: 0xB07CFF).opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(hex: 0xB07CFF)))
+        .background(color.opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(color))
         .padding(.horizontal, 12)
         .padding(.top, 6)
+    }
+
+    private var color: Color { whisperNames.isEmpty ? Color(hex: 0xFF6A3D) : Color(hex: 0xB07CFF) }
+
+    private var text: String {
+        var parts: [String] = []
+        if !whisperNames.isEmpty { parts.append("whispers to \(whisperNames.joined(separator: ", "))") }
+        if emphasis { parts.append("vibrates phones") }
+        return "Next sound " + parts.joined(separator: " and ") + "."
     }
 }

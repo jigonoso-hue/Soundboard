@@ -15,6 +15,8 @@ struct MirrorPlay {
     var gap: Double
     var buzz: Bool
     var whisper: Bool
+    /// The player who played it, for sounds players add.
+    var by: String? = nil
 }
 
 /// A looping ambience layer the host has playing.
@@ -31,8 +33,10 @@ struct MirrorLayer {
 final class MirrorPlayer {
     /// The listener's level for a category, including their overall volume.
     var level: (String) -> Double = { _ in 1 }
-    /// Called when a whisper starts, and when what's playing changes.
-    var onWhisper: (() -> Void)?
+    /// Called when a whisper or a buzz sound starts, and when what's playing changes.
+    var onWhisper: ((MirrorPlay) -> Void)?
+    var onBuzz: ((MirrorPlay) -> Void)?
+    var onStart: ((MirrorPlay) -> Void)?
     var onChange: (() -> Void)?
 
     private final class Voice {
@@ -52,11 +56,6 @@ final class MirrorPlayer {
     private var voices: [String: Voice] = [:]
     private var layers: [String: (player: AVAudioPlayer, layer: MirrorLayer)] = [:]
     private var ticker: Task<Void, Never>?
-    private let haptics: UIImpactFeedbackGenerator
-
-    init() {
-        haptics = UIImpactFeedbackGenerator(style: .heavy)
-    }
 
     func play(_ play: MirrorPlay) {
         stopVoice(play.pid)
@@ -100,15 +99,14 @@ final class MirrorPlayer {
         onChange?()
     }
 
-    /// Buzz and the whisper notice, when the sound actually starts.
+    /// Buzz, whisper and "who played it" notices, when the sound actually starts.
     private func announce(_ play: MirrorPlay, after delay: TimeInterval) {
-        guard play.buzz || play.whisper else { return }
-        if play.buzz { haptics.prepare() }
         Task { @MainActor [weak self] in
             if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
             guard let self, self.voices[play.pid] != nil else { return }
-            if play.buzz { self.haptics.impactOccurred(intensity: 1) }
-            if play.whisper { self.onWhisper?() }
+            self.onStart?(play)
+            if play.buzz { self.onBuzz?(play) }
+            if play.whisper { self.onWhisper?(play) }
         }
     }
 

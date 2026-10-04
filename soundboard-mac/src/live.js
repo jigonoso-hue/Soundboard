@@ -339,6 +339,7 @@ class LiveHost extends EventEmitter {
   // ---- Called by the board ----
 
   // play: { pid, group, soundId, name, at, volume, cat, loop, gap, buzz, dur, to }
+  // `to` (a peer id or a list of them) makes it a whisper to those listeners.
   play(event) { return this.enqueue(() => this.doPlay(event)); }
 
   async doPlay(event) {
@@ -357,11 +358,12 @@ class LiveHost extends EventEmitter {
       cat: ['sfx', 'music', 'ambience'].includes(event.cat) ? event.cat : 'sfx',
       loop: !!event.loop,
       buzz: !!event.buzz,
-      whisper: !!event.to,
+      whisper: Array.isArray(event.to) ? event.to.length > 0 : !!event.to,
     };
     if (Number(event.gap) > 0) message.gap = Number(event.gap);
-    if (event.to) {
-      if (this.peers.has(event.to)) await this.sendTo(event.to, message);
+    const targets = Array.isArray(event.to) ? event.to : (event.to ? [event.to] : null);
+    if (targets) {
+      for (const peer of targets) if (this.peers.has(peer)) await this.sendTo(peer, message);
       return;
     }
     const endless = message.loop || message.gap;

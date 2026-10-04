@@ -89,6 +89,14 @@ struct ContentView: View {
                 .environmentObject(kits)
                 .environmentObject(ui)
         }
+        // While tuned in to a Live Session, the stage covers the app until the player leaves.
+        .fullScreenCover(isPresented: Binding(
+            get: { live.showStage && live.role == .listener },
+            set: { if !$0 { live.showStage = false } }
+        )) {
+            ListenerStageView()
+                .environmentObject(live)
+        }
         .sheet(item: $tagging, onDismiss: showTaggingIfNeeded) { request in
             TagNewSoundsView(soundIds: request.soundIds)
                 .environmentObject(store)
@@ -132,7 +140,7 @@ struct ContentView: View {
         .environment(\.appTheme, themes.theme)
         .onAppear {
             ambience.attach(to: store)
-            live.attach(store: store, ambience: ambience, kits: kits, bashes: bashes)
+            live.attach(store: store, ambience: ambience, kits: kits, bashes: bashes, player: player)
             player.live = live
             bashPlayer.live = live
             youtube.onCaptured = { file, name, source in

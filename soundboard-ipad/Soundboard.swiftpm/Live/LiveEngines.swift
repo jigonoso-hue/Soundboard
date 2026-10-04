@@ -2,9 +2,10 @@ import CryptoKit
 import Foundation
 
 // The protocol logic of a Live Session, shared by both ways of connecting.
-// LiveHostEngine answers listeners, serves files and forwards what the board
-// plays. LiveListenerEngine syncs its clock to the host, fetches and caches
-// files, and turns host commands into local ones for the MirrorPlayer.
+// LiveHostEngine answers listeners, serves files, forwards what the board
+// plays and takes players' sound requests. LiveListenerEngine syncs its clock
+// to the host, fetches and caches files, turns host commands into local ones
+// for the MirrorPlayer, and sends the player's own sounds when asked.
 
 /// SHA-256 of library files, remembered until the file changes.
 @MainActor
@@ -26,17 +27,172 @@ final class FileHasher {
     }
 }
 
-private func isHash(_ text: String) -> Bool {
-    text.count == 64 && text.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+/// Which sounds players may play for everyone.
+enum PlayerSounds: String, CaseIterable {
+    /// Only the GM plays sounds.
+    case off
+    /// Each player picks up to five sounds from their own library.
+    case own
+    /// Each player picks up to five sounds from the GM's library.
+    case gm
+
+    static let limit = 5
+
+    var label: String {
+        switch self {
+        case .off: return "Off"
+        case .own: return "Their own sounds"
+        case .gm: return "My soundboard"
+        }
+    }
 }
 
-private func isExt(_ text: String) -> Bool {
-    (1...5).contains(text.count) && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) && !$0.isUppercase }
+/// One of the GM's sounds that players may choose.
+struct CatalogItem: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let colorIndex: Int
 }
 
-private func clamp01(_ value: Double?) -> Double {
+/// Cached files, and the chunk messages files travel in.
+enum LiveFiles {
+    static func isHash(_ text: String) -> Bool {
+        text.count == 64 && text.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+    }
+
+    static func isExt(_ text: String) -> Bool {
+        (1...5).contains(text.count) && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) && !$0.isUppercase }
+    }
+
+    static var cacheDir: URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let dir = caches.appendingPathComponent("LiveCache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    static func cached(_ hash: String, _ ext: String) -> URL? {
+        guard isHash(hash), isExt(ext) else { return nil }
+        let url = cacheDir.appendingPathComponent("\(hash).\(ext)")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// Chunk `index` of a file as a `chunk` message, or nil if there's no such chunk.
+    static func chunk(of url: URL, hash: String, index: Int) -> LiveJSON? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let total = max(1, Int((size + UInt64(LiveNet.chunkSize) - 1) / UInt64(LiveNet.chunkSize)))
+        guard index >= 0, index < total else { return nil }
+        try? handle.seek(toOffset: UInt64(index * LiveNet.chunkSize))
+        let data = (try? handle.read(upToCount: LiveNet.chunkSize)) ?? Data()
+        return [
+            "t": "chunk", "hash": hash, "i": index, "n": total,
+            "ext": url.pathExtension.lowercased(), "data": data.base64EncodedString(),
+        ]
+    }
+
+    /// Deletes cached files not used for a month.
+    static func pruneCache() {
+        let cutoff = Date().addingTimeInterval(-30 * 86400)
+        let files = (try? FileManager.default.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: [.contentAccessDateKey])) ?? []
+        for file in files {
+            let used = (try? file.resourceValues(forKeys: [.contentAccessDateKey]).contentAccessDate) ?? Date()
+            if used < cutoff { try? FileManager.default.removeItem(at: file) }
+        }
+    }
+}
+
+func clamp01(_ value: Double?) -> Double {
     guard let value, value.isFinite else { return 1 }
     return min(1, max(0, value))
+}
+
+/// Fetches files from the other side of a connection, a few chunks at a time,
+/// most urgent first, checks their hash and caches them.
+@MainActor
+final class FileFetcher {
+    var onArrived: ((String, URL) -> Void)?
+    var onFailed: ((String) -> Void)?
+    private let send: (LiveJSON) -> Void
+
+    private struct Job {
+        var ext: String
+        var total: Int?
+        var next = 0
+        var inFlight = 0
+        var received = 0
+        var chunks: [Int: Data] = [:]
+    }
+    private var jobs: [String: Job] = [:]
+    private var queue: [String] = []
+
+    init(send: @escaping (LiveJSON) -> Void) {
+        self.send = send
+    }
+
+    func want(_ hash: String, ext: String, urgent: Bool) {
+        guard LiveFiles.isHash(hash), LiveFiles.isExt(ext), LiveFiles.cached(hash, ext) == nil else { return }
+        if jobs[hash] == nil { jobs[hash] = Job(ext: ext) }
+        if let index = queue.firstIndex(of: hash) {
+            guard urgent else { return }
+            queue.remove(at: index)
+        }
+        if urgent { queue.insert(hash, at: 0) } else { queue.append(hash) }
+        pump()
+    }
+
+    /// Keeps a few chunk requests in flight for the most urgent file.
+    private func pump() {
+        guard let hash = queue.first, var job = jobs[hash] else { return }
+        while job.inFlight < 4 {
+            if let total = job.total {
+                guard job.next < total else { break }
+            } else if job.next > 0 {
+                break // learn the chunk count first
+            }
+            send(["t": "need", "hash": hash, "i": job.next])
+            job.next += 1
+            job.inFlight += 1
+        }
+        jobs[hash] = job
+    }
+
+    func handleChunk(_ message: LiveJSON) {
+        guard let hash = LiveNet.string(message["hash"]), var job = jobs[hash],
+              let index = LiveNet.number(message["i"]).map({ Int($0) }),
+              let total = LiveNet.number(message["n"]).map({ Int($0) }),
+              total >= 1, index >= 0, index < total, job.chunks[index] == nil else { return }
+        job.total = total
+        job.inFlight = max(0, job.inFlight - 1)
+        job.chunks[index] = Data(base64Encoded: LiveNet.string(message["data"]) ?? "") ?? Data()
+        job.received += 1
+        jobs[hash] = job
+        guard job.received >= total else {
+            pump()
+            return
+        }
+        var bytes = Data()
+        for i in 0..<total { bytes.append(job.chunks[i] ?? Data()) }
+        jobs[hash] = nil
+        queue.removeAll { $0 == hash }
+        let actual = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        if actual == hash {
+            let url = LiveFiles.cacheDir.appendingPathComponent("\(hash).\(job.ext)")
+            try? bytes.write(to: url, options: .atomic)
+            onArrived?(hash, url)
+        } else {
+            onFailed?(hash)
+        }
+        pump()
+    }
+
+    func handleMissing(_ hash: String) {
+        jobs[hash] = nil
+        queue.removeAll { $0 == hash }
+        onFailed?(hash)
+        pump()
+    }
 }
 
 // MARK: - Host
@@ -49,11 +205,17 @@ final class LiveHostEngine {
         var device: String
     }
 
-    /// A play for the host to send. `to` makes it a whisper to one listener.
+    /// Where a play's file comes from.
+    enum Source {
+        case library(UUID)
+        case file(hash: String, ext: String, url: URL)
+    }
+
+    /// A play for the host to send. `to` makes it a whisper to those listeners.
     struct PlayEvent {
         var pid: String
         var group: String
-        var soundId: UUID
+        var source: Source
         var name: String
         var at: Double
         var volume: Double
@@ -62,20 +224,41 @@ final class LiveHostEngine {
         var gap: Double = 0
         var buzz = false
         var duration: Double = 0
-        var to: String? = nil
+        var to: [String]? = nil
+        /// The player who played it, for sounds players add.
+        var by: String? = nil
+    }
+
+    /// A sound a player asked to play for everyone.
+    enum Cue {
+        case library(UUID)
+        case file(hash: String, ext: String, name: String, url: URL)
     }
 
     let name: String
     let transport: LiveHostTransport
     /// A library sound's file, or nil if it's gone.
     var resolveSound: (UUID) -> URL? = { _ in nil }
+    /// The GM's sounds players may choose from, when players use the GM's soundboard.
+    var catalog: () -> [CatalogItem] = { [] }
     var onPeers: (([Peer]) -> Void)?
+    /// A player's sound request, already checked against the rules: (peer, player name, cue).
+    var onCue: ((String, String, Cue) -> Void)?
+    private(set) var playerSounds: PlayerSounds = .off
 
     private struct PeerInfo {
         var name = "Listener"
         var device = ""
         var ready = false
         var allowed: Set<String> = []
+        /// Distinct sounds this player has played (at most five).
+        var cued: Set<String> = []
+        var lastCue: Double = 0
+        /// The player's own sounds on offer: hash → (ext, name).
+        var offers: [String: (ext: String, name: String)] = [:]
+        var fetcher: FileFetcher?
+        /// Own sounds requested before their file arrived.
+        var waitingCues: Set<String> = []
     }
 
     private struct ActivePlay {
@@ -133,6 +316,8 @@ final class LiveHostEngine {
             peers[peer]?.ready = true
             transport.send(["t": "welcome", "peer": peer, "host": name, "v": LiveNet.version], to: peer)
             transport.send(scene, to: peer)
+            transport.send(rulesMessage, to: peer)
+            if playerSounds == .gm { transport.send(catalogMessage, to: peer) }
             send(ambience, to: peer)
             send(await prefetchMessage(), to: peer)
             let now = LiveNet.now
@@ -145,11 +330,123 @@ final class LiveHostEngine {
             pong["t0"] = message["t0"] ?? NSNull()
             transport.send(pong, to: peer)
         case "need":
-            sendChunk(to: peer, hash: LiveNet.string(message["hash"]) ?? "", index: Int(LiveNet.number(message["i"]) ?? 0))
+            let hash = LiveNet.string(message["hash"]) ?? ""
+            let index = Int(LiveNet.number(message["i"]) ?? 0)
+            if LiveFiles.isHash(hash), peers[peer]?.allowed.contains(hash) == true, let url = files[hash],
+               let chunk = LiveFiles.chunk(of: url, hash: hash, index: index) {
+                transport.send(chunk, to: peer)
+            } else {
+                transport.send(["t": "missing", "hash": hash], to: peer)
+            }
+        case "cue":
+            handleCue(from: peer, message)
+        case "offer":
+            handleOffer(from: peer, message)
+        case "chunk":
+            peers[peer]?.fetcher?.handleChunk(message)
+        case "missing":
+            peers[peer]?.fetcher?.handleMissing(LiveNet.string(message["hash"]) ?? "")
         default:
             break
         }
     }
+
+    // MARK: Players' sounds
+
+    private var rulesMessage: LiveJSON {
+        ["t": "rules", "playerSounds": playerSounds.rawValue, "limit": PlayerSounds.limit]
+    }
+
+    private var catalogMessage: LiveJSON {
+        ["t": "catalog", "sounds": catalog().map { ["id": $0.id, "name": $0.name, "color": $0.colorIndex] as LiveJSON }]
+    }
+
+    func setPlayerSounds(_ mode: PlayerSounds) {
+        enqueue { [weak self] in
+            guard let self else { return }
+            self.playerSounds = mode
+            for key in self.peers.keys {
+                self.peers[key]?.cued = []
+                if mode != .own { self.peers[key]?.offers = [:] }
+            }
+            self.broadcast(self.rulesMessage)
+            if mode == .gm { self.broadcast(self.catalogMessage) }
+        }
+    }
+
+    /// Sends the GM's sound list again (sounds added, renamed or marked GM only).
+    func refreshCatalog() {
+        enqueue { [weak self] in
+            guard let self, self.playerSounds == .gm else { return }
+            self.broadcast(self.catalogMessage)
+        }
+    }
+
+    /// Checks a player's request against the rules: the right mode, at most five
+    /// different sounds per player, and not too fast.
+    private func handleCue(from peer: String, _ message: LiveJSON) {
+        guard playerSounds != .off, var info = peers[peer], info.ready else { return }
+        let now = LiveNet.now
+        guard now - info.lastCue > 300 else { return }
+        let key: String
+        let cue: Cue?
+        switch playerSounds {
+        case .gm:
+            guard let id = LiveNet.string(message["id"]).flatMap(UUID.init(uuidString:)),
+                  catalog().contains(where: { $0.id == id.uuidString }) else { return }
+            key = id.uuidString
+            cue = .library(id)
+        case .own:
+            let hash = LiveNet.string(message["hash"]) ?? ""
+            guard let offer = info.offers[hash] else { return }
+            key = hash
+            if let url = LiveFiles.cached(hash, offer.ext) {
+                cue = .file(hash: hash, ext: offer.ext, name: offer.name, url: url)
+            } else {
+                // Play it once the file arrives from the player.
+                cue = nil
+                info.waitingCues.insert(hash)
+                info.fetcher?.want(hash, ext: offer.ext, urgent: true)
+            }
+        case .off:
+            return
+        }
+        guard info.cued.contains(key) || info.cued.count < PlayerSounds.limit else { return }
+        info.cued.insert(key)
+        info.lastCue = now
+        peers[peer] = info
+        if let cue { onCue?(peer, info.name, cue) }
+    }
+
+    /// A player's own sounds (at most five). The host fetches them ahead of time.
+    private func handleOffer(from peer: String, _ message: LiveJSON) {
+        guard playerSounds == .own, peers[peer]?.ready == true else { return }
+        var offers: [String: (ext: String, name: String)] = [:]
+        for item in ((message["sounds"] as? [LiveJSON]) ?? []).prefix(PlayerSounds.limit) {
+            let hash = LiveNet.string(item["hash"]) ?? ""
+            let ext = LiveNet.string(item["ext"]) ?? ""
+            guard LiveFiles.isHash(hash), LiveFiles.isExt(ext) else { continue }
+            offers[hash] = (ext, String((LiveNet.string(item["name"]) ?? "Sound").prefix(60)))
+        }
+        peers[peer]?.offers = offers
+        if peers[peer]?.fetcher == nil {
+            let fetcher = FileFetcher { [weak self] message in self?.transport.send(message, to: peer) }
+            fetcher.onArrived = { [weak self] hash, url in self?.contributionArrived(from: peer, hash: hash, url: url) }
+            fetcher.onFailed = { [weak self] hash in self?.peers[peer]?.waitingCues.remove(hash) }
+            peers[peer]?.fetcher = fetcher
+        }
+        for (hash, offer) in offers { peers[peer]?.fetcher?.want(hash, ext: offer.ext, urgent: false) }
+    }
+
+    private func contributionArrived(from peer: String, hash: String, url: URL) {
+        guard let info = peers[peer], let offer = info.offers[hash] else { return }
+        if info.waitingCues.contains(hash) {
+            peers[peer]?.waitingCues.remove(hash)
+            onCue?(peer, info.name, .file(hash: hash, ext: offer.ext, name: offer.name, url: url))
+        }
+    }
+
+    // MARK: Files
 
     /// Sends a message that refers to files, letting the listener fetch them.
     private func send(_ message: LiveJSON, to peer: String) {
@@ -172,24 +469,6 @@ final class LiveHostEngine {
         }
     }
 
-    private func sendChunk(to peer: String, hash: String, index: Int) {
-        guard isHash(hash), peers[peer]?.allowed.contains(hash) == true, let url = files[hash],
-              let handle = try? FileHandle(forReadingFrom: url) else {
-            transport.send(["t": "missing", "hash": hash], to: peer)
-            return
-        }
-        defer { try? handle.close() }
-        let size = (try? handle.seekToEnd()) ?? 0
-        let total = max(1, Int((size + UInt64(LiveNet.chunkSize) - 1) / UInt64(LiveNet.chunkSize)))
-        guard index >= 0, index < total else { return }
-        try? handle.seek(toOffset: UInt64(index * LiveNet.chunkSize))
-        let data = (try? handle.read(upToCount: LiveNet.chunkSize)) ?? Data()
-        transport.send([
-            "t": "chunk", "hash": hash, "i": index, "n": total,
-            "ext": url.pathExtension.lowercased(), "data": data.base64EncodedString(),
-        ], to: peer)
-    }
-
     /// Hash and extension of a library sound, registering it to be served.
     private func file(for soundId: UUID) async -> (hash: String, ext: String)? {
         guard let url = resolveSound(soundId), let hash = await hasher.hash(url) else { return nil }
@@ -209,15 +488,25 @@ final class LiveHostEngine {
 
     func play(_ event: PlayEvent) {
         enqueue { [weak self] in
-            guard let self, let file = await self.file(for: event.soundId) else { return }
+            guard let self else { return }
+            let file: (hash: String, ext: String)
+            switch event.source {
+            case .library(let id):
+                guard let found = await self.file(for: id) else { return }
+                file = found
+            case .file(let hash, let ext, let url):
+                self.files[hash] = url
+                file = (hash, ext)
+            }
             var message: LiveJSON = [
                 "t": "play", "pid": event.pid, "group": event.group, "hash": file.hash, "ext": file.ext,
                 "name": event.name, "at": event.at, "volume": clamp01(event.volume), "cat": event.cat,
                 "loop": event.loop, "buzz": event.buzz, "whisper": event.to != nil,
             ]
             if event.gap > 0 { message["gap"] = event.gap }
-            if let peer = event.to {
-                if self.peers[peer] != nil { self.send(message, to: peer) }
+            if let by = event.by { message["by"] = by }
+            if let targets = event.to {
+                for peer in targets where self.peers[peer] != nil { self.send(message, to: peer) }
                 return
             }
             let endless = event.loop || event.gap > 0 || event.duration <= 0
@@ -318,6 +607,8 @@ final class LiveListenerEngine {
     var onState: ((State) -> Void)?
     var onCommand: ((Command) -> Void)?
     var onScene: ((String?) -> Void)?
+    var onRules: ((PlayerSounds) -> Void)?
+    var onCatalog: (([CatalogItem]) -> Void)?
     private(set) var hostName: String?
     /// Resolves a built-in loop's file name to its URL.
     var builtinURL: (String) -> URL? = { _ in nil }
@@ -325,33 +616,25 @@ final class LiveListenerEngine {
     private let socket: LiveSocket
     private let name: String
     private let device: String
-    private let cacheDir: URL
     /// Host clock − local clock, in ms.
     private var offset: Double = 0
     private var samples: [(rtt: Double, offset: Double)] = []
     private var pingTask: Task<Void, Never>?
     private var closed = false
-
-    private struct Job {
-        var ext: String
-        var total: Int?
-        var next = 0
-        var inFlight = 0
-        var received = 0
-        var chunks: [Int: Data] = [:]
-    }
-    private var jobs: [String: Job] = [:]
-    private var queue: [String] = []
+    private var fetcher: FileFetcher!
     private var pendingPlays: [String: [LiveJSON]] = [:]
     private var ambienceLayers: [LiveJSON] = []
+    /// This player's own sounds on offer to the host: hash → file.
+    private var offered: [String: URL] = [:]
 
     init(socket: LiveSocket, name: String, device: String) {
         self.socket = socket
         self.name = name
         self.device = device
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        cacheDir = caches.appendingPathComponent("LiveCache", isDirectory: true)
-        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let fetcher = FileFetcher { [weak socket] message in socket?.send(message) }
+        fetcher.onArrived = { [weak self] hash, url in self?.fileArrived(hash, url) }
+        fetcher.onFailed = { [weak self] hash in self?.pendingPlays[hash] = nil }
+        self.fetcher = fetcher
     }
 
     func start() {
@@ -382,6 +665,29 @@ final class LiveListenerEngine {
         onCommand?(.stopAll(ambienceToo: true))
     }
 
+    // MARK: Player sounds
+
+    /// Asks the host to play one of the GM's sounds for everyone.
+    func cue(soundId: String) {
+        socket.send(["t": "cue", "id": soundId])
+    }
+
+    /// Asks the host to play one of this player's own (offered) sounds for everyone.
+    func cue(hash: String) {
+        socket.send(["t": "cue", "hash": hash])
+    }
+
+    /// Offers this player's own sounds (at most five) to the host.
+    func offer(_ sounds: [(url: URL, hash: String, name: String)]) {
+        offered = [:]
+        var list: [LiveJSON] = []
+        for sound in sounds.prefix(PlayerSounds.limit) {
+            offered[sound.hash] = sound.url
+            list.append(["hash": sound.hash, "ext": sound.url.pathExtension.lowercased(), "name": sound.name])
+        }
+        socket.send(["t": "offer", "sounds": list])
+    }
+
     private func handle(_ message: LiveJSON) {
         switch LiveNet.string(message["t"]) {
         case "welcome":
@@ -398,9 +704,18 @@ final class LiveListenerEngine {
             socket.close()
         case "pong": addClockSample(message)
         case "scene": onScene?(LiveNet.string(message["name"]))
+        case "rules":
+            onRules?(PlayerSounds(rawValue: LiveNet.string(message["playerSounds"]) ?? "") ?? .off)
+        case "catalog":
+            let items: [CatalogItem] = ((message["sounds"] as? [LiveJSON]) ?? []).compactMap { item in
+                guard let id = LiveNet.string(item["id"]) else { return nil }
+                return CatalogItem(id: id, name: LiveNet.string(item["name"]) ?? "Sound",
+                                   colorIndex: Int(LiveNet.number(item["color"]) ?? 0))
+            }
+            onCatalog?(items)
         case "prefetch":
             for file in (message["files"] as? [LiveJSON]) ?? [] {
-                want(LiveNet.string(file["hash"]) ?? "", ext: LiveNet.string(file["ext"]) ?? "", urgent: false)
+                fetcher.want(LiveNet.string(file["hash"]) ?? "", ext: LiveNet.string(file["ext"]) ?? "", urgent: false)
             }
         case "play": onPlay(message)
         case "stop":
@@ -415,11 +730,20 @@ final class LiveListenerEngine {
         case "ambience":
             ambienceLayers = (message["layers"] as? [LiveJSON]) ?? []
             for layer in ambienceLayers {
-                if let hash = LiveNet.string(layer["hash"]) { want(hash, ext: LiveNet.string(layer["ext"]) ?? "", urgent: true) }
+                if let hash = LiveNet.string(layer["hash"]) { fetcher.want(hash, ext: LiveNet.string(layer["ext"]) ?? "", urgent: true) }
             }
             emitAmbience()
-        case "chunk": onChunk(message)
-        case "missing": dropJob(LiveNet.string(message["hash"]) ?? "")
+        case "chunk": fetcher.handleChunk(message)
+        case "missing": fetcher.handleMissing(LiveNet.string(message["hash"]) ?? "")
+        case "need":
+            // The host fetching one of this player's own sounds.
+            let hash = LiveNet.string(message["hash"]) ?? ""
+            let index = Int(LiveNet.number(message["i"]) ?? 0)
+            if let url = offered[hash], let chunk = LiveFiles.chunk(of: url, hash: hash, index: index) {
+                socket.send(chunk)
+            } else {
+                socket.send(["t": "missing", "hash": hash])
+            }
         default: break
         }
     }
@@ -457,79 +781,7 @@ final class LiveListenerEngine {
         if let best = samples.min(by: { $0.rtt < $1.rtt }) { offset = best.offset }
     }
 
-    // MARK: Files
-
-    private func cacheURL(_ hash: String, _ ext: String) -> URL {
-        cacheDir.appendingPathComponent("\(hash).\(ext)")
-    }
-
-    private func cached(_ hash: String, _ ext: String) -> URL? {
-        guard isHash(hash), isExt(ext) else { return nil }
-        let url = cacheURL(hash, ext)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
-    }
-
-    private func want(_ hash: String, ext: String, urgent: Bool) {
-        guard isHash(hash), isExt(ext), cached(hash, ext) == nil else { return }
-        if jobs[hash] == nil { jobs[hash] = Job(ext: ext) }
-        if let index = queue.firstIndex(of: hash) {
-            guard urgent else { return }
-            queue.remove(at: index)
-        }
-        if urgent { queue.insert(hash, at: 0) } else { queue.append(hash) }
-        pump()
-    }
-
-    /// Keeps a few chunk requests in flight for the most urgent file.
-    private func pump() {
-        guard let hash = queue.first, var job = jobs[hash] else { return }
-        while job.inFlight < 4 {
-            if let total = job.total {
-                guard job.next < total else { break }
-            } else if job.next > 0 {
-                break // learn the chunk count first
-            }
-            socket.send(["t": "need", "hash": hash, "i": job.next])
-            job.next += 1
-            job.inFlight += 1
-        }
-        jobs[hash] = job
-    }
-
-    private func onChunk(_ message: LiveJSON) {
-        guard let hash = LiveNet.string(message["hash"]), var job = jobs[hash],
-              let index = LiveNet.number(message["i"]).map({ Int($0) }), let total = LiveNet.number(message["n"]).map({ Int($0) }),
-              total >= 1, index >= 0, index < total, job.chunks[index] == nil else { return }
-        job.total = total
-        job.inFlight = max(0, job.inFlight - 1)
-        job.chunks[index] = Data(base64Encoded: LiveNet.string(message["data"]) ?? "") ?? Data()
-        job.received += 1
-        jobs[hash] = job
-        guard job.received >= total else {
-            pump()
-            return
-        }
-        var bytes = Data()
-        for i in 0..<total { bytes.append(job.chunks[i] ?? Data()) }
-        jobs[hash] = nil
-        queue.removeAll { $0 == hash }
-        let actual = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-        if actual == hash {
-            let url = cacheURL(hash, job.ext)
-            try? bytes.write(to: url, options: .atomic)
-            fileArrived(hash, url)
-        } else {
-            pendingPlays[hash] = nil
-        }
-        pump()
-    }
-
-    private func dropJob(_ hash: String) {
-        jobs[hash] = nil
-        queue.removeAll { $0 == hash }
-        pendingPlays[hash] = nil
-        pump()
-    }
+    // MARK: Commands
 
     private func fileArrived(_ hash: String, _ url: URL) {
         let plays = pendingPlays.removeValue(forKey: hash) ?? []
@@ -537,18 +789,16 @@ final class LiveListenerEngine {
         if ambienceLayers.contains(where: { LiveNet.string($0["hash"]) == hash }) { emitAmbience() }
     }
 
-    // MARK: Commands
-
     private func onPlay(_ message: LiveJSON) {
         let hash = LiveNet.string(message["hash"]) ?? ""
         let ext = LiveNet.string(message["ext"]) ?? ""
-        if let url = cached(hash, ext) {
+        if let url = LiveFiles.cached(hash, ext) {
             emitPlay(message, url: url)
             return
         }
-        guard isHash(hash), isExt(ext) else { return }
+        guard LiveFiles.isHash(hash), LiveFiles.isExt(ext) else { return }
         pendingPlays[hash, default: []].append(message)
-        want(hash, ext: ext, urgent: true)
+        fetcher.want(hash, ext: ext, urgent: true)
     }
 
     private func emitPlay(_ message: LiveJSON, url: URL) {
@@ -565,7 +815,8 @@ final class LiveListenerEngine {
             loop: LiveNet.bool(message["loop"]),
             gap: max(0, LiveNet.number(message["gap"]) ?? 0),
             buzz: LiveNet.bool(message["buzz"]),
-            whisper: LiveNet.bool(message["whisper"])
+            whisper: LiveNet.bool(message["whisper"]),
+            by: LiveNet.string(message["by"])
         )))
     }
 
@@ -577,22 +828,10 @@ final class LiveListenerEngine {
             let volume = clamp01(LiveNet.number(layer["volume"]))
             if let builtin = LiveNet.string(layer["builtin"]) {
                 if let url = builtinURL(builtin) { layers.append(MirrorLayer(key: key, url: url, name: name, volume: volume)) }
-            } else if let url = cached(LiveNet.string(layer["hash"]) ?? "", LiveNet.string(layer["ext"]) ?? "") {
+            } else if let url = LiveFiles.cached(LiveNet.string(layer["hash"]) ?? "", LiveNet.string(layer["ext"]) ?? "") {
                 layers.append(MirrorLayer(key: key, url: url, name: name, volume: volume))
             }
         }
         onCommand?(.ambience(layers))
-    }
-
-    /// Deletes cached files not used for a month.
-    static func pruneCache() {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        let dir = caches.appendingPathComponent("LiveCache", isDirectory: true)
-        let cutoff = Date().addingTimeInterval(-30 * 86400)
-        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentAccessDateKey])) ?? []
-        for file in files {
-            let used = (try? file.resourceValues(forKeys: [.contentAccessDateKey]).contentAccessDate) ?? Date()
-            if used < cutoff { try? FileManager.default.removeItem(at: file) }
-        }
     }
 }
