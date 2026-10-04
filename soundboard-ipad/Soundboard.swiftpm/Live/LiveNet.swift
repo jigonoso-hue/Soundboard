@@ -437,21 +437,29 @@ final class LanBrowser {
 
     /// Looks up a found session's address and returns it as a ws:// URL.
     static func resolve(_ endpoint: NWEndpoint, completion: @escaping @MainActor (URL?) -> Void) {
+        EndpointResolver(endpoint: endpoint, completion: completion).start()
+    }
+}
+
+/// Connects to a Bonjour service just long enough to learn its IPv4 address and
+/// port. Everything runs on the main queue; the network callbacks aren't
+/// main-actor code, so this class stays outside the main actor.
+private final class EndpointResolver: @unchecked Sendable {
+    private let connection: NWConnection
+    private let completion: @MainActor (URL?) -> Void
+    private var done = false
+
+    init(endpoint: NWEndpoint, completion: @escaping @MainActor (URL?) -> Void) {
         let parameters = NWParameters.tcp
         if let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
             ip.version = .v4
         }
-        let connection = NWConnection(to: endpoint, using: parameters)
-        var done = false
-        func finish(_ url: URL?) {
-            guard !done else { return }
-            done = true
-            connection.cancel()
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { completion(url) }
-            }
-        }
-        connection.stateUpdateHandler = { state in
+        connection = NWConnection(to: endpoint, using: parameters)
+        self.completion = completion
+    }
+
+    func start() {
+        connection.stateUpdateHandler = { [self] state in
             switch state {
             case .ready:
                 if case .hostPort(let host, let port)? = connection.currentPath?.remoteEndpoint {
@@ -470,6 +478,18 @@ final class LanBrowser {
         }
         connection.start(queue: .main)
         // Don't wait forever on a session that has gone away.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { finish(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [self] in finish(nil) }
+    }
+
+    /// Reports once, then closes the lookup connection (it keeps itself alive until then).
+    private func finish(_ url: URL?) {
+        guard !done else { return }
+        done = true
+        connection.stateUpdateHandler = nil
+        connection.cancel()
+        let completion = completion
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { completion(url) }
+        }
     }
 }
