@@ -12,10 +12,8 @@ enum SegmentScript {
   const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.soundboard;
   const post = (msg) => { if (handler) handler.postMessage(msg); };
   const getVideo = () => document.querySelector('video.html5-main-video') || document.querySelector('video');
-  const adShowing = () => {
-    const player = document.querySelector('#movie_player');
-    return !!(player && player.classList.contains('ad-showing'));
-  };
+  // Desktop and mobile YouTube both mark the player while an ad plays.
+  const adShowing = () => !!document.querySelector('.html5-video-player.ad-showing, #movie_player.ad-showing, .ad-showing .html5-main-video, .ad-interrupting');
   const videoTitle = () => {
     const el = document.querySelector('h1.ytd-watch-metadata yt-formatted-string, h1.title, #title h1, .slim-video-information-title');
     return (el && el.textContent.trim()) || document.title.replace(/ - YouTube$/, '');
@@ -25,6 +23,9 @@ enum SegmentScript {
   const MAX_BYTES = 150 * 1024 * 1024;
   const tracks = [];
   const sources = new WeakMap(); // SourceBuffer -> track
+  const blobs = new Map(); // object URL -> MediaSource, to tell which stream the video is playing
+  const isMediaSource = (obj) => !!obj && [window.MediaSource, window.ManagedMediaSource, window.WebKitMediaSource]
+    .some((MS) => MS && obj instanceof MS);
 
   // ---------- Ask for AAC in MP4, which the app can always open ----------
 
@@ -40,10 +41,21 @@ enum SegmentScript {
       const add = MS.prototype.addSourceBuffer;
       MS.prototype.addSourceBuffer = function (mime) {
         const buffer = add.call(this, mime);
-        if (/^audio\//i.test(String(mime))) sources.set(buffer, newTrack(String(mime)));
+        if (/^audio\//i.test(String(mime))) sources.set(buffer, newTrack(String(mime), this));
         return buffer;
       };
     }
+  }
+  if (window.URL && URL.createObjectURL) {
+    const createObjectURL = URL.createObjectURL;
+    URL.createObjectURL = function (obj) {
+      const url = createObjectURL.apply(this, arguments);
+      if (isMediaSource(obj)) {
+        blobs.set(url, obj);
+        if (blobs.size > 20) blobs.delete(blobs.keys().next().value);
+      }
+      return url;
+    };
   }
   if (navigator.mediaCapabilities && navigator.mediaCapabilities.decodingInfo) {
     const decodingInfo = navigator.mediaCapabilities.decodingInfo.bind(navigator.mediaCapabilities);
@@ -59,7 +71,7 @@ enum SegmentScript {
     window.SourceBuffer.prototype.appendBuffer = function (data) {
       const track = sources.get(this);
       if (track) {
-        try { record(track, data); } catch (e) { /* never break playback */ }
+        try { record(track, data, Number(this.timestampOffset) || 0); } catch (e) { /* never break playback */ }
       }
       return append.call(this, data);
     };
@@ -158,8 +170,8 @@ enum SegmentScript {
 
   // ---------- Recording what the player appends ----------
 
-  function newTrack(mime) {
-    const track = { mime, pending: new Uint8Array(0), ftyp: null, init: null, timescale: 0, defaultDuration: 0, moof: null, frags: new Map(), bytes: 0, lastAppend: 0 };
+  function newTrack(mime, mediaSource) {
+    const track = { mime, mediaSource, offset: 0, pending: new Uint8Array(0), ftyp: null, init: null, timescale: 0, defaultDuration: 0, moof: null, frags: new Map(), bytes: 0, lastAppend: 0 };
     tracks.push(track);
     if (tracks.length > 8) tracks.shift();
     return track;
@@ -172,7 +184,8 @@ enum SegmentScript {
 
   const sameBytes = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
-  function record(track, data) {
+  function record(track, data, offset) {
+    track.offset = offset;
     let bytes = toBytes(data);
     if (track.pending.length) bytes = concat([track.pending, bytes]);
     let p = 0;
@@ -209,11 +222,15 @@ enum SegmentScript {
       const timing = moofTiming(track.moof, track.defaultDuration);
       if (timing) {
         const bytes = concat([track.moof, box]);
-        const existing = track.frags.get(timing.time);
+        // Where the player puts it on the video's timeline.
+        const time = timing.time / track.timescale + track.offset;
+        const key = Math.round(time * 1000);
+        const existing = track.frags.get(key);
         if (existing) track.bytes -= existing.bytes.length;
-        track.frags.set(timing.time, {
+        track.frags.set(key, {
+          key,
           base: timing.time,
-          time: timing.time / track.timescale,
+          time,
           dur: timing.duration / track.timescale,
           tfdt: timing.tfdt,
           bytes,
@@ -240,7 +257,7 @@ enum SegmentScript {
     const list = [...track.frags.values()].sort((a, b) => Math.abs(b.time - now) - Math.abs(a.time - now));
     for (const frag of list) {
       if (track.bytes <= MAX_BYTES * 0.8) break;
-      track.frags.delete(frag.base);
+      track.frags.delete(frag.key);
       track.bytes -= frag.bytes.length;
     }
   }
@@ -263,9 +280,25 @@ enum SegmentScript {
     return end === null ? start : end;
   }
 
-  function bestTrack(start) {
+  // The audio stream of what the video element is playing right now (not an ad's).
+  function currentTrack() {
+    const video = getVideo();
+    if (!video) return null;
+    const source = isMediaSource(video.srcObject) ? video.srcObject : blobs.get(video.currentSrc || video.src);
+    if (!source) return null;
     let best = null;
     for (const track of tracks) {
+      if (track.mediaSource === source && track.init && track.timescale && (!best || track.lastAppend > best.lastAppend)) best = track;
+    }
+    return best;
+  }
+
+  // Fallback when the playing stream can't be identified: a stream long enough for the range.
+  function bestTrack(start, end) {
+    let best = null;
+    for (const track of tracks) {
+      const ms = track.mediaSource;
+      if (ms && isFinite(ms.duration) && ms.duration > 0 && ms.duration < end - 0.5) continue;
       if (!track.init || !track.timescale) continue;
       if (!best || reach(track, start) > reach(best, start)
           || (reach(track, start) === reach(best, start) && track.lastAppend > best.lastAppend)) best = track;
@@ -316,6 +349,20 @@ enum SegmentScript {
   window.__sbSeg = {
     // How many audio streams have been seen (0 = this page can't be captured this way).
     available() { return tracks.filter((t) => t.init).length; },
+    debug() {
+      const video = getVideo();
+      const current = currentTrack();
+      return JSON.stringify({
+        ad: adShowing(),
+        time: video && video.currentTime,
+        tracks: tracks.map((t) => {
+          const list = ordered(t);
+          return { mime: t.mime, current: t === current, frags: list.length, from: list.length ? list[0].time : null,
+            to: list.length ? list[list.length - 1].time + list[list.length - 1].dur : null,
+            duration: t.mediaSource && t.mediaSource.duration };
+        }),
+      });
+    },
     capture(start, end, options) {
       run(start, end, options || {}).catch((err) => post({ type: 'error', message: String((err && err.message) || err) }));
       return 'ok';
@@ -328,20 +375,41 @@ enum SegmentScript {
     if (!video) throw new Error('Open a YouTube video first.');
     if (!(end > start)) throw new Error('The end time must be after the start time.');
     if (cancel) throw new Error('A capture is already running.');
-    // The player may still be loading its first chunks.
-    for (let i = 0; i < 20 && !bestTrack(start); i++) await sleep(250);
-    if (!bestTrack(start)) { post({ type: 'segments-unavailable' }); return; }
-
     let cancelled = false;
     cancel = () => { cancelled = true; };
     const saved = { rate: video.playbackRate, muted: video.muted };
+    let track = null;
+    // Ads play through the same video element with their own audio stream.
+    // Let them finish, then use only the stream the video itself plays.
+    const pick = () => {
+      if (adShowing()) return track;
+      const found = currentTrack() || bestTrack(start, end);
+      if (found) track = found;
+      return track;
+    };
     try {
+      if (adShowing()) {
+        post({ type: 'status', message: 'Waiting for the ad to finish…' });
+        video.muted = true;
+        video.play().catch(() => {});
+        const waitUntil = Date.now() + 180000;
+        while (adShowing() && Date.now() < waitUntil) {
+          if (cancelled) throw new Error('Capture cancelled.');
+          await sleep(250);
+        }
+        if (adShowing()) throw new Error('The ad didn\'t finish. Try again.');
+        await sleep(500); // let the video's own stream start
+      }
+      // The player may still be loading its first chunks.
+      for (let i = 0; i < 20 && !pick(); i++) await sleep(250);
+      if (!pick()) { cancel = null; post({ type: 'segments-unavailable' }); return; }
+
       // Play (muted, and faster than normal) until the player has downloaded the whole range.
-      if (reach(bestTrack(start), start) < end - 0.05) {
+      if (reach(pick(), start) < end - 0.05) {
         post({ type: 'status', message: 'Downloading the audio…' });
         video.muted = true;
         const current = video.currentTime;
-        if (current < start - 1 || current > reach(bestTrack(start), start)) video.currentTime = Math.max(0, start - 0.5);
+        if (current < start - 1 || current > reach(pick(), start)) video.currentTime = Math.max(0, start - 0.5);
         video.playbackRate = options.rate || 2;
         video.play().catch(() => {});
         let lastReach = -1;
@@ -349,8 +417,8 @@ enum SegmentScript {
         while (true) {
           await sleep(250);
           if (cancelled) throw new Error('Capture cancelled.');
-          const track = bestTrack(start);
-          const got = track ? reach(track, start) : start;
+          const playing = pick();
+          const got = playing ? reach(playing, start) : start;
           post({ type: 'progress', time: got, fraction: Math.max(0, Math.min(1, (got - start) / (end - start))) });
           if (got >= end - 0.05) break;
           if (adShowing()) { stalledFor = 0; continue; }
@@ -372,11 +440,11 @@ enum SegmentScript {
       video.muted = saved.muted;
     }
 
-    const built = build(bestTrack(start), start, end);
+    const built = build(track, start, end);
     if (!built) throw new Error('No audio was downloaded.');
     post({
       type: 'segments-start',
-      mime: bestTrack(start).mime,
+      mime: track.mime,
       relStart: Math.max(0, start - built.offset),
       relEnd: Math.min(end, built.until) - built.offset,
     });

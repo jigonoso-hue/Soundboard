@@ -11,10 +11,8 @@ enum CaptureScript {
   const post = (msg) => { if (handler) handler.postMessage(msg); };
 
   const getVideo = () => document.querySelector('video.html5-main-video') || document.querySelector('video');
-  const adShowing = () => {
-    const player = document.querySelector('#movie_player');
-    return !!(player && player.classList.contains('ad-showing'));
-  };
+  // Desktop and mobile YouTube both mark the player while an ad plays.
+  const adShowing = () => !!document.querySelector('.html5-video-player.ad-showing, #movie_player.ad-showing, .ad-showing .html5-main-video, .ad-interrupting');
   const videoTitle = () => {
     const el = document.querySelector('h1.ytd-watch-metadata yt-formatted-string, h1.title, #title h1, .slim-video-information-title');
     return (el && el.textContent.trim()) || document.title.replace(/ - YouTube$/, '');
