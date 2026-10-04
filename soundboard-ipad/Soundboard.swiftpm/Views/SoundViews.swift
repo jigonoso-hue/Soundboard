@@ -47,7 +47,7 @@ struct SoundTile: View {
                         .foregroundStyle(.white)
                         .lineLimit(size == .l ? 3 : 2)
                         .multilineTextAlignment(.leading)
-                    if !sound.tagList.isEmpty && size != .s {
+                    if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
                         HStack(spacing: 4) {
                             ForEach(sound.tagList.prefix(2), id: \.self) { TagChip(tag: $0, small: true) }
                         }
@@ -133,7 +133,7 @@ struct TrackRow: View {
                         Text(sound.name)
                             .font(size == .l ? Font.headline : Font.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        if !sound.tagList.isEmpty && size != .s {
+                        if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
                             HStack(spacing: 4) {
                                 ForEach(sound.tagList.prefix(5), id: \.self) { TagChip(tag: $0, small: true) }
                             }

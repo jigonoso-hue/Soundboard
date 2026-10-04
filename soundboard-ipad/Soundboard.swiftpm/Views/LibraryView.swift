@@ -5,6 +5,7 @@ struct LibraryView: View {
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var ui: AppUI
+    @EnvironmentObject private var themes: ThemeSettings
     let destination: Destination
 
     private var showBashes: Bool { destination == .all || destination == .bashes }
@@ -39,6 +40,7 @@ struct LibraryView: View {
             }
             .padding()
         }
+        .themedBackground(themes.theme)
     }
 
     private var activeFilters: some View {

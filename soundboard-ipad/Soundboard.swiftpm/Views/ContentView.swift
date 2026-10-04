@@ -9,6 +9,7 @@ struct ContentView: View {
     @StateObject private var bashPlayer = BashPlayer()
     @StateObject private var kits = KitStore()
     @StateObject private var ui = AppUI()
+    @StateObject private var themes = ThemeSettings()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showBrowser = false
     @State private var selection: Destination? = .all
@@ -104,6 +105,10 @@ struct ContentView: View {
         .environmentObject(kits)
         .environmentObject(ui)
         .environmentObject(youtube)
+        .environmentObject(themes)
+        .tint(themes.accent)
+        .preferredColorScheme(themes.theme.colorScheme)
+        .fontDesign(themes.theme.fontDesign)
         .onAppear {
             ambience.attach(to: store)
             youtube.onCaptured = { file, name, source in
@@ -141,6 +146,10 @@ struct ContentView: View {
     /// After sounds are added, ask for their tags (like the Mac app). Waits a
     /// moment so it doesn't collide with a sheet that's closing.
     private func showTaggingIfNeeded() {
+        if !ui.askToTag {
+            store.recentlyAdded = []
+            return
+        }
         // A full-screen YouTube browser would hide the sheet; wait until it closes.
         guard tagging == nil, !store.recentlyAdded.isEmpty, !compactBrowser.wrappedValue else { return }
         Task {

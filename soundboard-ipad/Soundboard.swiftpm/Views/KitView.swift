@@ -7,6 +7,7 @@ struct KitView: View {
     @EnvironmentObject private var kits: KitStore
     @EnvironmentObject private var ambience: AmbienceMixer
     @EnvironmentObject private var ui: AppUI
+    @EnvironmentObject private var themes: ThemeSettings
     let kitId: UUID
 
     @State private var editing = false
@@ -50,6 +51,7 @@ struct KitView: View {
                     }
                     .padding(12)
                 }
+                .themedBackground(themes.theme)
             }
             .onDisappear { ui.kitDrawerOpen = false }
             .sheet(isPresented: $creatingSection) {

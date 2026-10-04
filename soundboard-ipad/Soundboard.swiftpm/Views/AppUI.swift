@@ -4,6 +4,7 @@ import SwiftUI
 enum Destination: Hashable {
     case all, clips, full, bashes
     case kit(UUID)
+    case options
 }
 
 enum SoundSort: String, CaseIterable {
@@ -37,6 +38,13 @@ final class AppUI: ObservableObject {
     @Published var bashesCollapsed: Bool {
         didSet { UserDefaults.standard.set(bashesCollapsed, forKey: "bashesCollapsed") }
     }
+    @Published var showTagsOnTiles: Bool {
+        didSet { UserDefaults.standard.set(showTagsOnTiles, forKey: "showTagsOnTiles") }
+    }
+    /// Show the "Tag New Sounds" sheet after adding sounds.
+    @Published var askToTag: Bool {
+        didSet { UserDefaults.standard.set(askToTag, forKey: "askToTag") }
+    }
 
     @Published var editingSound: Sound?
     @Published var editingBash: BashEditRequest?
@@ -53,6 +61,8 @@ final class AppUI: ObservableObject {
         sort = SoundSort(rawValue: defaults.string(forKey: "sort") ?? "") ?? .custom
         tagsOpen = defaults.bool(forKey: "tagsOpen")
         bashesCollapsed = defaults.bool(forKey: "bashesCollapsed")
+        showTagsOnTiles = defaults.object(forKey: "showTagsOnTiles") as? Bool ?? true
+        askToTag = defaults.object(forKey: "askToTag") as? Bool ?? true
     }
 
     var isFiltering: Bool {

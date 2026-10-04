@@ -5,6 +5,7 @@ struct SidebarView: View {
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var kits: KitStore
     @EnvironmentObject private var ui: AppUI
+    @EnvironmentObject private var themes: ThemeSettings
     @Binding var selection: Destination?
     @State private var newTag = ""
     @State private var deletingTag: String?
@@ -64,6 +65,12 @@ struct SidebarView: View {
             }
 
             Section {
+                NavigationLink(value: Destination.options) {
+                    Label("Options", systemImage: "gearshape")
+                }
+            }
+
+            Section {
                 if ui.tagsOpen {
                     tagFilters
                 }
@@ -93,6 +100,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .themedBackground(themes.theme)
         .navigationTitle("Soundboard")
         .alert("Delete the “\(deletingTag ?? "")” tag?", isPresented: Binding(get: { deletingTag != nil }, set: { if !$0 { deletingTag = nil } })) {
             Button("Delete", role: .destructive) {

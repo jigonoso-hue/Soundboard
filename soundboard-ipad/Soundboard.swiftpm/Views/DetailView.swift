@@ -34,6 +34,7 @@ struct DetailView: View {
     /// While a kit with its own ambience section is open, that section replaces
     /// the strip (unless the strip's own layers are playing).
     private var showStrip: Bool {
+        if destination == .options { return false }
         guard let kit, kit.hasAmbience else { return true }
         return ambience.stripPlaying
     }
@@ -42,6 +43,8 @@ struct DetailView: View {
         Group {
             if let kit {
                 KitView(kitId: kit.id)
+            } else if destination == .options {
+                OptionsView()
             } else {
                 LibraryView(destination: destination)
             }
@@ -49,7 +52,7 @@ struct DetailView: View {
         .navigationTitle(kit?.name ?? title)
         .navigationBarTitleDisplayMode(.inline)
         // Scene kits show everything in them, so there's nothing to search there.
-        .modifier(LibrarySearch(enabled: kit == nil, text: $ui.search))
+        .modifier(LibrarySearch(enabled: kit == nil && destination != .options, text: $ui.search))
         .toolbar { toolbar }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showStrip {
@@ -95,12 +98,23 @@ struct DetailView: View {
         case .full: return "Full Sounds"
         case .bashes: return "Bashes"
         case .kit: return "Scene Kit"
+        case .options: return "Options"
         }
     }
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if kit != nil {
+        if destination == .options {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    player.stopAll()
+                    bashPlayer.stop()
+                } label: {
+                    Label("Stop All", systemImage: "stop.fill")
+                }
+                .tint(.red)
+            }
+        } else if kit != nil {
             // In a scene kit: just the master volume and Stop All.
             ToolbarItemGroup(placement: .topBarTrailing) {
                 HStack(spacing: 6) {
