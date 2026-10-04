@@ -16,10 +16,11 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
   - While a kit is open, the toolbar only has the master volume and **Stop All**.
 - **Full sounds** show a volume slider while they play, like ambience layers. The level you set is kept for next time.
 - **Options** (in the sidebar):
-  - **Themes:** System, Light, Dark, plus three themed looks:
+  - **Themes:** System, Light, Dark, plus four themed looks:
     - **Tavern:** every page is a sheet of worn parchment (torn and nicked edges, creases, mug rings and stains) on a wooden table, with book-style lettering.
     - **Space Age:** a starship window onto deep space (nebulae, stars, a ringed planet and a flying saucer) framed by riveted hull plating, with dark 50s atomic panels: cream outlines, offset colour shadows, sparkles, boomerangs and atoms.
     - **Sci-Fi:** a glowing holographic starship HUD: a blue grid with radar rings, an edge ruler and corner brackets, and cyan panels with cut corners, header tabs, hatching and status dots, in monospaced lettering.
+    - **Dark Academia:** deep indigo pages in gilded frames (inward-curved corners, a double gold line, thorned corner stars and crest ornaments) on a starry night with blue glows and a faint arcane sigil, in book-style lettering.
   - **Highlight colour:** pick one of the presets or any colour.
   - **Settings:** volumes, sorting, tag options, whether to ask for tags after adding sounds, and signing out of YouTube.
   - **Storage:** shows how much space your sounds use.

@@ -80,7 +80,7 @@ struct OptionsView: View {
         } header: {
             Text("Appearance")
         } footer: {
-            Text("Tavern puts every page on worn parchment on a wooden table. Space Age looks out of a starship window onto deep space, with 50s atomic panels. Sci-Fi is a glowing holographic starship HUD.")
+            Text("Tavern puts every page on worn parchment on a wooden table. Space Age looks out of a starship window onto deep space, with 50s atomic panels. Sci-Fi is a glowing holographic starship HUD. Dark Academia puts deep indigo pages in gilded frames under a starry night.")
         }
     }
 
@@ -233,6 +233,7 @@ struct ThemePreview: View {
         case .light, .tavern: return Color(hex: 0x2B1D0E)
         case .spaceAge: return Color(hex: 0xF6EFDD)
         case .scifi: return Color(hex: 0xDDF6FF)
+        case .academia: return Color(hex: 0xF1E6C8)
         default: return .white
         }
     }
@@ -258,6 +259,11 @@ struct ThemePreview: View {
             ZStack {
                 HUDBackdrop().equatable()
                 HUDPanel(seed: "preview").equatable().padding(8)
+            }
+        case .academia:
+            ZStack {
+                ArcaneBackdrop().equatable()
+                GildedPanel(seed: "preview").equatable().padding(10)
             }
         }
     }

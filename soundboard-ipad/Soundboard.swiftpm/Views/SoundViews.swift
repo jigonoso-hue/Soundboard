@@ -34,16 +34,28 @@ struct SoundTile: View {
         let progress = player.progress[sound.id]
         let color = Palette.color(sound.colorIndex)
         let isPlaying = progress != nil
+        // Sci-Fi tiles are see-through glass with a glowing edge and a synth wave while playing.
+        let scifi = theme == .scifi
         Button {
             playSound(sound, store: store, player: player, ui: ui, gain: gain)
         } label: {
             ZStack(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(theme.tileBase)
+                    .fill(scifi ? Color(hex: 0x081E36).opacity(0.35) : theme.tileBase)
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(color.opacity(isPlaying ? 0.55 : 0.26))
+                    .fill(color.opacity(scifi ? (isPlaying ? 0.3 : 0.12) : (isPlaying ? 0.55 : 0.26)))
+                if scifi && isPlaying {
+                    SynthWave(color: color)
+                        .padding(.vertical, 6)
+                }
+                if scifi {
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(color, lineWidth: isPlaying ? 4 : 3)
+                        .blur(radius: isPlaying ? 6 : 4)
+                        .opacity(isPlaying ? 0.9 : 0.6)
+                }
                 RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(color.opacity(0.7), lineWidth: 1)
+                    .strokeBorder(color.opacity(scifi ? 0.95 : 0.7), lineWidth: scifi ? 1.5 : 1)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(sound.name)
                         .font(size == .s ? Font.caption.weight(.semibold) : (size == .l ? Font.headline : Font.subheadline.weight(.semibold)))
@@ -76,7 +88,8 @@ struct SoundTile: View {
             .frame(height: size == .s ? 54 : (size == .l ? 104 : 74))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .contentShape(RoundedRectangle(cornerRadius: 14))
-            .shadow(color: isPlaying ? color.opacity(0.6) : .clear, radius: 10)
+            .shadow(color: scifi ? color.opacity(isPlaying ? 0.8 : 0.35) : (isPlaying ? color.opacity(0.6) : .clear),
+                    radius: scifi ? (isPlaying ? 12 : 6) : 10)
             .scaleEffect(isPlaying ? 1.02 : 1)
             .animation(.easeOut(duration: 0.15), value: isPlaying)
         }
@@ -196,6 +209,11 @@ struct TrackRow: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(theme.cardFill(active: isPlaying))
         )
+        .background {
+            if theme == .scifi && isPlaying {
+                SynthWave(color: color).opacity(0.5).padding(.vertical, 4)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop ? 1 : 0)
@@ -271,6 +289,48 @@ struct SoundMenu: View {
             deleteSound(sound, store: store, player: player, bashes: bashes, kits: kits)
         } label: {
             Label("Delete", systemImage: "trash")
+        }
+    }
+}
+
+/// Glowing synth waves that ripple across a playing sound in the Sci-Fi theme.
+struct SynthWave: View {
+    let color: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            Canvas { context, size in
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                SynthWave.draw(&context, size: size, time: reduceMotion ? 0 : time, color: color)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, time: Double, color: Color) {
+        let w = size.width
+        let h = size.height
+        guard w > 4, h > 4 else { return }
+        // (height, waves across, speed, opacity)
+        let waves: [(CGFloat, CGFloat, Double, Double)] = [(0.3, 2.2, 3.2, 0.95), (0.2, 3.4, -2.3, 0.6), (0.13, 5.1, 4.1, 0.4)]
+        var glow = context
+        glow.addFilter(.blur(radius: 4))
+        for (index, wave) in waves.enumerated() {
+            var path = Path()
+            let steps = max(24, Int(w / 3))
+            for step in 0...steps {
+                let f = CGFloat(step) / CGFloat(steps)
+                // Taper the ends so the wave fades into the tile's edges.
+                let envelope = sin(f * .pi)
+                let phase = CGFloat(time * wave.2) + CGFloat(index) * 1.7
+                let y = h / 2 + sin(f * wave.1 * .pi * 2 + phase) * wave.0 * h * envelope
+                let point = CGPoint(x: f * w, y: y)
+                if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            glow.stroke(path, with: .color(color.opacity(wave.3 * 0.8)), lineWidth: 4)
+            context.stroke(path, with: .color(color.opacity(wave.3)), lineWidth: 1.5)
         }
     }
 }

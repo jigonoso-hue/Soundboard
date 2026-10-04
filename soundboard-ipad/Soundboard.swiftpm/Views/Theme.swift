@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The app's look: light/dark, background, accent colour and lettering.
 enum AppTheme: String, CaseIterable, Identifiable {
-    case system, dark, light, tavern, spaceAge, scifi
+    case system, dark, light, tavern, spaceAge, scifi, academia
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return "Tavern"
         case .spaceAge: return "Space Age"
         case .scifi: return "Sci-Fi"
+        case .academia: return "Dark Academia"
         }
     }
 
@@ -25,6 +26,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return "Old parchment on a tavern table"
         case .spaceAge: return "Deep space through a starship window"
         case .scifi: return "A glowing starship HUD"
+        case .academia: return "Gilded frames and arcane sigils"
         }
     }
 
@@ -32,7 +34,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var colorScheme: ColorScheme? {
         switch self {
         case .system: return nil
-        case .dark, .spaceAge, .scifi: return .dark
+        case .dark, .spaceAge, .scifi, .academia: return .dark
         case .light, .tavern: return .light
         }
     }
@@ -43,6 +45,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return "#9c3d12"
         case .spaceAge: return "#2ad4c0"
         case .scifi: return "#3fd2ff"
+        case .academia: return "#d4a94a"
         default: return "#b04cff"
         }
     }
@@ -50,7 +53,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     /// Tavern uses a book-like serif face, Space Age a rounded one.
     var fontDesign: Font.Design {
         switch self {
-        case .tavern: return .serif
+        case .tavern, .academia: return .serif
         case .spaceAge: return .rounded
         case .scifi: return .monospaced
         default: return .default
@@ -59,7 +62,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
     var isTavern: Bool { self == .tavern }
     /// Themes that paint their own backdrop and put pages on panels.
-    var hasBackdrop: Bool { self == .tavern || self == .spaceAge || self == .scifi }
+    var hasBackdrop: Bool { self != .system && self != .dark && self != .light }
 
     /// Colour of the navigation bar in themes that paint their own backdrop.
     var barColor: Color? {
@@ -67,6 +70,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return Color(hex: 0x3A2414)
         case .spaceAge: return Color(hex: 0x0B1226)
         case .scifi: return Color(hex: 0x041426)
+        case .academia: return Color(hex: 0x0A0B24)
         default: return nil
         }
     }
@@ -77,6 +81,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return Color(hex: 0x2B1A0C)
         case .spaceAge: return Color(hex: 0xF6EFDD)
         case .scifi: return Color(hex: 0xDDF6FF)
+        case .academia: return Color(hex: 0xF1E6C8)
         default: return nil
         }
     }
@@ -87,6 +92,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return Color(hex: 0x5B4127)
         case .spaceAge: return Color(hex: 0xA9B6D6)
         case .scifi: return Color(hex: 0x7FB6D4)
+        case .academia: return Color(hex: 0xA9A3C9)
         default: return .secondary
         }
     }
@@ -97,6 +103,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return Color(hex: 0x7A5228).opacity(active ? 0.28 : 0.16)
         case .spaceAge: return Color(hex: 0x0C142C).opacity(active ? 0.95 : 0.82)
         case .scifi: return Color(hex: 0x08203A).opacity(active ? 0.95 : 0.8)
+        case .academia: return Color(hex: 0x14164A).opacity(active ? 0.95 : 0.8)
         default: return Color.secondary.opacity(active ? 0.18 : 0.1)
         }
     }
@@ -107,6 +114,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return Color(hex: 0x5A3A18).opacity(0.55)
         case .spaceAge: return Color(hex: 0xF6EFDD).opacity(0.55)
         case .scifi: return Color(hex: 0x3FD2FF).opacity(0.55)
+        case .academia: return Color(hex: 0xD4A94A).opacity(0.6)
         default: return Color.secondary.opacity(0.25)
         }
     }
@@ -131,6 +139,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .spaceAge: return Color(hex: 0x0C142C).opacity(0.85)
         case .scifi: return Color(hex: 0x081E36).opacity(0.85)
+        case .academia: return Color(hex: 0x0E1035).opacity(0.85)
         case .tavern: return Color(hex: 0xF3E6C8).opacity(0.6)
         default: return .clear
         }
@@ -451,7 +460,7 @@ struct TavernBackdrop: View {
 }
 
 /// A themed "sheet" behind a card or strip: parchment in Tavern, an atomic panel
-/// in Space Age, a HUD panel in Sci-Fi, otherwise `fallback`.
+/// in Space Age, a HUD panel in Sci-Fi, a gilded frame in Dark Academia, otherwise `fallback`.
 struct ThemePanel<Fallback: View>: View {
     let theme: AppTheme
     let seed: String
@@ -462,6 +471,7 @@ struct ThemePanel<Fallback: View>: View {
         case .tavern: Parchment(seed: seed).equatable()
         case .spaceAge: AtomicPanel(seed: seed).equatable()
         case .scifi: HUDPanel(seed: seed).equatable()
+        case .academia: GildedPanel(seed: seed).equatable()
         default: fallback()
         }
     }
@@ -469,7 +479,7 @@ struct ThemePanel<Fallback: View>: View {
 
 extension View {
     /// In the Tavern theme: the table with this screen on its own parchment page, or the
-    /// bare table when `page` is nil. In Space Age: the window onto space. In Sci-Fi: the HUD.
+    /// bare table when `page` is nil. In Space Age: the window onto space. In Sci-Fi: the HUD. In Dark Academia: the starry night.
     @ViewBuilder
     func themedBackground(_ theme: AppTheme, page: String? = "page") -> some View {
         switch theme {
@@ -485,6 +495,10 @@ extension View {
             self
                 .scrollContentBackground(.hidden)
                 .background(HUDBackdrop().equatable().ignoresSafeArea())
+        case .academia:
+            self
+                .scrollContentBackground(.hidden)
+                .background(ArcaneBackdrop().equatable().ignoresSafeArea())
         default:
             self
         }
