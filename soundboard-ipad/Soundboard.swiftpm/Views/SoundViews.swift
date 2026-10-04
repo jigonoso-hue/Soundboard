@@ -44,7 +44,7 @@ struct SoundTile: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(sound.name)
                         .font(size == .s ? Font.caption.weight(.semibold) : (size == .l ? Font.headline : Font.subheadline.weight(.semibold)))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.primary)
                         .lineLimit(size == .l ? 3 : 2)
                         .multilineTextAlignment(.leading)
                     if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
@@ -58,7 +58,7 @@ struct SoundTile: View {
                             if gap > 0 { Text("\(gap.formatted())s") }
                         }
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.75))
+                        .foregroundStyle(.secondary)
                     }
                 }
                 .padding(size == .s ? 8 : 10)

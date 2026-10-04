@@ -11,6 +11,7 @@ struct DetailView: View {
     @EnvironmentObject private var ambience: AmbienceMixer
     @EnvironmentObject private var kits: KitStore
     @EnvironmentObject private var ui: AppUI
+    @EnvironmentObject private var themes: ThemeSettings
     let destination: Destination
     @Binding var showBrowser: Bool
 
@@ -54,13 +55,22 @@ struct DetailView: View {
         // Scene kits show everything in them, so there's nothing to search there.
         .modifier(LibrarySearch(enabled: kit == nil && destination != .options, text: $ui.search))
         .toolbar { toolbar }
+        .themedNavigationBar(themes.theme)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showStrip {
-                VStack(spacing: 0) {
-                    Divider()
+                if themes.theme.hasBackdrop {
                     AmbienceStrip()
+                        .padding(.vertical, 4)
+                        .background(ThemePanel(theme: themes.theme, seed: "ambience") { EmptyView() })
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                } else {
+                    VStack(spacing: 0) {
+                        Divider()
+                        AmbienceStrip()
+                    }
+                    .background(.bar)
                 }
-                .background(.bar)
             }
         }
         .fileImporter(

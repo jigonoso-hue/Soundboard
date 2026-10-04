@@ -25,7 +25,7 @@ struct OptionsView: View {
             storage
             about
         }
-        .themedBackground(themes.theme)
+        .themedBackground(themes.theme, page: "options")
         .task { storageText = await Self.measureStorage(SoundStore.folder) }
     }
 
@@ -80,7 +80,7 @@ struct OptionsView: View {
         } header: {
             Text("Appearance")
         } footer: {
-            Text("Parchment and Tavern give the app a bardcore look, with book-style lettering.")
+            Text("Tavern puts every page on worn parchment on a wooden table. Space Age is 50s atomic: mid-century panels on a starship's riveted hull.")
         }
     }
 
@@ -230,7 +230,7 @@ struct ThemePreview: View {
 
     private var textColor: Color {
         switch theme {
-        case .light, .parchment: return Color(hex: 0x2B1D0E)
+        case .light, .tavern, .spaceAge: return Color(hex: 0x2B1D0E)
         default: return .white
         }
     }
@@ -245,7 +245,16 @@ struct ThemePreview: View {
             }
         case .dark: Color(hex: 0x111114)
         case .light: Color(hex: 0xF5F5F7)
-        case .parchment, .tavern: ThemeBackground(theme: theme)
+        case .tavern:
+            ZStack {
+                WoodTable().equatable()
+                Parchment(seed: "preview").equatable().padding(6)
+            }
+        case .spaceAge:
+            ZStack {
+                HullPlating().equatable()
+                AtomicPanel(seed: "preview").equatable().padding(.leading, 6).padding(.top, 6).padding(.trailing, 12).padding(.bottom, 12)
+            }
         }
     }
 }

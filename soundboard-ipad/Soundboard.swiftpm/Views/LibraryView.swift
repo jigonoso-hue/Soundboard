@@ -40,7 +40,7 @@ struct LibraryView: View {
             }
             .padding()
         }
-        .themedBackground(themes.theme)
+        .themedBackground(themes.theme, page: "library")
     }
 
     private var activeFilters: some View {

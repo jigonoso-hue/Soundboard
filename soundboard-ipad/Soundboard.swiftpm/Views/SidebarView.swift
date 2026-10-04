@@ -100,7 +100,8 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .themedBackground(themes.theme)
+        .themedBackground(themes.theme, page: "sidebar")
+        .themedNavigationBar(themes.theme)
         .navigationTitle("Soundboard")
         .alert("Delete the “\(deletingTag ?? "")” tag?", isPresented: Binding(get: { deletingTag != nil }, set: { if !$0 { deletingTag = nil } })) {
             Button("Delete", role: .destructive) {

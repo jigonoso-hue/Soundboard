@@ -47,11 +47,14 @@ struct KitView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         header(kit)
+                            .padding(themes.theme.hasBackdrop ? 14 : 0)
+                            .background(ThemePanel(theme: themes.theme, seed: "kit-header-\(kit.id)") { EmptyView() })
                         board(kit, width: geo.size.width - 24)
                     }
                     .padding(12)
                 }
-                .themedBackground(themes.theme)
+                // The board is the bare backdrop; the header and each section get their own sheet.
+                .themedBackground(themes.theme, page: nil)
             }
             .onDisappear { ui.kitDrawerOpen = false }
             .sheet(isPresented: $creatingSection) {
@@ -398,6 +401,7 @@ enum KitDrag {
 
 /// One section of a kit's board.
 struct KitSectionView: View {
+    @EnvironmentObject private var themes: ThemeSettings
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var ambience: AmbienceMixer
@@ -434,15 +438,19 @@ struct KitSectionView: View {
             .disabled(editing)
             .opacity(editing ? 0.6 : 1)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.secondary.opacity(section.isAmbience ? 0.1 : 0.08))
+            ThemePanel(theme: themes.theme, seed: section.id.uuidString) {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.secondary.opacity(section.isAmbience ? 0.1 : 0.08))
+            }
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(borderColor, style: StrokeStyle(lineWidth: targeted || dropHover ? 2 : 1, dash: editing ? [6, 4] : []))
+                // Themed sheets have their own edges; only show a border to highlight.
+                .opacity(themes.theme.hasBackdrop && !(targeted || dropHover || editing) ? 0 : 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
         .dropDestination(for: String.self) { items, _ in
             guard let first = items.first else { return false }
             // A built-in loop from the library panel.
