@@ -62,6 +62,8 @@ final class YouTubeController: ObservableObject {
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
+        // Lets Safari on a Mac inspect the YouTube page (Develop menu) for troubleshooting.
+        if #available(iOS 16.4, *) { webView.isInspectable = true }
         content.add(MessageBridge(self), name: "soundboard")
     }
 
