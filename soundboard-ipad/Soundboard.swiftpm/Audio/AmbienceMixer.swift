@@ -192,6 +192,14 @@ final class AmbienceMixer: ObservableObject {
         players[id]?.volume = Float(volume * masterVolume)
     }
 
+    /// Every layer playing right now, with the ambience volume applied, for Live Session listeners.
+    func liveSnapshot() -> [AmbienceLayer] {
+        (layers + Array(external.values))
+            .filter { playing.contains($0.id) }
+            .map { AmbienceLayer(id: $0.id, kind: $0.kind, ref: $0.ref, volume: $0.volume * masterVolume) }
+            .sorted { $0.id < $1.id }
+    }
+
     func name(kind: AmbienceLayer.Kind, ref: String) -> String {
         name(of: AmbienceLayer(id: "", kind: kind, ref: ref, volume: 0))
     }

@@ -10,6 +10,7 @@ struct ContentView: View {
     @StateObject private var kits = KitStore()
     @StateObject private var ui = AppUI()
     @StateObject private var themes = ThemeSettings()
+    @StateObject private var live = LiveSession()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showBrowser = false
     @State private var selection: Destination? = .all
@@ -106,6 +107,24 @@ struct ContentView: View {
         .environmentObject(ui)
         .environmentObject(youtube)
         .environmentObject(themes)
+        .environmentObject(live)
+        .overlay(alignment: .top) {
+            if let notice = live.notice {
+                Text(notice)
+                    .font(.callout.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(radius: 8)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: notice) {
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        withAnimation { live.notice = nil }
+                    }
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: live.notice)
         .tint(themes.accent)
         .preferredColorScheme(themes.theme.colorScheme)
         .fontDesign(themes.theme.fontDesign)
@@ -113,11 +132,17 @@ struct ContentView: View {
         .environment(\.appTheme, themes.theme)
         .onAppear {
             ambience.attach(to: store)
+            live.attach(store: store, ambience: ambience, kits: kits, bashes: bashes)
+            player.live = live
+            bashPlayer.live = live
             youtube.onCaptured = { file, name, source in
                 _ = try store.addFile(at: file, name: name, source: source)
             }
         }
         .onChange(of: store.sounds) { _, _ in ambience.syncWithLibrary() }
+        .onChange(of: selection) { _, destination in
+            if case .kit(let id)? = destination { live.currentKitId = id } else { live.currentKitId = nil }
+        }
         .onChange(of: store.recentlyAdded) { _, _ in showTaggingIfNeeded() }
         .onChange(of: showBrowser) { _, open in
             if !open { showTaggingIfNeeded() }

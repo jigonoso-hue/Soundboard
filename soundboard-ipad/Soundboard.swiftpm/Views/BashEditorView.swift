@@ -300,7 +300,7 @@ struct BashEditorView: View {
         .contentShape(Rectangle())
         .onTapGesture { location in
             playhead = max(0, Double(location.x) / zoom)
-            if isPlaying { bashPlayer.play(draft, store: store, masterVolume: player.masterVolume, from: playhead) }
+            if isPlaying { bashPlayer.play(draft, store: store, masterVolume: player.masterVolume, from: playhead, broadcast: false) }
         }
     }
 
@@ -503,7 +503,7 @@ struct BashEditorView: View {
             playhead = 0
             bashPlayer.stop()
         } else {
-            bashPlayer.play(draft, store: store, masterVolume: player.masterVolume, from: playhead)
+            bashPlayer.play(draft, store: store, masterVolume: player.masterVolume, from: playhead, broadcast: false)
         }
     }
 

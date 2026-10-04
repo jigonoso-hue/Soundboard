@@ -25,6 +25,10 @@ struct Sound: Identifiable, Codable, Equatable {
     var kind: SoundKind? = nil
     /// Length in seconds, measured when the sound is added.
     var duration: Double? = nil
+    /// Live Session: never sent to listeners (nil in libraries made before Live Sessions).
+    var gmOnly: Bool? = nil
+    /// Live Session: listeners' phones vibrate when it starts.
+    var buzz: Bool? = nil
 
     var tagList: [String] { tags ?? [] }
 

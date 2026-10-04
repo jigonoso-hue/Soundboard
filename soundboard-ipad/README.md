@@ -83,6 +83,22 @@ The online (YouTube) browser always blocks ads, using the same blocker as the Ma
 
 The **Ambience** strip at the top of the board lists the built-in loops. Tap a layer to fade it in or out, and use its slider to set its volume. The slider next to the title sets all layers at once. **Stop All** stops only soundboard effects, while **Stop Ambience** fades out the background. To add a layer, tap **Add Layer**, or long-press any sound and choose **Add to Ambience**. Long-press a layer to remove it.
 
+## Live Session
+
+Play to your players' own devices, or tune in to your GM's. Tap the **Live** button (the radio waves) in the toolbar.
+
+**Broadcast (the GM).** Name the session and choose **At the table** (players on the same Wi-Fi find it) or **Online** (players join with a 5-character code through a relay server; see [`live-relay/`](../live-relay/README.md)). Everything you play goes to listeners: sounds, bashes, ambience and the open scene kit's name.
+
+- **Whisper:** in the Live sheet, tap **Whisper** next to a player. The next sound you play goes only to them; a banner shows while it's armed.
+- **GM only:** turn it on in a sound's Edit screen and it plays only on your device. Tiles show a **GM** badge.
+- **Buzz:** turn it on in a sound's Edit screen for big hits. Listeners' iPhones vibrate when it plays.
+
+**Tune In (a player).** Enter your name, then pick a nearby session or enter the GM's code. You get your own sliders for overall volume, music, effects and ambience. Keep the app open while tuned in; the screen stays on.
+
+The first time you broadcast or look for sessions, iOS asks to use the local network: tap **Allow**. Online sessions need the relay at a secure (`wss://` or `https://`) address.
+
+The GM's app sends commands, not audio: each listener fetches every sound file once, caches it, syncs its clock with the GM's and plays each sound itself, in time. A Mac and an iPhone or iPad can share a session.
+
 ## Saving a whole video's audio
 
 Open a video and tap **Save Full Audio**. The app saves the audio YouTube's player downloads: the video plays muted at double speed until all of it has downloaded, so a 4-minute song takes about 2 minutes.
@@ -111,6 +127,10 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Audio/AudioFiles.swift` | Streaming .m4a encoding of captures and trimming audio out of videos |
 | `Audio/AmbienceMixer.swift` | Ambience layers |
 | `Resources/Ambience/` | Built-in loops (made by `tools/generate-ambience.py`) |
+| `Live/LiveNet.swift` | Live Session networking: WebSockets, the local server and Bonjour browser, the relay connection |
+| `Live/LiveEngines.swift` | Live Session host and listener logic (files, clock sync, commands) |
+| `Live/MirrorPlayer.swift` | Plays what a Live Session host sends, with the listener's volumes and haptics |
+| `Live/LiveSession.swift` | Live Session state, forwarding what the board plays while hosting |
 | `YouTube/YouTubeController.swift` | The embedded YouTube view and capture bridge |
 | `YouTube/SegmentScript.swift` | Saves the audio YouTube's player downloads |
 | `YouTube/AdBlockScript.swift` | YouTube ad blocker (generated from the Mac app by `tools/sync-adblock.py`) |

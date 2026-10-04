@@ -80,6 +80,20 @@ struct EditSoundView: View {
                 } footer: {
                     Text("0 seconds replays immediately. Tap the sound again, or Stop All, to stop it.")
                 }
+                Section {
+                    Toggle("GM only", isOn: Binding(
+                        get: { sound.gmOnly == true },
+                        set: { sound.gmOnly = $0 }
+                    ))
+                    Toggle("Buzz phones", isOn: Binding(
+                        get: { sound.buzz == true },
+                        set: { sound.buzz = $0 }
+                    ))
+                } header: {
+                    Text("Live Session")
+                } footer: {
+                    Text("GM-only sounds play only on your device, never for listeners. Buzz makes listeners' phones vibrate when it plays, for big hits.")
+                }
                 if let source = sound.source {
                     Section("From YouTube") {
                         Text(source.title.isEmpty ? "YouTube video" : source.title)

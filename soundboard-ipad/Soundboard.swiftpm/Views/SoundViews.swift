@@ -74,6 +74,7 @@ struct SoundTile: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     }
+                    if sound.gmOnly == true && size != .s { GMBadge() }
                 }
                 .padding(size == .s ? 8 : 10)
                 .padding(.leading, book ? 12 : 0)
@@ -181,6 +182,7 @@ struct TrackRow: View {
                         }
                     }
                     Spacer(minLength: 8)
+                    if sound.gmOnly == true { GMBadge() }
                     if let gap = sound.repeatGap {
                         HStack(spacing: 3) {
                             AppIcon(id: "repeat", size: 11)
@@ -356,5 +358,17 @@ struct SynthWave: View {
             glow.stroke(path, with: .color(color.opacity(wave.3 * 0.8)), lineWidth: 4)
             context.stroke(path, with: .color(color.opacity(wave.3)), lineWidth: 1.5)
         }
+    }
+}
+
+/// Marks sounds that never play for Live Session listeners.
+struct GMBadge: View {
+    var body: some View {
+        Text("GM")
+            .font(.caption2.weight(.heavy))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Color(hex: 0xFF6A3D).opacity(0.3), in: Capsule())
+            .accessibilityLabel("GM only")
     }
 }

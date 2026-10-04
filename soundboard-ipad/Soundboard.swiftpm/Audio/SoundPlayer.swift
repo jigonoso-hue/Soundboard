@@ -38,6 +38,8 @@ final class SoundPlayer: ObservableObject {
 
     private var players: [UUID: [Voice]] = [:]
     private var ticker: Task<Void, Never>?
+    /// Forwards what plays to Live Session listeners while hosting.
+    weak var live: LiveSession?
 
     init() {
         let defaults = UserDefaults.standard
@@ -67,22 +69,27 @@ final class SoundPlayer: ObservableObject {
         progress[sound.id] = 0
         volumes[sound.id] = volume
         startTicker()
+        live?.soundPlayed(sound, volume: min(1, volume * gain * masterVolume))
     }
 
     func stop(_ id: UUID) {
+        let wasPlaying = players[id] != nil
         players[id]?.forEach { $0.player.stop() }
         players[id] = nil
         progress[id] = nil
         volumes[id] = nil
+        if wasPlaying { live?.soundStopped(id) }
     }
 
     func stopAll() {
         for id in Array(players.keys) { stop(id) }
+        live?.stoppedAll()
     }
 
     private func applyVolumes() {
-        for list in players.values {
+        for (id, list) in players {
             for entry in list { entry.player.volume = Float(min(1, entry.volume * entry.gain * masterVolume)) }
+            if let entry = list.last { live?.soundVolume(id, volume: min(1, entry.volume * entry.gain * masterVolume)) }
         }
     }
 
@@ -95,6 +102,7 @@ final class SoundPlayer: ObservableObject {
             voice.volume = value
             voice.player.volume = Float(min(1, value * voice.gain * masterVolume))
         }
+        if let voice = list.last { live?.soundVolume(id, volume: min(1, value * voice.gain * masterVolume)) }
     }
 
     /// Changes the extra level of playing sounds (a scene kit section's volume slider).
@@ -104,6 +112,7 @@ final class SoundPlayer: ObservableObject {
                 voice.gain = gain
                 voice.player.volume = Float(min(1, voice.volume * gain * masterVolume))
             }
+            if let voice = players[id]?.last { live?.soundVolume(id, volume: min(1, voice.volume * gain * masterVolume)) }
         }
     }
 

@@ -31,6 +31,12 @@ let package = Package(
                 .landscapeRight,
                 .landscapeLeft,
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
+            ],
+            capabilities: [
+                .localNetwork(
+                    purposeString: "Dungeon Radio uses your local network to find and host Live Sessions with other players at the table.",
+                    bonjourServiceTypes: ["_dungeonradio._tcp"]
+                )
             ]
         )
     ],

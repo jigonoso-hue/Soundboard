@@ -241,10 +241,17 @@ class LiveHost extends EventEmitter {
     this.ambience = { t: 'ambience', layers: [] };
     this.scene = { t: 'scene', name: null };
     this.prefetchIds = [];
+    // Keeps operations in order (a play waiting on its file hash, then a stop).
+    this.tail = Promise.resolve();
 
     transport.on('join', (peer) => this.peers.set(peer, { name: 'Listener', device: '', allowed: new Set(), ready: false }));
     transport.on('leave', (peer) => { this.peers.delete(peer); this.emitPeers(); });
-    transport.on('message', (peer, message) => this.handle(peer, message).catch(() => {}));
+    transport.on('message', (peer, message) => this.enqueue(() => this.handle(peer, message)));
+  }
+
+  enqueue(operation) {
+    this.tail = this.tail.then(operation).catch(() => {});
+    return this.tail;
   }
 
   peerList() {
@@ -332,7 +339,9 @@ class LiveHost extends EventEmitter {
   // ---- Called by the board ----
 
   // play: { pid, group, soundId, name, at, volume, cat, loop, gap, buzz, dur, to }
-  async play(event) {
+  play(event) { return this.enqueue(() => this.doPlay(event)); }
+
+  async doPlay(event) {
     let file;
     try { file = await this.fileFor(event.soundId); } catch { return; }
     if (!file) return;
@@ -365,23 +374,31 @@ class LiveHost extends EventEmitter {
     this.broadcast(message);
   }
 
-  stop(group) {
+  stop(group) { return this.enqueue(() => this.doStop(group)); }
+
+  doStop(group) {
     for (const [pid, entry] of this.active) if (entry.group === group) this.active.delete(pid);
     this.broadcast({ t: 'stop', group: String(group) });
   }
 
-  volume(group, volume) {
+  volume(group, volume) { return this.enqueue(() => this.doVolume(group, volume)); }
+
+  doVolume(group, volume) {
     for (const entry of this.active.values()) if (entry.group === group) entry.message.volume = clamp01(volume);
     this.broadcast({ t: 'volume', group: String(group), volume: clamp01(volume) });
   }
 
   stopAll() {
-    this.active.clear();
-    this.broadcast({ t: 'stopAll' });
+    return this.enqueue(() => {
+      this.active.clear();
+      this.broadcast({ t: 'stopAll' });
+    });
   }
 
   // layers: [{ key, kind: 'builtin'|'sound', ref, name, volume }]
-  async setAmbience(layers) {
+  setAmbience(layers) { return this.enqueue(() => this.doSetAmbience(layers)); }
+
+  async doSetAmbience(layers) {
     const out = [];
     for (const layer of layers || []) {
       const base = { key: String(layer.key), name: String(layer.name || ''), volume: clamp01(layer.volume) };
@@ -394,12 +411,16 @@ class LiveHost extends EventEmitter {
     this.broadcast(this.ambience);
   }
 
-  setScene(name) {
+  setScene(name) { return this.enqueue(() => this.doSetScene(name)); }
+
+  doSetScene(name) {
     this.scene = { t: 'scene', name: name || null };
     this.broadcast(this.scene);
   }
 
-  async setPrefetch(soundIds) {
+  setPrefetch(soundIds) { return this.enqueue(() => this.doSetPrefetch(soundIds)); }
+
+  async doSetPrefetch(soundIds) {
     this.prefetchIds = [...new Set(soundIds || [])];
     this.broadcast(await this.prefetchMessage());
   }

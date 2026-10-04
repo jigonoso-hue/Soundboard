@@ -33,6 +33,10 @@ final class BashPlayer: ObservableObject {
     private var clock: AVAudioPlayer?
     private var volume: Double = 1
     private var ticker: Task<Void, Never>?
+    /// Forwards clips to Live Session listeners while hosting (not for editor previews).
+    weak var live: LiveSession?
+    private var runId = ""
+    private var broadcasting = false
 
     var progress: Double? {
         guard playingId != nil else { return nil }
@@ -41,8 +45,10 @@ final class BashPlayer: ObservableObject {
     }
 
     /// Starts `bash` from `start` seconds. Sounds missing from the library are skipped.
-    func play(_ bash: Bash, store: SoundStore, masterVolume: Double, from start: Double = 0) {
+    func play(_ bash: Bash, store: SoundStore, masterVolume: Double, from start: Double = 0, broadcast: Bool = true) {
         stop()
+        runId = String(UUID().uuidString.prefix(8))
+        broadcasting = broadcast
         var built: [Track] = []
         for clip in bash.clips {
             guard let sound = store.sound(clip.soundId) else { continue }
@@ -68,6 +74,8 @@ final class BashPlayer: ObservableObject {
     }
 
     func stop() {
+        if broadcasting && playingId != nil { live?.bashStopped(runId: runId) }
+        broadcasting = false
         ticker?.cancel()
         ticker = nil
         for instance in instances { instance.player.stop() }
@@ -118,6 +126,12 @@ final class BashPlayer: ObservableObject {
                     player.play()
                 }
                 instances.append(Instance(player: player, end: endAt, clipVolume: clip.volume))
+                if broadcasting {
+                    // Wall-clock time of this play's start, in ms.
+                    let at = LiveNet.now + (startAt - elapsed) * 1000
+                    live?.bashClip(runId: runId, soundId: clip.soundId, at: at,
+                                   volume: min(1, clip.volume * volume), duration: track.length)
+                }
             }
         }
     }
