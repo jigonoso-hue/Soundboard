@@ -1,4 +1,4 @@
-# TTRPG Soundboard
+# Dungeon Radio
 
 A soundboard for running tabletop RPG sessions.
 

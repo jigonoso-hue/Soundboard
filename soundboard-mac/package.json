@@ -1,6 +1,6 @@
 {
   "name": "clipboard-soundboard",
-  "productName": "Soundboard",
+  "productName": "Dungeon Radio",
   "version": "1.0.0",
   "description": "A Mac soundboard with your own sounds and a built-in YouTube browser for clipping new ones.",
   "main": "src/main.js",
@@ -11,14 +11,14 @@
     "test": "node --test"
   },
   "build": {
-    "appId": "com.local.soundboard",
-    "productName": "Soundboard",
+    "appId": "com.local.dungeonradio",
+    "productName": "Dungeon Radio",
     "files": ["src/**/*", "package.json"],
     "mac": {
       "category": "public.app-category.music",
       "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Soundboard does not record your microphone; this is only required by macOS for audio output device selection."
+        "NSMicrophoneUsageDescription": "Dungeon Radio does not record your microphone; this is only required by macOS for audio output device selection."
       }
     }
   },

@@ -1,4 +1,4 @@
-# Soundboard for iPad
+# Dungeon Radio for iPad and iPhone
 
 The iPad version of the soundboard: a native SwiftUI app with the same features as the Mac app.
 

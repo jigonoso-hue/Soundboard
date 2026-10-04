@@ -13,12 +13,15 @@ let package = Package(
     ],
     products: [
         .iOSApplication(
-            name: "Soundboard",
+            name: "Dungeon Radio",
             targets: ["AppModule"],
+            // Kept from when the app was called Soundboard, so installed copies
+            // update in place and keep their sounds.
             bundleIdentifier: "com.local.soundboard",
             teamIdentifier: "",
             displayVersion: "1.0",
             bundleVersion: "1",
+            appIcon: .asset("AppIcon"),
             supportedDeviceFamilies: [
                 .pad,
                 .phone

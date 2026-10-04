@@ -166,7 +166,7 @@ struct OptionsView: View {
 
     private var about: some View {
         Section("About") {
-            row("Soundboard", "Made for tabletop games")
+            row("Dungeon Radio", "Made for tabletop games")
             Text("The icon set, bashes, scene kits and ambience work the same way as in the Mac app.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)

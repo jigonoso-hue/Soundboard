@@ -27,7 +27,7 @@ final class AppAudioRecorder {
             case .unavailable:
                 return "Recording isn't available on this device right now."
             case .denied(let detail):
-                return "Soundboard needs permission to record its own audio (\(detail)). Tap Create Sound again and choose Allow."
+                return "Dungeon Radio needs permission to record its own audio (\(detail)). Tap Create Sound again and choose Allow."
             }
         }
     }

@@ -1,4 +1,4 @@
-# Soundboard (macOS)
+# Dungeon Radio (macOS)
 
 A desktop soundboard for your Mac. You can:
 
@@ -30,7 +30,9 @@ npm start
 npm run dist
 ```
 
-The DMG is written to `dist/`. Open it and drag **Soundboard** into Applications. The build isn't code-signed, so the first time you open the app, right-click it and choose **Open**.
+The DMG is written to `dist/`. Open it and drag **Dungeon Radio** into Applications. The build isn't code-signed, so the first time you open the app, right-click it and choose **Open**.
+
+The app icon comes from `build/icon.png` (1024×1024).
 
 ## Making a sound from YouTube
 
@@ -175,7 +177,7 @@ The download runs in the background at full speed, not in real time, and the aud
 
 ## Where sounds are stored
 
-`~/Library/Application Support/Soundboard/sounds/`. This folder holds the audio files and a `library.json` index. You can open it from any sound's **⋯ → Show in Finder**.
+`~/Library/Application Support/Soundboard/sounds/`. The folder keeps the app's original name, so libraries from before the rename carry over. This folder holds the audio files and a `library.json` index. You can open it from any sound's **⋯ → Show in Finder**.
 
 ## Notes
 

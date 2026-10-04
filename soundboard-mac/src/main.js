@@ -15,8 +15,12 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'sound', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 
+// The app was first called Soundboard. Keep its data folder so existing
+// libraries carry over (~/Library/Application Support/Soundboard).
+app.setPath('userData', path.join(app.getPath('appData'), 'Soundboard'));
+
 // YouTube shows "browser not supported" banners to Electron's default UA.
-app.userAgentFallback = app.userAgentFallback.replace(/\s(Electron|clipboard-soundboard|Soundboard)\/\S+/gi, '');
+app.userAgentFallback = app.userAgentFallback.replace(/\s(Electron|clipboard-soundboard|Soundboard|Dungeon Radio)\/\S+/gi, '');
 
 let library;
 let bashes;
@@ -31,7 +35,7 @@ function createWindow() {
     height: 860,
     minWidth: 900,
     minHeight: 560,
-    title: 'Soundboard',
+    title: 'Dungeon Radio',
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#14141c',
     webPreferences: {
