@@ -20,7 +20,7 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
     - **Tavern:** every page is a sheet of worn parchment (torn and nicked edges, creases, mug rings and stains) on a wooden table, with book-style lettering.
     - **Space Age:** a starship window onto deep space (nebulae, stars, a ringed planet and a flying saucer) framed by riveted hull plating, with dark 50s atomic panels: cream outlines, offset colour shadows, sparkles, boomerangs and atoms.
     - **Sci-Fi:** a glowing holographic starship HUD: a blue grid with radar rings, an edge ruler and corner brackets, and cyan panels with cut corners, header tabs, hatching and status dots, in monospaced lettering.
-    - **Dark Academia:** deep indigo pages in gilded frames (inward-curved corners, a double gold line, thorned corner stars and crest ornaments) on a starry night with blue glows and a faint arcane sigil, in book-style lettering.
+    - **Dark Academia:** deep indigo pages in gilded frames (inward-curved corners, a double gold line, thorned corner stars, filigree curls, crest ornaments and moon phases) on a starry night with blue glows, an arcane sigil in an astrolabe ring, a crescent moon, constellations, an hourglass and a key. Sounds are leather-bound book covers that glow with magic while they play. Book-style lettering.
   - **Highlight colour:** pick one of the presets or any colour.
   - **Settings:** volumes, sorting, tag options, whether to ask for tags after adding sounds, and signing out of YouTube.
   - **Storage:** shows how much space your sounds use.

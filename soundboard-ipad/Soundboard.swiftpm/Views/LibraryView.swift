@@ -26,7 +26,7 @@ struct LibraryView: View {
                 if !ui.tagFilter.isEmpty {
                     activeFilters
                 }
-                if store.sounds.isEmpty && bashes.bashes.isEmpty {
+                if store.sounds.isEmpty && (bashes.bashes.isEmpty || !showBashes) {
                     ContentUnavailableView(
                         "No sounds yet",
                         systemImage: "speaker.wave.3",
@@ -39,6 +39,7 @@ struct LibraryView: View {
                 if showFull && !store.sounds.isEmpty { fullBlock }
             }
             .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .themedBackground(themes.theme, page: "library")
     }

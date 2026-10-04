@@ -482,21 +482,23 @@ extension View {
     /// bare table when `page` is nil. In Space Age: the window onto space. In Sci-Fi: the HUD. In Dark Academia: the starry night.
     @ViewBuilder
     func themedBackground(_ theme: AppTheme, page: String? = "page") -> some View {
+        // Fill the screen even when the content is empty, or the backdrop shrinks with it.
+        let filled = frame(maxWidth: .infinity, maxHeight: .infinity)
         switch theme {
         case .tavern:
-            self
+            filled
                 .scrollContentBackground(.hidden)
                 .background(TavernBackdrop(page: page).ignoresSafeArea())
         case .spaceAge:
-            self
+            filled
                 .scrollContentBackground(.hidden)
                 .background(SpaceScene(seed: page ?? "board").equatable().ignoresSafeArea())
         case .scifi:
-            self
+            filled
                 .scrollContentBackground(.hidden)
                 .background(HUDBackdrop().equatable().ignoresSafeArea())
         case .academia:
-            self
+            filled
                 .scrollContentBackground(.hidden)
                 .background(ArcaneBackdrop().equatable().ignoresSafeArea())
         default:

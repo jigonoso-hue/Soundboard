@@ -36,32 +36,31 @@ struct SoundTile: View {
         let isPlaying = progress != nil
         // Sci-Fi tiles are see-through glass with a glowing edge and a synth wave while playing.
         let scifi = theme == .scifi
+        // Dark Academia tiles are leather book covers that glow with magic while playing.
+        let book = theme == .academia
+        let shape = book
+            ? AnyShape(UnevenRoundedRectangle(topLeadingRadius: 3, bottomLeadingRadius: 3, bottomTrailingRadius: 8, topTrailingRadius: 8))
+            : AnyShape(RoundedRectangle(cornerRadius: 14))
         Button {
             playSound(sound, store: store, player: player, ui: ui, gain: gain)
         } label: {
             ZStack(alignment: .bottomLeading) {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(scifi ? Color(hex: 0x081E36).opacity(0.35) : theme.tileBase)
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(color.opacity(scifi ? (isPlaying ? 0.3 : 0.12) : (isPlaying ? 0.55 : 0.26)))
-                if scifi && isPlaying {
-                    SynthWave(color: color)
-                        .padding(.vertical, 6)
+                if book {
+                    BookCover(seed: sound.id.uuidString, color: color, emblem: size == .l).equatable()
+                    if isPlaying {
+                        MagicGlow(color: color)
+                    }
+                } else {
+                    plainTile(color: color, isPlaying: isPlaying, scifi: scifi)
                 }
-                if scifi {
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(color, lineWidth: isPlaying ? 4 : 3)
-                        .blur(radius: isPlaying ? 6 : 4)
-                        .opacity(isPlaying ? 0.9 : 0.6)
-                }
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(color.opacity(scifi ? 0.95 : 0.7), lineWidth: scifi ? 1.5 : 1)
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: book ? .center : .leading, spacing: 4) {
                     Text(sound.name)
                         .font(size == .s ? Font.caption.weight(.semibold) : (size == .l ? Font.headline : Font.subheadline.weight(.semibold)))
+                        .italic(book)
                         .foregroundStyle(.primary)
                         .lineLimit(size == .l ? 3 : 2)
-                        .multilineTextAlignment(.leading)
+                        .multilineTextAlignment(book ? .center : .leading)
+                        .shadow(color: book ? .black.opacity(0.6) : .clear, radius: 2, y: 1)
                     if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
                         HStack(spacing: 4) {
                             ForEach(sound.tagList.prefix(2), id: \.self) { TagChip(tag: $0, small: true) }
@@ -77,7 +76,9 @@ struct SoundTile: View {
                     }
                 }
                 .padding(size == .s ? 8 : 10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.leading, book ? 12 : 0)
+                .padding(.top, book ? 2 : 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: book ? .top : .topLeading)
                 GeometryReader { geo in
                     Rectangle()
                         .fill(color)
@@ -86,9 +87,11 @@ struct SoundTile: View {
                 }
             }
             .frame(height: size == .s ? 54 : (size == .l ? 104 : 74))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .contentShape(RoundedRectangle(cornerRadius: 14))
-            .shadow(color: scifi ? color.opacity(isPlaying ? 0.8 : 0.35) : (isPlaying ? color.opacity(0.6) : .clear),
+            .clipShape(shape)
+            .contentShape(shape)
+            .shadow(color: book && isPlaying ? Color(hex: 0xFFD27A).opacity(0.85) : .clear, radius: 12)
+            .shadow(color: book ? (isPlaying ? color.opacity(0.9) : .black.opacity(0.5)) : .clear, radius: book && isPlaying ? 22 : 3, y: book && isPlaying ? 0 : 2)
+            .shadow(color: book ? .clear : (scifi ? color.opacity(isPlaying ? 0.8 : 0.35) : (isPlaying ? color.opacity(0.6) : .clear)),
                     radius: scifi ? (isPlaying ? 12 : 6) : 10)
             .scaleEffect(isPlaying ? 1.02 : 1)
             .animation(.easeOut(duration: 0.15), value: isPlaying)
@@ -116,6 +119,27 @@ struct SoundTile: View {
             }
         }
         .contextMenu { SoundMenu(sound: sound) }
+    }
+
+    /// The tile's colour, edge and (in Sci-Fi) glow and synth wave.
+    @ViewBuilder
+    private func plainTile(color: Color, isPlaying: Bool, scifi: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(scifi ? Color(hex: 0x081E36).opacity(0.35) : theme.tileBase)
+        RoundedRectangle(cornerRadius: 14)
+            .fill(color.opacity(scifi ? (isPlaying ? 0.3 : 0.12) : (isPlaying ? 0.55 : 0.26)))
+        if scifi && isPlaying {
+            SynthWave(color: color)
+                .padding(.vertical, 6)
+        }
+        if scifi {
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(color, lineWidth: isPlaying ? 4 : 3)
+                .blur(radius: isPlaying ? 6 : 4)
+                .opacity(isPlaying ? 0.9 : 0.6)
+        }
+        RoundedRectangle(cornerRadius: 14)
+            .strokeBorder(color.opacity(scifi ? 0.95 : 0.7), lineWidth: scifi ? 1.5 : 1)
     }
 }
 
