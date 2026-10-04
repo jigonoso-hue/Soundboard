@@ -327,5 +327,14 @@ const Ambience = (() => {
       if (voice) voice.gain.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
     },
     onChange(fn) { listeners.add(fn); },
+    // Every layer playing right now, for Live Session listeners.
+    snapshot() {
+      const out = [];
+      for (const id of voices.keys()) {
+        const layer = state.layers.find((l) => l.id === id) || external.get(id);
+        if (layer) out.push({ key: id, kind: layer.kind, ref: layer.ref, name: layerName(layer), volume: layer.volume * state.volume });
+      }
+      return out;
+    },
   };
 })();

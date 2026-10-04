@@ -1,0 +1,15 @@
+{
+  "name": "dungeon-radio-relay",
+  "version": "1.0.0",
+  "description": "Relay server for Dungeon Radio Live Sessions played over the internet.",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

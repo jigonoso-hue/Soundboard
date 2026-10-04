@@ -79,6 +79,7 @@ function play(id) {
   audio.addEventListener('timeupdate', () => updateTile(id, audio));
   audio.play().catch(done);
   updateTile(id, audio);
+  if (typeof Live !== 'undefined') Live.soundPlayed(sound);
 }
 
 function stop(id) {
@@ -87,10 +88,12 @@ function stop(id) {
   for (const audio of set) { audio.stopped = true; clearTimeout(audio.repeatTimer); audio.pause(); audio.removeAttribute('src'); audio.load(); }
   playing.delete(id);
   updateTile(id);
+  if (typeof Live !== 'undefined') Live.soundStopped(id);
 }
 
 function stopAll() {
   for (const id of [...playing.keys()]) stop(id);
+  if (typeof Live !== 'undefined') Live.stoppedAll();
 }
 
 function updateTile(id, audio) {
@@ -344,6 +347,7 @@ function makeTrack(sound, { reorder = true } = {}) {
 
   const meta = document.createElement('div');
   meta.className = 'track-meta';
+  if (sound.gmOnly) meta.appendChild(gmBadge());
   if (sound.repeat) {
     const rep = document.createElement('span');
     rep.className = 'tile-hotkey';
@@ -380,6 +384,15 @@ function makeTrack(sound, { reorder = true } = {}) {
     Icons.set(playBtn, 'stop');
   }
   return row;
+}
+
+// Marks sounds that never play for Live Session listeners.
+function gmBadge() {
+  const badge = document.createElement('span');
+  badge.className = 'tile-hotkey gm-badge';
+  badge.textContent = 'GM';
+  badge.title = 'GM only: not played for Live Session listeners';
+  return badge;
 }
 
 // Drag a tile or row onto another of the same kind to reorder.
@@ -425,9 +438,10 @@ function makeTile(sound, { reorder = true } = {}) {
   tile.appendChild(name);
   if ((sound.tags || []).length) tile.appendChild(tagLine(sound, 2));
 
-  if (sound.hotkey || sound.repeat) {
+  if (sound.hotkey || sound.repeat || sound.gmOnly) {
     const badges = document.createElement('div');
     badges.className = 'tile-badges';
+    if (sound.gmOnly) badges.appendChild(gmBadge());
     if (sound.repeat) {
       const rep = document.createElement('span');
       rep.className = 'tile-hotkey';
@@ -560,6 +574,7 @@ master.addEventListener('input', () => {
   for (const [id, set] of playing) {
     const sound = sounds.find((s) => s.id === id);
     for (const audio of set) audio.volume = Math.min(1, (sound ? sound.volume : 1) * prefs.master);
+    if (typeof Live !== 'undefined') Live.soundVolume(id, Math.min(1, (sound ? sound.volume : 1) * prefs.master));
   }
 });
 
@@ -620,6 +635,8 @@ function openEditor(id) {
   $('#edit-repeat').checked = !!sound.repeat;
   $('#edit-repeat-gap').value = sound.repeat ? sound.repeat.gap : 0;
   $('#edit-repeat-gap').disabled = !sound.repeat;
+  $('#edit-gm-only').checked = !!sound.gmOnly;
+  $('#edit-buzz').checked = !!sound.buzz;
   const swatches = $('#edit-colors');
   swatches.textContent = '';
   for (const color of COLORS) {
@@ -650,6 +667,8 @@ dialog.addEventListener('close', async () => {
     repeat: $('#edit-repeat').checked ? { gap: Math.max(0, Number($('#edit-repeat-gap').value) || 0) } : null,
     kind: editKind.value(),
     tags: editTags.selected(),
+    gmOnly: $('#edit-gm-only').checked,
+    buzz: $('#edit-buzz').checked,
   });
   await Tags.load();
   sounds = result.sounds;

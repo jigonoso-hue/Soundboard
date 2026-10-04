@@ -13,17 +13,36 @@
   "build": {
     "appId": "com.local.dungeonradio",
     "productName": "Dungeon Radio",
-    "files": ["src/**/*", "package.json"],
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
     "mac": {
       "category": "public.app-category.music",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Dungeon Radio does not record your microphone; this is only required by macOS for audio output device selection."
+        "NSMicrophoneUsageDescription": "Dungeon Radio does not record your microphone; this is only required by macOS for audio output device selection.",
+        "NSLocalNetworkUsageDescription": "Dungeon Radio uses your local network to find and host Live Sessions with other players at the table.",
+        "NSBonjourServices": [
+          "_dungeonradio._tcp"
+        ]
       }
     }
   },
   "devDependencies": {
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.4.4",
+    "ws": "^8.22.0"
   }
 }

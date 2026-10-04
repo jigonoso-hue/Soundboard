@@ -6,6 +6,7 @@ const { Library, AUDIO_EXTENSIONS } = require('./library');
 const { YtDlp } = require('./ytdlp');
 const { BashStore, COVER_TYPES } = require('./bashes');
 const { KitStore, KIT_ICONS, KIT_COLORS, COLUMNS } = require('./kits');
+const Live = require('./live');
 
 const AMBIENCE_DIR = path.join(__dirname, 'ambience');
 
@@ -312,8 +313,134 @@ function registerIpc() {
   ipcMain.handle('kits:duplicate', (e, id) => { const kit = kits.duplicate(id); kitsChanged(e.sender); return kit; });
   ipcMain.handle('kits:remove', (e, id) => { kits.remove(id); kitsChanged(e.sender); });
 
+  registerLiveIpc();
+
   ipcMain.handle('shell:open-external', (_e, url) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
+  });
+}
+
+// ---- Live Session (see live.js) ----
+
+let live = null; // { role: 'host', host, transport, mode } or { role: 'listen', listener }
+let lanBrowser = null;
+const liveCacheDir = () => path.join(app.getPath('userData'), 'live-cache');
+
+function sendToMain(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+function liveStatus(extra = {}) {
+  if (!live) return { role: null, ...extra };
+  if (live.role === 'host') {
+    return {
+      role: 'host', mode: live.mode, name: live.host.name, code: live.transport.code || null,
+      reconnecting: !!live.reconnecting, peers: live.host.peerList(), ...extra,
+    };
+  }
+  const { state, host, scene } = live.listener;
+  return { role: 'listen', state, host: host || null, scene: scene || null, ...extra };
+}
+
+function endLive() {
+  if (!live) return;
+  if (live.role === 'host') live.host.end();
+  else live.listener.leave();
+  live = null;
+}
+
+function registerLiveIpc() {
+  ipcMain.handle('live:status', () => ({ ...liveStatus(), bonjour: Live.hasBonjour() }));
+
+  ipcMain.handle('live:host-start', async (_e, { name, mode, relay }) => {
+    endLive();
+    const sessionName = String(name || '').trim().slice(0, 40) || `${Live.deviceName()}'s game`;
+    const transport = mode === 'online'
+      ? new Live.RelayHostTransport({ url: relay })
+      : new Live.LanHostTransport({ name: sessionName });
+    await transport.start();
+    const host = new Live.LiveHost({
+      name: sessionName,
+      transport,
+      resolveSound: (id) => {
+        const sound = library.get(id);
+        const file = sound && library.resolveFile(sound.file);
+        return file ? { file, ext: path.extname(file).slice(1).toLowerCase() } : null;
+      },
+    });
+    const session = { role: 'host', host, transport, mode: mode === 'online' ? 'online' : 'local' };
+    live = session;
+    host.on('peers', () => { if (live === session) sendToMain('live:status', liveStatus()); });
+    transport.on('reconnecting', () => { session.reconnecting = true; if (live === session) sendToMain('live:status', liveStatus()); });
+    transport.on('connected', () => { session.reconnecting = false; if (live === session) sendToMain('live:status', liveStatus()); });
+    transport.on('failed', (err) => {
+      if (live !== session) return;
+      live = null;
+      sendToMain('live:status', liveStatus({ error: err.message }));
+    });
+    return liveStatus();
+  });
+
+  // What the board plays, forwarded to listeners.
+  ipcMain.on('live:host-event', (_e, event) => {
+    if (!live || live.role !== 'host' || !event) return;
+    const { host } = live;
+    switch (event.t) {
+      case 'play': host.play(event); break;
+      case 'stop': host.stop(event.group); break;
+      case 'volume': host.volume(event.group, event.volume); break;
+      case 'stopAll': host.stopAll(); break;
+      case 'ambience': host.setAmbience(event.layers); break;
+      case 'scene': host.setScene(event.name); break;
+      case 'prefetch': host.setPrefetch(event.ids); break;
+      default: break;
+    }
+  });
+
+  ipcMain.handle('live:listen', (_e, { url, code, relay, name }) => {
+    endLive();
+    let target = url;
+    if (!target) {
+      const base = Live.relayUrl(relay);
+      if (!base) throw new Error('Set a relay server address first.');
+      const clean = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (!clean) throw new Error('Enter the session code from your GM.');
+      target = `${base}?role=listen&code=${clean}`;
+    } else if (!/^ws:\/\/[^/]+$/.test(target)) {
+      throw new Error('That isn’t a local session address.');
+    }
+    const listener = new Live.LiveListener({ cacheDir: liveCacheDir(), name: String(name || '').trim().slice(0, 40) || Live.deviceName(), device: 'Mac' });
+    const session = { role: 'listen', listener };
+    live = session;
+    listener.on('status', (status) => {
+      if (live !== session) return;
+      if (status.state === 'error' || status.state === 'ended') live = null;
+      sendToMain('live:status', { role: live ? 'listen' : null, ...status });
+    });
+    listener.on('command', (command) => {
+      if (command.file) command.url = `sound://live/${encodeURIComponent(path.basename(command.file))}`;
+      if (command.layers) {
+        for (const layer of command.layers) {
+          layer.url = layer.builtin ? `sound://builtin/${encodeURIComponent(layer.builtin)}` : `sound://live/${encodeURIComponent(path.basename(layer.file))}`;
+          delete layer.file;
+        }
+      }
+      delete command.file;
+      sendToMain('live:command', command);
+    });
+    listener.connect(target);
+    return liveStatus();
+  });
+
+  ipcMain.handle('live:leave', () => { endLive(); return liveStatus(); });
+
+  ipcMain.handle('live:browse', (_e, on) => {
+    lanBrowser?.stop();
+    lanBrowser = null;
+    if (!on) return;
+    lanBrowser = new Live.LanBrowser();
+    lanBrowser.on('sessions', (list) => sendToMain('live:sessions', list));
+    lanBrowser.start();
   });
 }
 
@@ -335,11 +462,14 @@ app.whenReady().then(() => {
   kits.finishMigration(library.list());
 
   ytdlp = new YtDlp();
+  Live.LiveListener.pruneCache(liveCacheDir());
 
   protocol.handle('sound', async (request) => {
     const url = new URL(request.url);
     const file = decodeURIComponent(url.pathname.slice(1));
-    const resolved = url.host === 'builtin' ? resolveBuiltin(file) : library.resolveFile(file);
+    const resolved = url.host === 'builtin' ? resolveBuiltin(file)
+      : url.host === 'live' ? resolveLiveCache(file)
+      : library.resolveFile(file);
     if (!resolved) return new Response('Not found', { status: 404 });
     return serveFile(resolved, request.headers.get('range'));
   });
@@ -387,6 +517,11 @@ async function serveFile(file, range) {
   return new Response(Readable.toWeb(fs.createReadStream(file)), { status: 200, headers: { ...headers, 'Content-Length': String(size) } });
 }
 
+// Files a Live Session host sent us, named <sha256>.<ext>.
+function resolveLiveCache(file) {
+  return /^[0-9a-f]{64}\.[a-z0-9]{1,5}$/.test(file) ? path.join(liveCacheDir(), file) : null;
+}
+
 function resolveBuiltin(file) {
   const resolved = path.resolve(AMBIENCE_DIR, file);
   return path.dirname(resolved) === AMBIENCE_DIR ? resolved : null;
@@ -396,7 +531,11 @@ function titleCase(text) {
   return text.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  endLive();
+  lanBrowser?.stop();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

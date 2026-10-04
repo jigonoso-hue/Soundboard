@@ -64,9 +64,11 @@
         <span class="spacer"></span>
         <button id="add-btn" class="primary" title="Add audio files"><i data-icon="plus"></i> Add Sounds</button>
         <button id="toggle-yt" title="Show/hide the YouTube browser"><i data-icon="video"></i> YouTube</button>
+        <button id="live-btn" title="Live Session: play to your players' devices"><i data-icon="speaker"></i> <span id="live-label">Live</span></button>
         <button id="stop-all" class="danger" title="Stop every sound effect and bash (Esc)"><i data-icon="stop"></i> Stop All</button>
       </header>
 
+      <div id="whisper-bar" class="whisper-bar hidden" role="status"></div>
       <div id="active-filters" class="active-filters hidden"></div>
 
       <div class="content-row">
@@ -210,6 +212,10 @@
         </label>
         <p class="muted small">0 seconds replays immediately. Click the tile again (or Stop All) to stop it.</p>
       </div>
+      <div class="live-row">
+        <label class="inline"><input type="checkbox" id="edit-gm-only"> GM only: never play it for Live Session listeners</label>
+        <label class="inline"><input type="checkbox" id="edit-buzz"> Buzz: vibrate listeners' phones when it plays</label>
+      </div>
       <label>Hotkey (works even when the app is in the background)
         <div class="hotkey-row">
           <input id="edit-hotkey" readonly placeholder="Click, then press e.g. ⌥⌘1">
@@ -303,6 +309,17 @@
     </form>
   </dialog>
 
+  <dialog id="live-dialog" class="wide">
+    <form method="dialog">
+      <h2>Live Session</h2>
+      <div id="live-body"></div>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button value="close">Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="hidden"></div>
 
   <script src="icons.js"></script>
@@ -314,5 +331,6 @@
   <script src="bash-common.js"></script>
   <script src="kits.js"></script>
   <script src="bashes-board.js"></script>
+  <script src="live.js"></script>
 </body>
 </html>

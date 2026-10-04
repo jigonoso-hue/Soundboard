@@ -900,3 +900,32 @@ dialog { max-height: 90vh; overflow-y: auto; }
 .drawer-action { display: flex; align-items: center; justify-content: center; }
 #kit-icon-picker { margin-bottom: 6px; }
 #kit-dialog { width: min(560px, 92vw); }
+
+/* ---------- Live Session ---------- */
+#live-btn.live-on { border-color: #ff6a3d; color: #ffb59c; }
+#live-btn.live-on::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ff6a3d; margin-right: 2px; box-shadow: 0 0 8px #ff6a3d; animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: 0.35; } }
+.whisper-bar { display: flex; align-items: center; gap: 10px; margin: 0 16px 8px; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #b07cff 22%, transparent); border: 1px solid #b07cff; }
+.whisper-bar span { flex: 1; }
+.gm-badge { background: color-mix(in srgb, #ff6a3d 30%, transparent); color: #ffd2c2; font-weight: 700; letter-spacing: 0.04em; }
+.live-row { margin: -4px 0 12px; }
+.live-tabs { margin-bottom: 12px; }
+.live-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+dialog label.live-mode { flex-direction: row; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); margin: 0; cursor: pointer; }
+dialog label.live-mode.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+dialog label.live-mode input { width: auto; margin-top: 3px; }
+.live-mode span { display: flex; flex-direction: column; gap: 3px; }
+.live-subhead { font-weight: 600; margin: 14px 0 6px; }
+.live-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.live-row-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; }
+.live-code-row { display: flex; gap: 8px; margin-bottom: 10px; }
+dialog input.live-code-input { text-transform: uppercase; letter-spacing: 0.15em; font-family: ui-monospace, monospace; }
+.live-hero { text-align: center; padding: 6px 0 4px; }
+.live-hero-name { font-size: 20px; font-weight: 700; margin: 2px 0 6px; }
+.live-code { font: 700 38px/1.1 ui-monospace, monospace; letter-spacing: 0.2em; color: #ffb59c; margin: 4px 0; user-select: all; }
+.live-sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; margin-top: 10px; }
+.live-now { min-height: 20px; }
+.live-error { color: #ff8a8a; margin: 10px 0 0; }
+#live-body > button { margin-top: 12px; }
+body.live-buzz #app { animation: live-buzz 0.35s linear; }
+@keyframes live-buzz { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }

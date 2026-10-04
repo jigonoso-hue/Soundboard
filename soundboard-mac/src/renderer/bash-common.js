@@ -20,6 +20,12 @@
       this.buffers = new Map(); // `${soundId}:${file}` -> Promise<AudioBuffer>
       this.active = null; // { bashId, sources, startedAt, from, duration }
       this.listeners = new Set();
+      // Live Session hooks (main board only): onSchedule({ runId, sound, at, volume, dur })
+      // for every clip play, with `at` the wall-clock time (ms) of the clip's start;
+      // onStop(runId) when the bash stops.
+      this.onSchedule = null;
+      this.onStop = null;
+      this.runs = 0;
       this.applyPrefs();
     }
 
@@ -70,7 +76,7 @@
       if (this.pending !== token) return; // another play/stop happened while decoding
 
       const startedAt = this.ctx.currentTime + 0.05;
-      const active = { bashId: bash.id, sources: [], startedAt, from, duration: 0, voices: [] };
+      const active = { bashId: bash.id, runId: `${Date.now().toString(36)}-${++this.runs}`, sources: [], startedAt, from, duration: 0, voices: [] };
       for (const { clip, sound, buffer } of entries) {
         active.duration = Math.max(active.duration, clipEnd(clip, buffer.duration));
         const gain = this.ctx.createGain();
@@ -82,7 +88,7 @@
         // Skip plays that finished before `from`.
         let index = clip.offset >= from || period <= 0 ? 0 : Math.floor((from - clip.offset) / period);
         if (index > 0 && from - (clip.offset + index * period) >= buffer.duration) index++;
-        active.voices.push({ buffer, gain, period, plays, offset: clip.offset, index });
+        active.voices.push({ buffer, gain, period, plays, offset: clip.offset, index, sound, volume: gain.gain.value });
         active.sources.push({ gain, source: null });
       }
       this.active = active;
@@ -113,7 +119,17 @@
             const source = this.ctx.createBufferSource();
             source.buffer = voice.buffer;
             source.connect(voice.gain);
-            source.start(Math.max(when, this.ctx.currentTime), into);
+            const startAt = Math.max(when, this.ctx.currentTime);
+            source.start(startAt, into);
+            if (this.onSchedule) {
+              this.onSchedule({
+                runId: active.runId,
+                sound: voice.sound,
+                at: Date.now() + (startAt - this.ctx.currentTime - into) * 1000,
+                volume: voice.volume * this.master.gain.value,
+                dur: voice.buffer.duration,
+              });
+            }
             active.sources.push({ source, gain: voice.gain });
             source.onended = () => {
               const i = active.sources.findIndex((x) => x.source === source);
@@ -130,6 +146,7 @@
       clearTimeout(this.endTimer);
       clearInterval(this.scheduler);
       if (this.active) {
+        if (this.onStop) this.onStop(this.active.runId);
         const now = this.ctx.currentTime;
         for (const { source, gain } of this.active.sources) {
           // Tiny fade so stopping mid-sound doesn't click.

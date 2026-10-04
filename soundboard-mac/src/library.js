@@ -162,6 +162,9 @@ class Library {
       const gap = Number(changes.repeat?.gap);
       sound.repeat = changes.repeat ? { gap: Number.isFinite(gap) ? Math.min(3600, Math.max(0, Math.round(gap * 10) / 10)) : 0 } : null;
     }
+    // Live Session: never sent to listeners / vibrates listeners' phones.
+    if ('gmOnly' in changes) sound.gmOnly = !!changes.gmOnly;
+    if ('buzz' in changes) sound.buzz = !!changes.buzz;
     if ('hotkey' in changes) {
       // Only one sound may own a given hotkey.
       if (changes.hotkey) for (const s of this.sounds) if (s.hotkey === changes.hotkey) s.hotkey = null;
