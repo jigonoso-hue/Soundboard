@@ -43,11 +43,11 @@ struct BashCard: View {
 
     var body: some View {
         let playing = bashPlayer.isPlaying(bash.id)
-        let coverSize: CGFloat = size == .s ? 44 : (size == .l ? 76 : 58)
+        let coverSize: CGFloat = size == .s ? 34 : (size == .l ? 60 : 44)
         Button {
             toggleBash(bash, store: store, player: player, bashPlayer: bashPlayer, ui: ui)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 BashCoverView(cover: bash.cover, size: coverSize)
                     .overlay {
                         if playing {
@@ -59,7 +59,7 @@ struct BashCard: View {
                     }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(bash.name)
-                        .font(size == .l ? Font.title3.weight(.semibold) : Font.headline)
+                        .font(size == .l ? Font.headline : Font.subheadline.weight(.semibold))
                         .lineLimit(2)
                     Text(bash.clips.isEmpty ? "Empty, tap to edit" : "\(bash.soundCount) sound\(bash.soundCount == 1 ? "" : "s")")
                         .font(.caption)
@@ -67,7 +67,7 @@ struct BashCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(10)
+            .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 14)
                     .fill(Color.secondary.opacity(playing ? 0.2 : 0.1))

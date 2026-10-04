@@ -21,7 +21,7 @@ struct LibraryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 20) {
                 if !ui.tagFilter.isEmpty {
                     activeFilters
                 }
@@ -94,7 +94,7 @@ struct LibraryView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12)], spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)], spacing: 10) {
                         ForEach(visibleBashes) { bash in
                             BashCard(bash: bash)
                         }
@@ -114,7 +114,7 @@ struct LibraryView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12)], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
                     ForEach(clips) { sound in
                         SoundTile(sound: sound)
                             .draggable(sound.id.uuidString)
@@ -135,7 +135,7 @@ struct LibraryView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: 6) {
                     ForEach(full) { sound in
                         TrackRow(sound: sound)
                             .draggable(sound.id.uuidString)

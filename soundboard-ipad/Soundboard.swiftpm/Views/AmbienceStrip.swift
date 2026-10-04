@@ -9,40 +9,53 @@ struct AmbienceStrip: View {
     private let activeColor = Color(hex: 0x6EE7B7)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { collapsed.toggle() }
                 } label: {
                     Label("Ambience", systemImage: collapsed ? "chevron.right" : "chevron.down")
-                        .font(.headline)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(mixer.playing.isEmpty ? Color.primary : activeColor)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 .buttonStyle(.plain)
 
                 Image(systemName: "speaker.wave.1.fill")
                     .foregroundStyle(.secondary)
                 Slider(value: $mixer.masterVolume, in: 0...1)
-                    .frame(maxWidth: 160)
+                    .frame(minWidth: 70, maxWidth: 130)
 
                 addMenu
 
                 if mixer.kitLayersPlaying > 0 {
-                    Text("+ \(mixer.kitLayersPlaying) from scene kits")
+                    Text("+\(mixer.kitLayersPlaying) from kits")
                         .font(.caption)
                         .foregroundStyle(activeColor)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
 
                 Spacer(minLength: 0)
 
-                Button("Stop Ambience") { mixer.stopAll() }
-                    .buttonStyle(.bordered)
-                    .disabled(mixer.playing.isEmpty)
+                Button {
+                    mixer.stopAll()
+                } label: {
+                    IconLabel("Stop", icon: "stop", size: 12)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(mixer.playing.isEmpty)
+                .accessibilityLabel("Stop ambience")
             }
 
             if !collapsed {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         ForEach(mixer.layers) { layer in
                             card(for: layer)
                         }
@@ -50,8 +63,8 @@ struct AmbienceStrip: View {
                 }
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private var addMenu: some View {
@@ -68,13 +81,16 @@ struct AmbienceStrip: View {
                 }
             }
         } label: {
-            Label("Add Layer", systemImage: "plus.circle")
+            Label("Add", systemImage: "plus.circle")
+                .font(.subheadline)
+                .lineLimit(1)
+                .fixedSize()
         }
     }
 
     private func card(for layer: AmbienceLayer) -> some View {
         let isOn = mixer.isPlaying(layer)
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 2) {
             Button {
                 mixer.toggle(layer)
             } label: {
@@ -82,7 +98,7 @@ struct AmbienceStrip: View {
                     Image(systemName: isOn ? "speaker.wave.2.fill" : "speaker.slash")
                         .foregroundStyle(isOn ? activeColor : .secondary)
                     Text(mixer.name(of: layer))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -97,8 +113,9 @@ struct AmbienceStrip: View {
             )
             .accessibilityLabel("\(mixer.name(of: layer)) volume")
         }
-        .padding(10)
-        .frame(width: 170)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(width: 150)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(isOn ? activeColor.opacity(0.15) : Color.secondary.opacity(0.12))

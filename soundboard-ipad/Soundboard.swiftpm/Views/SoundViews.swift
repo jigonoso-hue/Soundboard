@@ -39,11 +39,11 @@ struct SoundTile: View {
                     .fill(color.opacity(isPlaying ? 0.55 : 0.26))
                 RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(color.opacity(0.7), lineWidth: 1)
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(sound.name)
-                        .font(size == .s ? Font.subheadline.weight(.semibold) : (size == .l ? Font.title3.weight(.semibold) : Font.headline))
+                        .font(size == .s ? Font.caption.weight(.semibold) : (size == .l ? Font.headline : Font.subheadline.weight(.semibold)))
                         .foregroundStyle(.white)
-                        .lineLimit(3)
+                        .lineLimit(size == .l ? 3 : 2)
                         .multilineTextAlignment(.leading)
                     if !sound.tagList.isEmpty && size != .s {
                         HStack(spacing: 4) {
@@ -59,7 +59,7 @@ struct SoundTile: View {
                         .foregroundStyle(.white.opacity(0.75))
                     }
                 }
-                .padding(12)
+                .padding(size == .s ? 8 : 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 GeometryReader { geo in
                     Rectangle()
@@ -68,7 +68,7 @@ struct SoundTile: View {
                         .frame(maxHeight: .infinity, alignment: .bottom)
                 }
             }
-            .frame(height: size == .s ? 70 : (size == .l ? 128 : 96))
+            .frame(height: size == .s ? 54 : (size == .l ? 104 : 74))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .contentShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: isPlaying ? color.opacity(0.6) : .clear, radius: 10)
@@ -120,13 +120,13 @@ struct TrackRow: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle().fill(isPlaying ? color : color.opacity(0.22))
-                    AppIcon(id: isPlaying ? "stop" : "play", size: 16)
+                    AppIcon(id: isPlaying ? "stop" : "play", size: 14)
                         .foregroundStyle(isPlaying ? Color.black : color)
                 }
-                .frame(width: size == .l ? 46 : 38, height: size == .l ? 46 : 38)
+                .frame(width: size == .l ? 40 : 32, height: size == .l ? 40 : 32)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(sound.name)
-                        .font(size == .l ? Font.title3.weight(.semibold) : Font.body.weight(.semibold))
+                        .font(size == .l ? Font.headline : Font.subheadline.weight(.semibold))
                         .lineLimit(1)
                     if !sound.tagList.isEmpty && size != .s {
                         HStack(spacing: 4) {
@@ -147,8 +147,8 @@ struct TrackRow: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, size == .s ? 6 : 10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, size == .s ? 4 : 7)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.secondary.opacity(isPlaying ? 0.18 : 0.1))

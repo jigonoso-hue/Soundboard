@@ -36,15 +36,15 @@ struct KitView: View {
         if let kit {
             GeometryReader { geo in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 12) {
                         header(kit)
-                        board(kit, width: geo.size.width - 32)
+                        board(kit, width: geo.size.width - 24)
                     }
-                    .padding(16)
+                    .padding(12)
                 }
             }
             .inspector(isPresented: $drawerOpen) {
-                KitDrawerView(kitId: kitId, target: $drawerTarget)
+                KitDrawerView(kitId: kitId, target: $drawerTarget) { drawerOpen = false }
                     .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
             }
             .alert("Section name", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -83,64 +83,17 @@ struct KitView: View {
     // MARK: Header
 
     private func header(_ kit: SoundKit) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
-                IconBadge(icon: kit.icon, color: kit.color, iconColor: kit.iconColor, size: 72)
-                    .shadow(color: (Color(hexString: kit.color) ?? .clear).opacity(0.5), radius: 12, y: 6)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("SCENE KIT").font(.caption2.weight(.semibold)).tracking(1).foregroundStyle(.secondary)
-                    Text(kit.name).font(.largeTitle.weight(.bold)).lineLimit(2)
-                    Text(describe(kit)).font(.callout).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            // One row when there's room, otherwise the buttons go under the title.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    title(kit)
+                    Spacer(minLength: 12)
+                    actions(kit)
                 }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    Button {
-                        openDrawer(kit, section: drawerTarget)
-                    } label: {
-                        IconLabel("Add from Library", icon: "plus")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    Button {
-                        withAnimation { editing.toggle() }
-                    } label: {
-                        if editing { Text("Done") } else { IconLabel("Customize Layout", icon: "grid") }
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(editing ? Color.accentColor : nil)
-                    Menu {
-                        Button {
-                            addSection(to: kit, kind: .mixed)
-                        } label: {
-                            Label("Sound Section", systemImage: "square.grid.2x2")
-                        }
-                        Button {
-                            addSection(to: kit, kind: .ambience)
-                        } label: {
-                            Label("Ambience Section", systemImage: "square.3.layers.3d")
-                        }
-                    } label: {
-                        IconLabel("Section", icon: "plus")
-                    }
-                    .buttonStyle(.bordered)
-                    Button {
-                        ui.editingKit = KitEditRequest(kitId: kit.id)
-                    } label: {
-                        IconLabel("Edit", icon: "edit")
-                    }
-                    .buttonStyle(.bordered)
-                    Button {
-                        kits.duplicate(kit.id)
-                    } label: {
-                        Text("Duplicate")
-                    }
-                    .buttonStyle(.bordered)
-                    Button(role: .destructive) {
-                        confirmDelete = true
-                    } label: {
-                        IconLabel("Delete", icon: "trash")
-                    }
-                    .buttonStyle(.bordered)
+                VStack(alignment: .leading, spacing: 10) {
+                    title(kit)
+                    actions(kit)
                 }
             }
             if editing {
@@ -149,6 +102,74 @@ struct KitView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func title(_ kit: SoundKit) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(icon: kit.icon, color: kit.color, iconColor: kit.iconColor, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(kit.name).font(.title3.weight(.bold)).lineLimit(1)
+                Text(describe(kit)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+    }
+
+    private func actions(_ kit: SoundKit) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                if drawerOpen { drawerOpen = false } else { openDrawer(kit, section: drawerTarget) }
+            } label: {
+                IconLabel(drawerOpen ? "Close Library" : "Add from Library", icon: drawerOpen ? "close" : "plus", size: 14)
+            }
+            .buttonStyle(.borderedProminent)
+            Button {
+                withAnimation { editing.toggle() }
+            } label: {
+                if editing { Text("Done") } else { IconLabel("Layout", icon: "grid", size: 14) }
+            }
+            .buttonStyle(.bordered)
+            .tint(editing ? Color.accentColor : nil)
+            Menu {
+                Button {
+                    addSection(to: kit, kind: .mixed)
+                } label: {
+                    Label("Sound Section", systemImage: "square.grid.2x2")
+                }
+                Button {
+                    addSection(to: kit, kind: .ambience)
+                } label: {
+                    Label("Ambience Section", systemImage: "square.3.layers.3d")
+                }
+            } label: {
+                IconLabel("Section", icon: "plus", size: 14)
+            }
+            .buttonStyle(.bordered)
+            Menu {
+                Button {
+                    ui.editingKit = KitEditRequest(kitId: kit.id)
+                } label: {
+                    Label("Edit Name and Icon…", systemImage: "pencil")
+                }
+                Button {
+                    kits.duplicate(kit.id)
+                } label: {
+                    Label("Duplicate", systemImage: "plus.square.on.square")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    confirmDelete = true
+                } label: {
+                    Label("Delete Kit", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(minHeight: 18)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Kit options")
+        }
+        .controlSize(.small)
+        .fixedSize()
     }
 
     private func describe(_ kit: SoundKit) -> String {
@@ -207,16 +228,16 @@ struct KitView: View {
                     if editing {
                         // Drag handle over the title bar.
                         Color.white.opacity(0.001)
-                            .frame(height: 40)
-                            .padding(.trailing, 90)
+                            .frame(height: 34)
+                            .padding(.trailing, 70)
                             .gesture(layoutDrag(kit, section: section, col: col, resizing: false))
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
                     if editing {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.caption.weight(.bold))
-                            .padding(10)
+                            .font(.caption2.weight(.bold))
+                            .padding(8)
                             .background(Circle().fill(Color.accentColor))
                             .foregroundStyle(.white)
                             .padding(4)
@@ -393,20 +414,20 @@ struct KitSectionView: View {
             Divider()
             ScrollView {
                 content
-                    .padding(10)
+                    .padding(8)
             }
             .disabled(editing)
             .opacity(editing ? 0.6 : 1)
         }
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(Color.secondary.opacity(section.isAmbience ? 0.1 : 0.08))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(borderColor, style: StrokeStyle(lineWidth: targeted || dropHover ? 2 : 1, dash: editing ? [6, 4] : []))
         )
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .dropDestination(for: String.self) { items, _ in
             guard let first = items.first else { return false }
             // A built-in loop from the library panel.
@@ -444,7 +465,7 @@ struct KitSectionView: View {
                 AppIcon(id: "layers", size: 15).foregroundStyle(ambienceColor)
             }
             Text(section.title.uppercased())
-                .font(.footnote.weight(.bold))
+                .font(.caption.weight(.bold))
                 .tracking(0.5)
                 .lineLimit(1)
             if section.count > 0 {
@@ -455,18 +476,19 @@ struct KitSectionView: View {
                 Button {
                     for layer in section.layers { ambience.stopVoice(section.voiceId(layer)) }
                 } label: {
-                    IconLabel("Stop", icon: "stop", size: 11).font(.caption)
+                    IconLabel("Stop", icon: "stop", size: 10).font(.caption2.weight(.semibold))
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+                .buttonStyle(.borderless)
                 .disabled(!anyOn)
             }
             Spacer(minLength: 4)
             Button(action: onAdd) {
-                IconLabel("Add", icon: "plus", size: 12).font(.caption)
+                AppIcon(id: "plus", size: 16)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .buttonStyle(.borderless)
+            .accessibilityLabel(section.isAmbience ? "Add layers" : "Add from library")
             Menu {
                 Button(section.isAmbience ? "Add Layers…" : "Add from Library…", action: onAdd)
                 Button("Rename…", action: onRename)
@@ -492,13 +514,16 @@ struct KitSectionView: View {
                 Button("Remove Section", role: .destructive, action: onRemove)
             } label: {
                 Image(systemName: "ellipsis")
-                    .frame(width: 26, height: 22)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Section options")
         }
-        .padding(.horizontal, 12)
-        .frame(height: 40)
+        .padding(.leading, 12)
+        .padding(.trailing, 4)
+        .frame(height: 34)
         .background(section.isAmbience ? ambienceColor.opacity(0.07) : Color.clear)
     }
 
@@ -535,16 +560,16 @@ struct KitSectionView: View {
                 }
             }
         }
-        let tileWidth: CGFloat = section.size == .s ? 110 : (section.size == .l ? 190 : 140)
-        let cardWidth: CGFloat = section.size == .s ? 190 : (section.size == .l ? 280 : 230)
-        return VStack(alignment: .leading, spacing: 10) {
+        let tileWidth: CGFloat = section.size == .s ? 100 : (section.size == .l ? 170 : 128)
+        let cardWidth: CGFloat = section.size == .s ? 170 : (section.size == .l ? 260 : 210)
+        return VStack(alignment: .leading, spacing: 8) {
             if section.items.isEmpty {
                 emptyButton(section.kind == .bashes ? "Add bashes from your library" : "Add from your library", icon: "plus")
             } else if bashItems.isEmpty && clipItems.isEmpty && fullItems.isEmpty {
                 Text("Nothing here matches your filters.").font(.caption).foregroundStyle(.secondary)
             }
             if !bashItems.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth), spacing: 10)], spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth), spacing: 8)], spacing: 8) {
                     ForEach(bashItems) { entry in
                         BashCard(bash: entry.value, size: section.size)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
@@ -553,7 +578,7 @@ struct KitSectionView: View {
                 }
             }
             if !clipItems.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: tileWidth), spacing: 10)], spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: tileWidth), spacing: 8)], spacing: 8) {
                     ForEach(clipItems) { entry in
                         SoundTile(sound: entry.value, size: section.size)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
@@ -613,7 +638,7 @@ struct KitSectionView: View {
             IconLabel(title, icon: icon)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 70)
+                .frame(maxWidth: .infinity, minHeight: 52)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .strokeBorder(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
@@ -650,8 +675,8 @@ struct KitSectionView: View {
                 HStack(spacing: 10) {
                     AppIcon(id: Self.layerIcon(layer), size: 20)
                         .foregroundStyle(isOn ? Color(hex: 0x10261D) : Color.secondary)
-                        .frame(width: 36, height: 36)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(isOn ? ambienceColor : Color.secondary.opacity(0.15)))
+                        .frame(width: 30, height: 30)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(isOn ? ambienceColor : Color.secondary.opacity(0.15)))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(ambience.name(kind: layer.kind, ref: layer.ref))
                             .font(.subheadline.weight(.semibold))

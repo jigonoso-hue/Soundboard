@@ -9,6 +9,7 @@ struct KitDrawerView: View {
     @EnvironmentObject private var ambience: AmbienceMixer
     let kitId: UUID
     @Binding var target: UUID?
+    var onClose: () -> Void = {}
 
     @State private var search = ""
     @State private var type: Filter = .all
@@ -47,8 +48,15 @@ struct KitDrawerView: View {
 
     var body: some View {
         if let kit, let section {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Library").font(.headline)
+                    Spacer()
+                    Button("Done", action: onClose)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Adding to").font(.caption).foregroundStyle(.secondary)
                     Picker("Section", selection: Binding(get: { section.id }, set: { id in
                         target = id
@@ -103,13 +111,14 @@ struct KitDrawerView: View {
                     }
                 }
                 .listStyle(.plain)
+                .environment(\.defaultMinListRowHeight, 34)
                 Text(section.isAmbience
                      ? "Tap to add or remove a layer. You can also drag sounds onto any ambience section."
                      : "Tap to add or remove. You can also drag items onto any section.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .padding()
+            .padding(12)
             .onAppear { type = Self.defaultFilter(section) }
             .onChange(of: target) { _, _ in
                 if let current = self.section { type = Self.defaultFilter(current) }
@@ -209,8 +218,8 @@ struct KitDrawerView: View {
                 AppIcon(id: row.icon, size: 16)
                     .foregroundStyle(row.iconColor)
                     .frame(width: 22)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(row.name).lineLimit(1).foregroundStyle(Color.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.name).font(.subheadline).lineLimit(1).foregroundStyle(Color.primary)
                     HStack(spacing: 4) {
                         ForEach(row.tags.prefix(3), id: \.self) { TagChip(tag: $0, small: true) }
                         Text(row.meta).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
@@ -218,14 +227,15 @@ struct KitDrawerView: View {
                 }
                 Spacer(minLength: 4)
                 Image(systemName: added ? "checkmark" : "plus")
-                    .font(.caption.weight(.bold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(added ? Color.black : Color.secondary)
-                    .frame(width: 26, height: 26)
+                    .frame(width: 22, height: 22)
                     .background(Circle().fill(added ? Color(hex: 0x6EE7B7) : Color.secondary.opacity(0.15)))
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 5, leading: 8, bottom: 5, trailing: 8))
         .listRowBackground(added ? Color(hex: 0x6EE7B7).opacity(0.1) : Color.clear)
         .draggable(dragPayload(row))
     }
