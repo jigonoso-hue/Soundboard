@@ -65,8 +65,15 @@ struct KitSection: Identifiable, Codable, Equatable {
     var size: ItemSize
     var items: [KitItem]
     var layers: [KitLayer]
+    /// The section's own volume slider: nil when the section doesn't show one.
+    var volume: Double? = nil
+    /// Shows a shuffle button that plays a random item from the section.
+    var shuffle: Bool? = nil
 
     var isAmbience: Bool { kind == .ambience }
+    /// Level applied to everything played from this section.
+    var gain: Double { volume ?? 1 }
+    var hasShuffle: Bool { shuffle == true && !isAmbience }
     var count: Int { isAmbience ? layers.count : items.count }
 
     /// Voice name for one of this section's layers in the ambience mixer.
@@ -277,6 +284,7 @@ final class KitStore: ObservableObject {
             s.x = min(columns - s.w, max(0, section.x))
             s.y = min(500, max(0, section.y))
             s.h = min(40, max(2, section.h))
+            if let volume = section.volume { s.volume = min(1, max(0, volume)) }
             if s.isAmbience {
                 s.items = []
                 var keys = Set<String>()

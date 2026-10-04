@@ -48,7 +48,8 @@ struct DetailView: View {
         }
         .navigationTitle(kit?.name ?? title)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $ui.search, prompt: "Search sounds and tags")
+        // Scene kits show everything in them, so there's nothing to search there.
+        .modifier(LibrarySearch(enabled: kit == nil, text: $ui.search))
         .toolbar { toolbar }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showStrip {
@@ -99,6 +100,31 @@ struct DetailView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        if kit != nil {
+            // In a scene kit: just the master volume and Stop All.
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                HStack(spacing: 6) {
+                    Image(systemName: "speaker.fill").font(.caption).foregroundStyle(.secondary)
+                    Slider(value: $player.masterVolume, in: 0...1)
+                        .frame(width: 150)
+                        .accessibilityLabel("Master volume")
+                    Image(systemName: "speaker.wave.3.fill").font(.caption).foregroundStyle(.secondary)
+                }
+                Button {
+                    player.stopAll()
+                    bashPlayer.stop()
+                } label: {
+                    Label("Stop All", systemImage: "stop.fill")
+                }
+                .tint(.red)
+            }
+        } else {
+            libraryToolbar
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var libraryToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
                 showSettings = true
@@ -170,6 +196,20 @@ struct DetailView: View {
             if !failures.isEmpty {
                 ui.errorMessage = "Couldn't add: \(failures.joined(separator: ", "))"
             }
+        }
+    }
+}
+
+/// Search for the library views only.
+struct LibrarySearch: ViewModifier {
+    let enabled: Bool
+    @Binding var text: String
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.searchable(text: $text, prompt: "Search sounds and tags")
+        } else {
+            content
         }
     }
 }

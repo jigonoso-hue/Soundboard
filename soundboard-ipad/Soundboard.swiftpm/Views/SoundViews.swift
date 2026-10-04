@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Plays a sound, or reports why it couldn't.
 @MainActor
-func playSound(_ sound: Sound, store: SoundStore, player: SoundPlayer, ui: AppUI) {
+func playSound(_ sound: Sound, store: SoundStore, player: SoundPlayer, ui: AppUI, gain: Double = 1) {
     do {
-        try player.play(sound, url: store.url(for: sound))
+        try player.play(sound, url: store.url(for: sound), gain: gain)
     } catch {
         ui.errorMessage = "Couldn't play “\(sound.name)”."
     }
@@ -26,13 +26,15 @@ struct SoundTile: View {
     @EnvironmentObject private var ui: AppUI
     let sound: Sound
     var size: ItemSize = .m
+    /// Extra level, such as a scene kit section's volume slider.
+    var gain: Double = 1
 
     var body: some View {
         let progress = player.progress[sound.id]
         let color = Palette.color(sound.colorIndex)
         let isPlaying = progress != nil
         Button {
-            playSound(sound, store: store, player: player, ui: ui)
+            playSound(sound, store: store, player: player, ui: ui, gain: gain)
         } label: {
             ZStack(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: 14)
@@ -108,66 +110,103 @@ struct TrackRow: View {
     @EnvironmentObject private var ui: AppUI
     let sound: Sound
     var size: ItemSize = .m
+    /// Extra level, such as a scene kit section's volume slider.
+    var gain: Double = 1
 
     var body: some View {
         let progress = player.progress[sound.id]
         let color = Palette.color(sound.colorIndex)
         let isPlaying = progress != nil
         let total = sound.duration ?? 0
-        Button {
-            playSound(sound, store: store, player: player, ui: ui)
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle().fill(isPlaying ? color : color.opacity(0.22))
-                    AppIcon(id: isPlaying ? "stop" : "play", size: 14)
-                        .foregroundStyle(isPlaying ? Color.black : color)
-                }
-                .frame(width: size == .l ? 40 : 32, height: size == .l ? 40 : 32)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(sound.name)
-                        .font(size == .l ? Font.headline : Font.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    if !sound.tagList.isEmpty && size != .s {
-                        HStack(spacing: 4) {
-                            ForEach(sound.tagList.prefix(5), id: \.self) { TagChip(tag: $0, small: true) }
+        VStack(spacing: 0) {
+            Button {
+                playSound(sound, store: store, player: player, ui: ui, gain: gain)
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(isPlaying ? color : color.opacity(0.22))
+                        AppIcon(id: isPlaying ? "stop" : "play", size: 14)
+                            .foregroundStyle(isPlaying ? Color.black : color)
+                    }
+                    .frame(width: size == .l ? 40 : 32, height: size == .l ? 40 : 32)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(sound.name)
+                            .font(size == .l ? Font.headline : Font.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                        if !sound.tagList.isEmpty && size != .s {
+                            HStack(spacing: 4) {
+                                ForEach(sound.tagList.prefix(5), id: \.self) { TagChip(tag: $0, small: true) }
+                            }
                         }
                     }
-                }
-                Spacer(minLength: 8)
-                if let gap = sound.repeatGap {
-                    HStack(spacing: 3) {
-                        AppIcon(id: "repeat", size: 11)
-                        if gap > 0 { Text("\(gap.formatted())s") }
+                    Spacer(minLength: 8)
+                    if let gap = sound.repeatGap {
+                        HStack(spacing: 3) {
+                            AppIcon(id: "repeat", size: 11)
+                            if gap > 0 { Text("\(gap.formatted())s") }
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
                     }
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    Text(isPlaying ? "\(TimeText.format((progress ?? 0) * total)) / \(TimeText.format(total))" : (total > 0 ? TimeText.format(total) : ""))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
-                Text(isPlaying ? "\(TimeText.format((progress ?? 0) * total)) / \(TimeText.format(total))" : (total > 0 ? TimeText.format(total) : ""))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, size == .s ? 4 : 7)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, size == .s ? 4 : 7)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.secondary.opacity(isPlaying ? 0.18 : 0.1))
-            )
-            .overlay(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 8)
-            }
-            .overlay(alignment: .bottomLeading) {
-                GeometryReader { geo in
-                    Rectangle()
-                        .fill(color.opacity(0.8))
-                        .frame(width: geo.size.width * (progress ?? 0), height: 3)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
+            .buttonStyle(.plain)
+
+            // Volume, like an ambience layer, while it plays.
+            if isPlaying {
+                HStack(spacing: 8) {
+                    Image(systemName: "speaker.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Slider(
+                        value: Binding(
+                            get: { player.volumes[sound.id] ?? sound.volume },
+                            set: { player.setVolume($0, for: sound.id) }
+                        ),
+                        in: 0...1,
+                        onEditingChanged: { editing in
+                            // Keep the new level for next time.
+                            guard !editing, let volume = player.volumes[sound.id], var current = store.sound(sound.id) else { return }
+                            current.volume = volume
+                            store.update(current)
+                        }
+                    )
+                    .tint(color)
+                    .accessibilityLabel("\(sound.name) volume")
+                    Image(systemName: "speaker.wave.3.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
+                .padding(.leading, size == .l ? 62 : 54)
+                .padding(.trailing, 12)
+                .padding(.bottom, 8)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .contentShape(RoundedRectangle(cornerRadius: 12))
         }
-        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(isPlaying ? 0.18 : 0.1))
+        )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 8)
+        }
+        .overlay(alignment: .bottomLeading) {
+            GeometryReader { geo in
+                Rectangle()
+                    .fill(color.opacity(0.8))
+                    .frame(width: geo.size.width * (progress ?? 0), height: 3)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+            }
+            .allowsHitTesting(false)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .animation(.easeOut(duration: 0.2), value: isPlaying)
         .contextMenu { SoundMenu(sound: sound) }
     }
 }

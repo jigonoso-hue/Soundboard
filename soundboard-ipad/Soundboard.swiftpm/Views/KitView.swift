@@ -21,6 +21,7 @@ struct KitView: View {
     }
     @State private var dragging: DragState?
     @State private var renaming: KitSection?
+    @State private var creatingSection = false
     @State private var renameText = ""
     @State private var confirmDelete = false
     @State private var removingSection: KitSection?
@@ -51,6 +52,11 @@ struct KitView: View {
                 }
             }
             .onDisappear { ui.kitDrawerOpen = false }
+            .sheet(isPresented: $creatingSection) {
+                NewSectionView { title, kind, volumeSlider, shuffle in
+                    addSection(to: kit, kind: kind, title: title, volume: volumeSlider ? 1 : nil, shuffle: shuffle)
+                }
+            }
             .alert("Section name", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("Name", text: $renameText)
                 Button("Save") {
@@ -133,17 +139,8 @@ struct KitView: View {
             }
             .buttonStyle(.bordered)
             .tint(editing ? Color.accentColor : nil)
-            Menu {
-                Button {
-                    addSection(to: kit, kind: .mixed)
-                } label: {
-                    Label("Sound Section", systemImage: "square.grid.2x2")
-                }
-                Button {
-                    addSection(to: kit, kind: .ambience)
-                } label: {
-                    Label("Ambience Section", systemImage: "square.3.layers.3d")
-                }
+            Button {
+                creatingSection = true
             } label: {
                 IconLabel("Section", icon: "plus", size: 14)
             }
@@ -311,12 +308,13 @@ struct KitView: View {
         drawerOpen = true
     }
 
-    private func addSection(to kit: SoundKit, kind: SectionKind) {
+    private func addSection(to kit: SoundKit, kind: SectionKind, title: String? = nil, volume: Double? = nil, shuffle: Bool = false) {
         let bottom = kit.sections.reduce(0) { max($0, $1.y + $1.h) }
         let ambienceKind = kind == .ambience
+        let name = (title ?? "").trimmingCharacters(in: .whitespaces)
         let section = KitSection(
             id: UUID(),
-            title: ambienceKind ? "Ambience" : "New Section",
+            title: name.isEmpty ? (ambienceKind ? "Ambience" : "New Section") : name,
             kind: kind,
             x: 0,
             y: bottom,
@@ -324,11 +322,16 @@ struct KitView: View {
             h: ambienceKind ? 5 : 6,
             size: .m,
             items: [],
-            layers: []
+            layers: [],
+            volume: volume,
+            shuffle: ambienceKind ? nil : (shuffle ? true : nil)
         )
         change(kit) { $0.sections.append(section) }
-        renameText = section.title
-        renaming = section
+        // A named section from the sheet is ready; an automatic one gets a name now.
+        if title == nil {
+            renameText = section.title
+            renaming = section
+        }
     }
 
     private func removeSection(_ section: KitSection, from kit: SoundKit) {
@@ -396,6 +399,8 @@ struct KitSectionView: View {
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var ambience: AmbienceMixer
+    @EnvironmentObject private var player: SoundPlayer
+    @EnvironmentObject private var bashPlayer: BashPlayer
     @EnvironmentObject private var ui: AppUI
     let kit: SoundKit
     let section: KitSection
@@ -409,12 +414,16 @@ struct KitSectionView: View {
     let onMoveItem: (KitItem, UUID?, UUID) -> Void
 
     @State private var dropHover = false
+    @State private var lastShuffled: KitItem?
 
     private let ambienceColor = Color(hex: 0x6EE7B7)
 
     var body: some View {
         VStack(spacing: 0) {
             head
+            if section.volume != nil {
+                volumeRow
+            }
             Divider()
             ScrollView {
                 content
@@ -486,6 +495,17 @@ struct KitSectionView: View {
                 .disabled(!anyOn)
             }
             Spacer(minLength: 4)
+            if section.hasShuffle {
+                Button(action: shufflePlay) {
+                    Image(systemName: "shuffle")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .disabled(section.items.isEmpty)
+                .accessibilityLabel("Play a random item")
+            }
             Button(action: onAdd) {
                 AppIcon(id: "plus", size: 16)
                     .frame(width: 30, height: 30)
@@ -496,6 +516,19 @@ struct KitSectionView: View {
             Menu {
                 Button(section.isAmbience ? "Add Layers…" : "Add from Library…", action: onAdd)
                 Button("Rename…", action: onRename)
+                Toggle("Volume Slider", isOn: Binding(get: { section.volume != nil }, set: { on in
+                    var s = section
+                    s.volume = on ? 1 : nil
+                    onChange(s)
+                    applyGain(s.gain)
+                }))
+                if !section.isAmbience {
+                    Toggle("Shuffle Button", isOn: Binding(get: { section.shuffle == true }, set: { on in
+                        var s = section
+                        s.shuffle = on ? true : nil
+                        onChange(s)
+                    }))
+                }
                 if !section.isAmbience {
                     Picker("Item size", selection: Binding(get: { section.size }, set: { size in
                         var s = section
@@ -531,6 +564,63 @@ struct KitSectionView: View {
         .background(section.isAmbience ? ambienceColor.opacity(0.07) : Color.clear)
     }
 
+    // MARK: Section volume and shuffle
+
+    /// The section's own volume: scales everything played from it.
+    private var volumeRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "speaker.fill").font(.caption2).foregroundStyle(.secondary)
+            Slider(value: Binding(
+                get: { section.volume ?? 1 },
+                set: { value in
+                    var s = section
+                    s.volume = value
+                    onChange(s)
+                    applyGain(value)
+                }
+            ), in: 0...1)
+            .controlSize(.mini)
+            .accessibilityLabel("\(section.title) volume")
+            Image(systemName: "speaker.wave.3.fill").font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+    }
+
+    /// Updates what's playing from this section to a new section volume.
+    private func applyGain(_ gain: Double) {
+        if section.isAmbience {
+            for layer in section.layers {
+                ambience.setVoiceVolume(section.voiceId(layer), volume: layer.volume * gain)
+            }
+            return
+        }
+        player.setGain(gain, for: section.items.filter { $0.type == .sound }.map(\.id))
+        if let playing = bashPlayer.playingId, section.items.contains(KitItem(type: .bash, id: playing)) {
+            bashPlayer.setVolume(player.masterVolume * gain)
+        }
+    }
+
+    /// Plays a random sound or bash from the section (not the same one twice in a row).
+    private func shufflePlay() {
+        let candidates = section.items.filter { item in
+            item.type == .bash ? bashes.bash(item.id) != nil : store.sound(item.id) != nil
+        }
+        let fresh = candidates.count > 1 ? candidates.filter { $0 != lastShuffled } : candidates
+        guard let pick = fresh.randomElement() else { return }
+        lastShuffled = pick
+        switch pick.type {
+        case .sound:
+            if let sound = store.sound(pick.id) {
+                playSound(sound, store: store, player: player, ui: ui, gain: section.gain)
+            }
+        case .bash:
+            if let bash = bashes.bash(pick.id) {
+                bashPlayer.play(bash, store: store, masterVolume: player.masterVolume * section.gain)
+            }
+        }
+    }
+
     // MARK: Content
 
     @ViewBuilder
@@ -543,7 +633,7 @@ struct KitSectionView: View {
     }
 
     private var itemContent: some View {
-        let filtering = ui.isFiltering
+        let filtering = false // Scene kits always show everything in them.
         let query = ui.search.trimmingCharacters(in: .whitespaces).lowercased()
         var bashItems: [KitEntry<Bash>] = []
         var clipItems: [KitEntry<Sound>] = []
@@ -575,7 +665,7 @@ struct KitSectionView: View {
             if !bashItems.isEmpty {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth), spacing: 8)], spacing: 8) {
                     ForEach(bashItems) { entry in
-                        BashCard(bash: entry.value, size: section.size)
+                        BashCard(bash: entry.value, size: section.size, gain: section.gain)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
                             .contextMenu { itemMenu(entry.item) }
                     }
@@ -584,7 +674,7 @@ struct KitSectionView: View {
             if !clipItems.isEmpty {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: tileWidth), spacing: 8)], spacing: 8) {
                     ForEach(clipItems) { entry in
-                        SoundTile(sound: entry.value, size: section.size)
+                        SoundTile(sound: entry.value, size: section.size, gain: section.gain)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
                             .contextMenu { itemMenu(entry.item) }
                     }
@@ -593,7 +683,7 @@ struct KitSectionView: View {
             if !fullItems.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(fullItems) { entry in
-                        TrackRow(sound: entry.value, size: section.size)
+                        TrackRow(sound: entry.value, size: section.size, gain: section.gain)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
                             .contextMenu { itemMenu(entry.item) }
                     }
@@ -674,7 +764,7 @@ struct KitSectionView: View {
         let isOn = ambience.isPlaying(voice: voice)
         return VStack(alignment: .leading, spacing: 8) {
             Button {
-                ambience.toggleVoice(voice, kind: layer.kind, ref: layer.ref, volume: layer.volume)
+                ambience.toggleVoice(voice, kind: layer.kind, ref: layer.ref, volume: layer.volume * section.gain)
             } label: {
                 HStack(spacing: 10) {
                     AppIcon(id: Self.layerIcon(layer), size: 20)
@@ -698,7 +788,7 @@ struct KitSectionView: View {
             Slider(value: Binding(
                 get: { layer.volume },
                 set: { volume in
-                    ambience.setVoiceVolume(voice, volume: volume)
+                    ambience.setVoiceVolume(voice, volume: volume * section.gain)
                     var s = section
                     if let i = s.layers.firstIndex(where: { $0.id == layer.id }) { s.layers[i].volume = volume }
                     onChange(s)
@@ -739,5 +829,70 @@ struct KitSectionView: View {
             ("campfire", "campfire"), ("fire", "flame"), ("cave", "cave"), ("night", "moon"), ("forest", "pine"), ("drone", "eye"),
         ]
         return matches.first { ref.contains($0.0) }?.1 ?? "layers"
+    }
+}
+
+/// "+ Section": name, type and options for a new section.
+struct NewSectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    /// (title, kind, volume slider, shuffle button)
+    let onCreate: (String, SectionKind, Bool, Bool) -> Void
+
+    @State private var title = ""
+    @State private var kind: SectionKind = .mixed
+    @State private var volumeSlider = false
+    @State private var shuffle = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Name") {
+                    TextField(kind == .ambience ? "Ambience" : "e.g. Spells, Crowd, Boss Fight", text: $title)
+                }
+                Section {
+                    Picker("Holds", selection: $kind) {
+                        ForEach([SectionKind.mixed, .clips, .full, .bashes, .ambience], id: \.self) { kind in
+                            Label(kind == .mixed ? "Anything" : kind.label, systemImage: Self.symbol(kind)).tag(kind)
+                        }
+                    }
+                } header: {
+                    Text("Type")
+                } footer: {
+                    Text(kind == .ambience
+                         ? "Looping background layers, such as rain or a campfire, each with its own volume."
+                         : "Sounds and bashes. The type decides what the library panel shows first.")
+                }
+                Section("Options") {
+                    Toggle("Volume slider", isOn: $volumeSlider)
+                    if kind != .ambience {
+                        Toggle("Shuffle button", isOn: $shuffle)
+                    }
+                }
+            }
+            .navigationTitle("New Section")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        onCreate(title, kind, volumeSlider, kind != .ambience && shuffle)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private static func symbol(_ kind: SectionKind) -> String {
+        switch kind {
+        case .bashes: return "bolt"
+        case .clips: return "scissors"
+        case .full: return "music.note"
+        case .mixed: return "square.grid.2x2"
+        case .ambience: return "square.3.layers.3d"
+        }
     }
 }

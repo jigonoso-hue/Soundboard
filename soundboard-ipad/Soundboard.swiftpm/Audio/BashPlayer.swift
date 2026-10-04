@@ -23,6 +23,7 @@ final class BashPlayer: ObservableObject {
     private struct Instance {
         let player: AVAudioPlayer
         let end: Double
+        let clipVolume: Double
     }
 
     private var tracks: [Track] = []
@@ -80,6 +81,12 @@ final class BashPlayer: ObservableObject {
 
     func isPlaying(_ id: UUID) -> Bool { playingId == id }
 
+    /// Changes the overall level of the playing bash (a scene kit section's volume slider).
+    func setVolume(_ level: Double) {
+        volume = level
+        for instance in instances { instance.player.volume = Float(min(1, instance.clipVolume * level)) }
+    }
+
     private var now: Double {
         guard let clock else { return 0 }
         return clock.deviceCurrentTime - base
@@ -110,7 +117,7 @@ final class BashPlayer: ObservableObject {
                     player.currentTime = elapsed - startAt
                     player.play()
                 }
-                instances.append(Instance(player: player, end: endAt))
+                instances.append(Instance(player: player, end: endAt, clipVolume: clip.volume))
             }
         }
     }

@@ -12,6 +12,9 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
   - **Add** opens a library panel with search, type and tag filters. Tap to add or remove, or drag onto any section.
   - Drag items between sections, or long-press an item → **Move to Section**.
   - **Ambience sections** hold looping layers (built-in loops or your own sounds), each with its own on/off and volume.
+  - **+ Section** asks for a name and type. It can also add a **volume slider** for the section, which adjusts everything played from it, and a **shuffle button**, which plays a random sound or bash from it. You can turn both on or off later in the section's **⋯** menu.
+  - While a kit is open, the toolbar only has the master volume and **Stop All**.
+- **Full sounds** show a volume slider while they play, like ambience layers. The level you set is kept for next time.
 - **Icons.** The same 100 tabletop-game icons as the Mac app, for bash covers and scene kits. Search them, browse by group, and pick any background colour and icon colour.
 - **Your own sounds.** Tap **+** to add audio from the Files app, or pick a video from Files or Photos and trim out the part you want.
 - **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer.

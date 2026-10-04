@@ -5,6 +5,8 @@ import Foundation
 final class SoundPlayer: ObservableObject {
     /// Playing sounds → playback progress (0...1) of their most recent instance.
     @Published private(set) var progress: [UUID: Double] = [:]
+    /// Live volume of each playing sound (its own volume, adjustable while it plays).
+    @Published private(set) var volumes: [UUID: Double] = [:]
 
     @Published var masterVolume: Double {
         didSet {
@@ -19,7 +21,9 @@ final class SoundPlayer: ObservableObject {
 
     private final class Voice {
         let player: AVAudioPlayer
-        let volume: Double
+        var volume: Double
+        /// Extra level from where it was played, such as a scene kit section's volume slider.
+        var gain: Double = 1
         /// Seconds to wait before replaying, or nil to play once.
         let repeatGap: Double?
         /// When a repeating voice finished and is waiting to replay.
@@ -44,7 +48,7 @@ final class SoundPlayer: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(true)
     }
 
-    func play(_ sound: Sound, url: URL) throws {
+    func play(_ sound: Sound, url: URL, gain: Double = 1) throws {
         // A repeating sound toggles: tapping it again stops it instead of stacking another copy.
         if sound.repeatGap != nil && progress[sound.id] != nil {
             stop(sound.id)
@@ -52,12 +56,16 @@ final class SoundPlayer: ObservableObject {
         }
         if restartInsteadOfOverlap { stop(sound.id) }
         let player = try AVAudioPlayer(contentsOf: url)
-        player.volume = Float(min(1, sound.volume * masterVolume))
+        let volume = volumes[sound.id] ?? sound.volume
+        player.volume = Float(min(1, volume * gain * masterVolume))
         if sound.repeatGap == 0 { player.numberOfLoops = -1 } // replay immediately, gaplessly
         player.prepareToPlay()
         player.play()
-        players[sound.id, default: []].append(Voice(player: player, volume: sound.volume, repeatGap: sound.repeatGap))
+        let voice = Voice(player: player, volume: volume, repeatGap: sound.repeatGap)
+        voice.gain = gain
+        players[sound.id, default: []].append(voice)
         progress[sound.id] = 0
+        volumes[sound.id] = volume
         startTicker()
     }
 
@@ -65,6 +73,7 @@ final class SoundPlayer: ObservableObject {
         players[id]?.forEach { $0.player.stop() }
         players[id] = nil
         progress[id] = nil
+        volumes[id] = nil
     }
 
     func stopAll() {
@@ -73,7 +82,28 @@ final class SoundPlayer: ObservableObject {
 
     private func applyVolumes() {
         for list in players.values {
-            for entry in list { entry.player.volume = Float(min(1, entry.volume * masterVolume)) }
+            for entry in list { entry.player.volume = Float(min(1, entry.volume * entry.gain * masterVolume)) }
+        }
+    }
+
+    /// Changes a playing sound's volume (the slider on a playing full sound).
+    func setVolume(_ volume: Double, for id: UUID) {
+        let value = min(1, max(0, volume))
+        guard let list = players[id] else { return }
+        volumes[id] = value
+        for voice in list {
+            voice.volume = value
+            voice.player.volume = Float(min(1, value * voice.gain * masterVolume))
+        }
+    }
+
+    /// Changes the extra level of playing sounds (a scene kit section's volume slider).
+    func setGain(_ gain: Double, for ids: [UUID]) {
+        for id in ids {
+            for voice in players[id] ?? [] {
+                voice.gain = gain
+                voice.player.volume = Float(min(1, voice.volume * gain * masterVolume))
+            }
         }
     }
 

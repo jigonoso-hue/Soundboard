@@ -22,13 +22,13 @@ struct BashCoverView: View {
 
 /// Starts or stops a bash.
 @MainActor
-func toggleBash(_ bash: Bash, store: SoundStore, player: SoundPlayer, bashPlayer: BashPlayer, ui: AppUI) {
+func toggleBash(_ bash: Bash, store: SoundStore, player: SoundPlayer, bashPlayer: BashPlayer, ui: AppUI, gain: Double = 1) {
     if bashPlayer.isPlaying(bash.id) {
         bashPlayer.stop()
     } else if bash.clips.isEmpty {
         ui.editingBash = BashEditRequest(id: bash.id)
     } else {
-        bashPlayer.play(bash, store: store, masterVolume: player.masterVolume)
+        bashPlayer.play(bash, store: store, masterVolume: player.masterVolume * gain)
     }
 }
 
@@ -40,12 +40,14 @@ struct BashCard: View {
     @EnvironmentObject private var ui: AppUI
     let bash: Bash
     var size: ItemSize = .m
+    /// Extra level, such as a scene kit section's volume slider.
+    var gain: Double = 1
 
     var body: some View {
         let playing = bashPlayer.isPlaying(bash.id)
         let coverSize: CGFloat = size == .s ? 34 : (size == .l ? 60 : 44)
         Button {
-            toggleBash(bash, store: store, player: player, bashPlayer: bashPlayer, ui: ui)
+            toggleBash(bash, store: store, player: player, bashPlayer: bashPlayer, ui: ui, gain: gain)
         } label: {
             HStack(spacing: 10) {
                 BashCoverView(cover: bash.cover, size: coverSize)
