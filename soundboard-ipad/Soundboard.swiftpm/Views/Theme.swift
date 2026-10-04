@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The app's look: light/dark, background, accent colour and lettering.
 enum AppTheme: String, CaseIterable, Identifiable {
-    case system, dark, light, tavern, spaceAge
+    case system, dark, light, tavern, spaceAge, scifi
 
     var id: String { rawValue }
 
@@ -13,6 +13,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .light: return "Light"
         case .tavern: return "Tavern"
         case .spaceAge: return "Space Age"
+        case .scifi: return "Sci-Fi"
         }
     }
 
@@ -23,6 +24,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .light: return "Bright and clean"
         case .tavern: return "Old parchment on a tavern table"
         case .spaceAge: return "Deep space through a starship window"
+        case .scifi: return "A glowing starship HUD"
         }
     }
 
@@ -30,7 +32,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var colorScheme: ColorScheme? {
         switch self {
         case .system: return nil
-        case .dark, .spaceAge: return .dark
+        case .dark, .spaceAge, .scifi: return .dark
         case .light, .tavern: return .light
         }
     }
@@ -40,6 +42,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .tavern: return "#9c3d12"
         case .spaceAge: return "#2ad4c0"
+        case .scifi: return "#3fd2ff"
         default: return "#b04cff"
         }
     }
@@ -49,19 +52,21 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .tavern: return .serif
         case .spaceAge: return .rounded
+        case .scifi: return .monospaced
         default: return .default
         }
     }
 
     var isTavern: Bool { self == .tavern }
     /// Themes that paint their own backdrop and put pages on panels.
-    var hasBackdrop: Bool { self == .tavern || self == .spaceAge }
+    var hasBackdrop: Bool { self == .tavern || self == .spaceAge || self == .scifi }
 
     /// Colour of the navigation bar in themes that paint their own backdrop.
     var barColor: Color? {
         switch self {
         case .tavern: return Color(hex: 0x3A2414)
         case .spaceAge: return Color(hex: 0x0B1226)
+        case .scifi: return Color(hex: 0x041426)
         default: return nil
         }
     }
@@ -71,6 +76,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .tavern: return Color(hex: 0x2B1A0C)
         case .spaceAge: return Color(hex: 0xF6EFDD)
+        case .scifi: return Color(hex: 0xDDF6FF)
         default: return nil
         }
     }
@@ -80,6 +86,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .tavern: return Color(hex: 0x5B4127)
         case .spaceAge: return Color(hex: 0xA9B6D6)
+        case .scifi: return Color(hex: 0x7FB6D4)
         default: return .secondary
         }
     }
@@ -89,6 +96,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .tavern: return Color(hex: 0x7A5228).opacity(active ? 0.28 : 0.16)
         case .spaceAge: return Color(hex: 0x0C142C).opacity(active ? 0.95 : 0.82)
+        case .scifi: return Color(hex: 0x08203A).opacity(active ? 0.95 : 0.8)
         default: return Color.secondary.opacity(active ? 0.18 : 0.1)
         }
     }
@@ -98,6 +106,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .tavern: return Color(hex: 0x5A3A18).opacity(0.55)
         case .spaceAge: return Color(hex: 0xF6EFDD).opacity(0.55)
+        case .scifi: return Color(hex: 0x3FD2FF).opacity(0.55)
         default: return Color.secondary.opacity(0.25)
         }
     }
@@ -121,6 +130,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var tileBase: Color {
         switch self {
         case .spaceAge: return Color(hex: 0x0C142C).opacity(0.85)
+        case .scifi: return Color(hex: 0x081E36).opacity(0.85)
         case .tavern: return Color(hex: 0xF3E6C8).opacity(0.6)
         default: return .clear
         }
@@ -441,7 +451,7 @@ struct TavernBackdrop: View {
 }
 
 /// A themed "sheet" behind a card or strip: parchment in Tavern, an atomic panel
-/// in Space Age, otherwise `fallback`.
+/// in Space Age, a HUD panel in Sci-Fi, otherwise `fallback`.
 struct ThemePanel<Fallback: View>: View {
     let theme: AppTheme
     let seed: String
@@ -451,6 +461,7 @@ struct ThemePanel<Fallback: View>: View {
         switch theme {
         case .tavern: Parchment(seed: seed).equatable()
         case .spaceAge: AtomicPanel(seed: seed).equatable()
+        case .scifi: HUDPanel(seed: seed).equatable()
         default: fallback()
         }
     }
@@ -458,7 +469,7 @@ struct ThemePanel<Fallback: View>: View {
 
 extension View {
     /// In the Tavern theme: the table with this screen on its own parchment page, or the
-    /// bare table when `page` is nil. In Space Age: the window onto space.
+    /// bare table when `page` is nil. In Space Age: the window onto space. In Sci-Fi: the HUD.
     @ViewBuilder
     func themedBackground(_ theme: AppTheme, page: String? = "page") -> some View {
         switch theme {
@@ -470,6 +481,10 @@ extension View {
             self
                 .scrollContentBackground(.hidden)
                 .background(SpaceScene(seed: page ?? "board").equatable().ignoresSafeArea())
+        case .scifi:
+            self
+                .scrollContentBackground(.hidden)
+                .background(HUDBackdrop().equatable().ignoresSafeArea())
         default:
             self
         }
