@@ -10,8 +10,15 @@ struct KitView: View {
     let kitId: UUID
 
     @State private var editing = false
-    @State private var drawerOpen = false
-    @State private var drawerTarget: UUID?
+    // The library panel is shown by ContentView, beside the whole page (so the toolbar moves with the board).
+    private var drawerOpen: Bool {
+        get { ui.kitDrawerOpen }
+        nonmutating set { ui.kitDrawerOpen = newValue }
+    }
+    private var drawerTarget: UUID? {
+        get { ui.kitDrawerTarget }
+        nonmutating set { ui.kitDrawerTarget = newValue }
+    }
     @State private var dragging: DragState?
     @State private var renaming: KitSection?
     @State private var renameText = ""
@@ -43,10 +50,7 @@ struct KitView: View {
                     .padding(12)
                 }
             }
-            .inspector(isPresented: $drawerOpen) {
-                KitDrawerView(kitId: kitId, target: $drawerTarget) { drawerOpen = false }
-                    .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
-            }
+            .onDisappear { ui.kitDrawerOpen = false }
             .alert("Section name", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("Name", text: $renameText)
                 Button("Save") {

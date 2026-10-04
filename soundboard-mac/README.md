@@ -148,12 +148,12 @@ In the editor window:
 
 ## YouTube ad blocker
 
-The YouTube browser blocks ads, and **Block YouTube ads** in the sidebar turns it on or off (it's on by default). It works in three ways:
+The YouTube browser always blocks ads. It works in three ways:
 - **Removes ad breaks:** it takes the list of ad breaks out of the video information YouTube sends its player, so most ads never start.
 - **Skips ads that still play:** they're muted, jumped to the end, and their **Skip** button is pressed.
 - **Hides banner and feed ads,** and blocks requests to ad and ad-tracking servers.
 
-Changing the setting reloads the YouTube page. The iPad app uses the same blocker; `tools/sync-adblock.py` copies it across after changes.
+The iPad app uses the same blocker; `tools/sync-adblock.py` copies it across after changes.
 
 ## Ambience
 

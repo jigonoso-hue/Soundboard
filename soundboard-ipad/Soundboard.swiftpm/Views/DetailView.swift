@@ -100,41 +100,36 @@ struct DetailView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Menu {
-                Picker("Sort", selection: $ui.sort) {
-                    ForEach(SoundSort.allCases, id: \.self) { sort in
-                        Text(sort.label).tag(sort)
-                    }
-                }
-            } label: {
-                Label("Sort", systemImage: "arrow.up.arrow.down")
-            }
             Button {
                 showSettings = true
             } label: {
-                Label("Settings", systemImage: "slider.horizontal.3")
+                Label("Sort and Settings", systemImage: "slider.horizontal.3")
             }
             .popover(isPresented: $showSettings) {
                 SettingsPopover()
             }
             Menu {
-                Button {
-                    showFileImporter = true
-                } label: {
-                    Label("Audio or Video from Files…", systemImage: "folder")
+                Section("Add Sounds") {
+                    Button {
+                        showFileImporter = true
+                    } label: {
+                        Label("Audio or Video from Files…", systemImage: "folder")
+                    }
+                    Button {
+                        showPhotoPicker = true
+                    } label: {
+                        Label("Video from Photos…", systemImage: "photo.on.rectangle")
+                    }
                 }
-                Button {
-                    showPhotoPicker = true
-                } label: {
-                    Label("Video from Photos…", systemImage: "photo.on.rectangle")
+                Section {
+                    Button {
+                        showBrowser.toggle()
+                    } label: {
+                        Label(showBrowser ? "Hide Online" : "Online", systemImage: "globe")
+                    }
                 }
             } label: {
                 Label("Add Sounds", systemImage: "plus")
-            }
-            Button {
-                showBrowser.toggle()
-            } label: {
-                Label("YouTube", systemImage: showBrowser ? "play.rectangle.fill" : "play.rectangle")
             }
             Button {
                 player.stopAll()
@@ -182,10 +177,20 @@ struct DetailView: View {
 /// Master volume and playback options.
 struct SettingsPopover: View {
     @EnvironmentObject private var player: SoundPlayer
-    @EnvironmentObject private var youtube: YouTubeController
+    @EnvironmentObject private var ui: AppUI
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Sort sounds").font(.headline)
+                Picker("Sort", selection: $ui.sort) {
+                    ForEach(SoundSort.allCases, id: \.self) { sort in
+                        Text(sort.label).tag(sort)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            Divider()
             Text("Master volume").font(.headline)
             HStack {
                 Image(systemName: "speaker.fill").foregroundStyle(.secondary)
@@ -196,14 +201,9 @@ struct SettingsPopover: View {
             Text("When on, a sound restarts instead of layering over itself.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Divider()
-            Toggle("Block YouTube ads", isOn: Binding(get: { youtube.blockAds }, set: { youtube.setBlockAds($0) }))
-            Text("Skips video ads and hides banner ads in the YouTube browser.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .padding(20)
-        .frame(minWidth: 300)
+        .frame(minWidth: 360)
         .presentationCompactAdaptation(.popover)
     }
 }

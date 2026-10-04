@@ -2,8 +2,8 @@
 // <video> element between two timestamps and hands the bytes to the host app.
 const { ipcRenderer, contextBridge } = require('electron');
 
-// The ad blocker has to run in the page's own world, before YouTube's scripts.
-if (ipcRenderer.sendSync('adblock:enabled')) contextBridge.executeInMainWorld({ func: youtubeAdBlocker });
+// The ad blocker (always on) has to run in the page's own world, before YouTube's scripts.
+contextBridge.executeInMainWorld({ func: youtubeAdBlocker });
 
 function getVideo() {
   return document.querySelector('video.html5-main-video') || document.querySelector('video');

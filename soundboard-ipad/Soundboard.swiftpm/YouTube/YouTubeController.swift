@@ -29,9 +29,6 @@ final class YouTubeController: ObservableObject {
     /// Called with the finished .m4a file, the sound's name and where it came from.
     var onCaptured: ((URL, String, SoundSource) throws -> Void)?
 
-    /// "Block YouTube ads" (on by default).
-    @Published private(set) var blockAds: Bool = UserDefaults.standard.object(forKey: "blockAds") as? Bool ?? true
-
     let webView: WKWebView
     private let content: WKUserContentController
     private var adRules: WKContentRuleList?
@@ -77,15 +74,13 @@ final class YouTubeController: ObservableObject {
 
     private func installScripts() {
         content.removeAllUserScripts()
-        if blockAds {
-            content.addUserScript(WKUserScript(source: AdBlockScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
+        // The ad blocker is always on.
+        content.addUserScript(WKUserScript(source: AdBlockScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // Must run before YouTube's player starts, to see the audio it downloads.
         content.addUserScript(WKUserScript(source: SegmentScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.addUserScript(WKUserScript(source: CaptureScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
 
         content.removeAllContentRuleLists()
-        guard blockAds else { return }
         if let adRules {
             content.add(adRules)
             return
@@ -96,18 +91,10 @@ final class YouTubeController: ObservableObject {
         ) { [weak self] list, _ in
             guard let self, let list else { return }
             self.adRules = list
-            if self.blockAds { self.content.add(list) }
+            self.content.add(list)
         }
     }
 
-    /// Turns the YouTube ad blocker on or off and reloads the page.
-    func setBlockAds(_ enabled: Bool) {
-        guard enabled != blockAds else { return }
-        blockAds = enabled
-        UserDefaults.standard.set(enabled, forKey: "blockAds")
-        installScripts()
-        if webView.url != nil { webView.reload() }
-    }
 
     // MARK: Navigation
 

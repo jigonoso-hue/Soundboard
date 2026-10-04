@@ -48,7 +48,7 @@ Apps installed with a free Apple ID stop opening after 7 days. Run it from Xcode
 
 ## Making a sound from YouTube
 
-1. Tap **YouTube** in the toolbar.
+1. Tap **+** in the toolbar, then **Online**.
 2. Search, or paste a video link, and play the video.
 3. Tap **Set Start** and **Set End** at the moments you want, or type times such as `1:23.5`.
 4. Tap ▶ to preview. Then enter a name (optional) and tap **✂ Create Sound**.
@@ -65,7 +65,7 @@ The app saves the audio that YouTube's player downloads, so nothing needs to pla
 
 ## Ad blocker
 
-The YouTube browser blocks ads, using the same blocker as the Mac app. It removes ad breaks from the video information, skips any ad that still plays, and hides banner ads. Turn it off or on with the settings button (sliders icon) → **Block YouTube ads**.
+The online (YouTube) browser always blocks ads, using the same blocker as the Mac app. It removes ad breaks from the video information, skips any ad that still plays, and hides banner ads.
 
 ## Ambience
 

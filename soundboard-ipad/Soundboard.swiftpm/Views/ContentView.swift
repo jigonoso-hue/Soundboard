@@ -27,6 +27,14 @@ struct ContentView: View {
                 NavigationStack {
                     DetailView(destination: selection ?? .all, showBrowser: $showBrowser)
                 }
+                // Outside the NavigationStack, the panel gets its own full-height column,
+                // and the toolbar stays above the board instead of over the panel.
+                .inspector(isPresented: kitDrawerOpen) {
+                    if case .kit(let id)? = selection {
+                        KitDrawerView(kitId: id, target: $ui.kitDrawerTarget) { ui.kitDrawerOpen = false }
+                            .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
+                    }
+                }
                 .frame(maxWidth: .infinity)
                 // On a full-width iPad the browser sits beside the board, like on the Mac.
                 if showBrowser && sizeClass == .regular {
@@ -40,7 +48,7 @@ struct ContentView: View {
         .fullScreenCover(isPresented: compactBrowser) {
             NavigationStack {
                 YouTubePanel(controller: youtube)
-                    .navigationTitle("YouTube")
+                    .navigationTitle("Online")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
@@ -111,6 +119,16 @@ struct ContentView: View {
             // A deleted kit can't stay selected.
             if case .kit(let id)? = selection, !list.contains(where: { $0.id == id }) { selection = .all }
         }
+    }
+
+    private var kitDrawerOpen: Binding<Bool> {
+        Binding(
+            get: {
+                if case .kit? = selection { return ui.kitDrawerOpen }
+                return false
+            },
+            set: { ui.kitDrawerOpen = $0 }
+        )
     }
 
     private var compactBrowser: Binding<Bool> {

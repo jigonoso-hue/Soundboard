@@ -313,17 +313,7 @@ function registerIpc() {
   });
 }
 
-// App settings that the main process needs (settings.json in userData).
-const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { blockAds: true };
-function loadSettings() {
-  try { settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsPath(), 'utf8')) }; } catch { /* defaults */ }
-}
-function saveSettings() {
-  fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2));
-}
-
-// Ad and ad-tracking servers, blocked in the YouTube browser while "Block YouTube ads" is on.
+// Ad and ad-tracking servers, always blocked in the YouTube browser.
 const AD_URLS = [
   '*://*.doubleclick.net/*', '*://*.googlesyndication.com/*', '*://*.googleadservices.com/*',
   '*://www.youtube.com/pagead/*', '*://m.youtube.com/pagead/*',
@@ -332,16 +322,8 @@ const AD_URLS = [
 ];
 
 app.whenReady().then(() => {
-  loadSettings();
   session.fromPartition('persist:youtube').webRequest.onBeforeRequest({ urls: AD_URLS }, (_details, callback) => {
-    callback({ cancel: !!settings.blockAds });
-  });
-  ipcMain.on('adblock:enabled', (event) => { event.returnValue = !!settings.blockAds; });
-  ipcMain.handle('adblock:get', () => !!settings.blockAds);
-  ipcMain.handle('adblock:set', (_e, enabled) => {
-    settings.blockAds = !!enabled;
-    saveSettings();
-    return settings.blockAds;
+    callback({ cancel: true });
   });
   library = new Library(path.join(app.getPath('userData'), 'sounds'));
   bashes = new BashStore(library.dir);

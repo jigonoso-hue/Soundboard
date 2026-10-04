@@ -43,6 +43,9 @@ final class AppUI: ObservableObject {
     @Published var editingKit: KitEditRequest?
     @Published var choosingKitFor: KitChoice?
     @Published var errorMessage: String?
+    /// The scene kit library panel, and the section it adds to.
+    @Published var kitDrawerOpen = false
+    @Published var kitDrawerTarget: UUID?
 
     init() {
         let defaults = UserDefaults.standard
