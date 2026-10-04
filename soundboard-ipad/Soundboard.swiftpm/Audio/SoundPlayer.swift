@@ -45,9 +45,8 @@ final class SoundPlayer: ObservableObject {
         let defaults = UserDefaults.standard
         masterVolume = defaults.object(forKey: "masterVolume") as? Double ?? 1
         restartInsteadOfOverlap = defaults.bool(forKey: "restartInsteadOfOverlap")
-        // .mixWithOthers lets sounds play over music, calls, or the YouTube view.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // Playback that mixes with music or the YouTube view and keeps going with the screen locked.
+        BackgroundAudio.shared.configure()
     }
 
     func play(_ sound: Sound, url: URL, gain: Double = 1) throws {

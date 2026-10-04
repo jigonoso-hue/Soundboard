@@ -37,13 +37,16 @@ let package = Package(
                     purposeString: "Dungeon Radio uses your local network to find and host Live Sessions with other players at the table.",
                     bonjourServiceTypes: ["_dungeonradio._tcp"]
                 )
-            ]
+            ],
+            // Background audio: sounds keep playing with the screen locked or in another app.
+            additionalInfoPlistContentFilePath: "BackgroundAudio.plist"
         )
     ],
     targets: [
         .executableTarget(
             name: "AppModule",
             path: ".",
+            exclude: ["BackgroundAudio.plist"],
             resources: [
                 .process("Resources")
             ]

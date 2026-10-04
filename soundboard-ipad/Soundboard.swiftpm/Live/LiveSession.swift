@@ -172,6 +172,8 @@ final class LiveSession: ObservableObject {
         if mode == .local { code = nil }
         peers = []
         role = .host
+        // Keep broadcasting with the screen locked or in another app.
+        BackgroundAudio.shared.keepAlive(true)
         lastAmbience = nil
         lastScene = nil
         lastPrefetch = nil
@@ -191,6 +193,7 @@ final class LiveSession: ObservableObject {
         code = nil
         reconnecting = false
         role = .idle
+        BackgroundAudio.shared.keepAlive(false)
         error = message
     }
 
@@ -381,8 +384,8 @@ final class LiveSession: ObservableObject {
         hostName = nil
         scene = nil
         browser.stop()
-        // Keep the screen on so the sounds keep playing.
-        UIApplication.shared.isIdleTimerDisabled = true
+        // Stay connected and playing with the screen locked or in another app.
+        BackgroundAudio.shared.keepAlive(true)
         engine.start()
     }
 
@@ -402,6 +405,6 @@ final class LiveSession: ObservableObject {
         role = .idle
         connected = false
         nowPlaying = []
-        UIApplication.shared.isIdleTimerDisabled = false
+        BackgroundAudio.shared.keepAlive(false)
     }
 }

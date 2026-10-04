@@ -93,11 +93,15 @@ Play to your players' own devices, or tune in to your GM's. Tap the **Live** but
 - **GM only:** turn it on in a sound's Edit screen and it plays only on your device. Tiles show a **GM** badge.
 - **Buzz:** turn it on in a sound's Edit screen for big hits. Listeners' iPhones vibrate when it plays.
 
-**Tune In (a player).** Enter your name, then pick a nearby session or enter the GM's code. You get your own sliders for overall volume, music, effects and ambience. Keep the app open while tuned in; the screen stays on.
+**Tune In (a player).** Enter your name, then pick a nearby session or enter the GM's code. You get your own sliders for overall volume, music, effects and ambience. Sounds keep playing with the screen locked or while you use another app.
 
 The first time you broadcast or look for sessions, iOS asks to use the local network: tap **Allow**. Online sessions need the relay at a secure (`wss://` or `https://`) address.
 
 The GM's app sends commands, not audio: each listener fetches every sound file once, caches it, syncs its clock with the GM's and plays each sound itself, in time. A Mac and an iPhone or iPad can share a session.
+
+## Playing with the screen locked
+
+Sounds keep playing when you lock the screen or switch to another app: music, ambience and anything already started carry on. During a Live Session (hosting or tuned in) the app also stays connected in the background, so new cues still arrive. Force-quitting the app (swiping it away) or turning the device off stops everything.
 
 ## Saving a whole video's audio
 
@@ -126,6 +130,8 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Audio/SoundPlayer.swift` | Playback, volumes, progress |
 | `Audio/AudioFiles.swift` | Streaming .m4a encoding of captures and trimming audio out of videos |
 | `Audio/AmbienceMixer.swift` | Ambience layers |
+| `Audio/BackgroundAudio.swift` | Audio session, interruptions, and staying alive in the background during Live Sessions |
+| `BackgroundAudio.plist` | Declares background audio (merged into the app's Info.plist) |
 | `Resources/Ambience/` | Built-in loops (made by `tools/generate-ambience.py`) |
 | `Live/LiveNet.swift` | Live Session networking: WebSockets, the local server and Bonjour browser, the relay connection |
 | `Live/LiveEngines.swift` | Live Session host and listener logic (files, clock sync, commands) |

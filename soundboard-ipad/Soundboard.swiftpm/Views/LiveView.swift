@@ -229,7 +229,7 @@ struct LiveView: View {
         } header: {
             Text("Your volumes")
         } footer: {
-            Text("Keep Dungeon Radio open while tuned in; the screen stays on.")
+            Text("Sounds keep playing with the screen locked or while you use another app.")
         }
         Section("Now playing") {
             Text(live.nowPlaying.isEmpty ? "Nothing right now." : live.nowPlaying.joined(separator: " · "))
