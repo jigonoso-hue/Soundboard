@@ -30,6 +30,29 @@ enum SegmentScript {
   // ---------- Ask for AAC in MP4, which the app can always open ----------
 
   const rejected = (type) => /webm|opus|vorbis/i.test(String(type || ''));
+  // The object in a prototype chain that actually defines `name` (on iPhone,
+  // ManagedMediaSource inherits its methods from a MediaSource that isn't exposed).
+  const owner = (proto, name) => {
+    for (let p = proto; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
+      if (Object.prototype.hasOwnProperty.call(p, name)) return p;
+    }
+    return null;
+  };
+
+  function patchAppend(proto) {
+    const target = owner(proto, 'appendBuffer');
+    if (!target || target.__sbAppendPatched) return;
+    target.__sbAppendPatched = true;
+    const append = target.appendBuffer;
+    target.appendBuffer = function (data) {
+      const track = sources.get(this);
+      if (track) {
+        try { record(track, data, Number(this.timestampOffset) || 0); } catch (e) { /* never break playback */ }
+      }
+      return append.call(this, data);
+    };
+  }
+
   for (const MS of [window.MediaSource, window.ManagedMediaSource, window.WebKitMediaSource]) {
     if (!MS || MS.__sbPatched) continue;
     MS.__sbPatched = true;
@@ -37,11 +60,16 @@ enum SegmentScript {
       const original = MS.isTypeSupported.bind(MS);
       MS.isTypeSupported = (type) => !rejected(type) && original(type);
     }
-    if (Object.prototype.hasOwnProperty.call(MS.prototype, 'addSourceBuffer')) {
-      const add = MS.prototype.addSourceBuffer;
-      MS.prototype.addSourceBuffer = function (mime) {
+    const target = owner(MS.prototype, 'addSourceBuffer');
+    if (target && !target.__sbAddPatched) {
+      target.__sbAddPatched = true;
+      const add = target.addSourceBuffer;
+      target.addSourceBuffer = function (mime) {
         const buffer = add.call(this, mime);
-        if (/^audio\//i.test(String(mime))) sources.set(buffer, newTrack(String(mime), this));
+        if (/^audio\//i.test(String(mime))) {
+          patchAppend(Object.getPrototypeOf(buffer)); // covers SourceBuffer classes that aren't exposed
+          sources.set(buffer, newTrack(String(mime), this));
+        }
         return buffer;
       };
     }
@@ -66,15 +94,8 @@ enum SegmentScript {
       return decodingInfo(config);
     };
   }
-  if (window.SourceBuffer) {
-    const append = window.SourceBuffer.prototype.appendBuffer;
-    window.SourceBuffer.prototype.appendBuffer = function (data) {
-      const track = sources.get(this);
-      if (track) {
-        try { record(track, data, Number(this.timestampOffset) || 0); } catch (e) { /* never break playback */ }
-      }
-      return append.call(this, data);
-    };
+  for (const SB of [window.SourceBuffer, window.ManagedSourceBuffer]) {
+    if (SB) patchAppend(SB.prototype);
   }
 
   // ---------- MP4 boxes ----------
@@ -370,6 +391,16 @@ enum SegmentScript {
     cancel() { if (cancel) cancel(); return 'ok'; },
   };
 
+  // A short description of how the page plays video, shown when capture can't work.
+  function diagnose() {
+    const video = getVideo();
+    const src = video ? String(video.currentSrc || video.src || '') : '';
+    const kind = !video ? 'no video' : video.srcObject ? 'stream object'
+      : src.startsWith('blob:') ? 'blob stream' : /m3u8|hls/i.test(src) ? 'HLS' : src ? 'file' : 'none';
+    const apis = ['MediaSource', 'ManagedMediaSource', 'SourceBuffer', 'ManagedSourceBuffer'].filter((n) => window[n]).join('+') || 'none';
+    return `source: ${kind}; APIs: ${apis}; audio streams seen: ${tracks.length}`;
+  }
+
   async function run(start, end, options) {
     const video = getVideo();
     if (!video) throw new Error('Open a YouTube video first.');
@@ -402,7 +433,7 @@ enum SegmentScript {
       }
       // The player may still be loading its first chunks.
       for (let i = 0; i < 20 && !pick(); i++) await sleep(250);
-      if (!pick()) { cancel = null; post({ type: 'segments-unavailable' }); return; }
+      if (!pick()) { cancel = null; post({ type: 'segments-unavailable', detail: diagnose() }); return; }
 
       // Play (muted, and faster than normal) until the player has downloaded the whole range.
       if (reach(pick(), start) < end - 0.05) {

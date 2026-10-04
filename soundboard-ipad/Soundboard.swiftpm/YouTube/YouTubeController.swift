@@ -39,6 +39,8 @@ final class YouTubeController: ObservableObject {
     private var segmentRange: (start: Double, end: Double) = (0, 0)
     /// Set while saving downloaded audio; used to fall back to recording.
     private var segmentRequest: (start: Double, end: Double, listen: Bool)?
+    /// Why the downloaded audio wasn't available, shown if recording fails too.
+    private var segmentDetail: String?
     private var pendingName = ""
     private var pendingFull = false
     private var label = ""
@@ -139,6 +141,7 @@ final class YouTubeController: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
         // Best: save the audio the player downloads. If this page can't, record instead.
         segmentRequest = (start, end, listen)
+        segmentDetail = nil
         Task {
             let js = "window.__sbSeg ? window.__sbSeg.capture(\(start), \(end), {}) : 'missing'"
             let result = try? await webView.evaluateJavaScript(js)
@@ -188,12 +191,13 @@ final class YouTubeController: ObservableObject {
             guard let self else { return }
             UIApplication.shared.isIdleTimerDisabled = false
             if let error { return self.fail("Couldn't save the audio: \(error.localizedDescription)") }
+            let detail = self.segmentDetail.map { " (\($0))" } ?? ""
             guard let result else {
-                return self.fail("No audio was recorded. Make sure the video plays, then try again.")
+                return self.fail("Couldn't get this video's audio\(detail). Play the video for a moment, then try again.")
             }
             guard result.peak > 0.0005 else {
                 try? FileManager.default.removeItem(at: result.file)
-                return self.fail("Only silence was recorded. Check that the video's sound isn't muted on the page, then try again.")
+                return self.fail("Only silence was recorded\(detail). Play the video for a moment, then try again.")
             }
             self.save(file: result.file, seconds: Double(result.frames) / result.sampleRate, message: message)
         }
@@ -314,6 +318,7 @@ final class YouTubeController: ObservableObject {
                     : "\(label)… the clip plays in real time."
             capture = .recording((message["fraction"] as? NSNumber)?.doubleValue ?? 0, detail)
         case "segments-unavailable":
+            segmentDetail = message["detail"] as? String
             fallBackToRecording()
         case "segments-start":
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
