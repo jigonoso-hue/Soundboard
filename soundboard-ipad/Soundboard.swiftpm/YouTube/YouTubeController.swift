@@ -29,7 +29,12 @@ final class YouTubeController: ObservableObject {
     /// Called with the finished .m4a file, the sound's name and where it came from.
     var onCaptured: ((URL, String, SoundSource) throws -> Void)?
 
+    /// "Block YouTube ads" (on by default).
+    @Published private(set) var blockAds: Bool = UserDefaults.standard.object(forKey: "blockAds") as? Bool ?? true
+
     let webView: WKWebView
+    private let content: WKUserContentController
+    private var adRules: WKContentRuleList?
     private var writer: CaptureWriter?
     /// Records the app's own audio (used on iPadOS, where the page can't tap YouTube's audio).
     private var recorder: AppAudioRecorder?
@@ -57,16 +62,51 @@ final class YouTubeController: ObservableObject {
         // Without a Safari token YouTube serves a reduced page.
         config.applicationNameForUserAgent = "Version/17.0 Safari/605.1.15"
         let content = WKUserContentController()
-        // Must run before YouTube's player starts, to see the audio it downloads.
-        content.addUserScript(WKUserScript(source: SegmentScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        content.addUserScript(WKUserScript(source: CaptureScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         config.userContentController = content
+        self.content = content
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
         // Lets Safari on a Mac inspect the YouTube page (Develop menu) for troubleshooting.
         if #available(iOS 16.4, *) { webView.isInspectable = true }
         content.add(MessageBridge(self), name: "soundboard")
+        installScripts()
+    }
+
+    // MARK: Scripts and ad blocking
+
+    private func installScripts() {
+        content.removeAllUserScripts()
+        if blockAds {
+            content.addUserScript(WKUserScript(source: AdBlockScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
+        // Must run before YouTube's player starts, to see the audio it downloads.
+        content.addUserScript(WKUserScript(source: SegmentScript.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        content.addUserScript(WKUserScript(source: CaptureScript.source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+
+        content.removeAllContentRuleLists()
+        guard blockAds else { return }
+        if let adRules {
+            content.add(adRules)
+            return
+        }
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "soundboard-youtube-ads",
+            encodedContentRuleList: AdBlockScript.contentRules
+        ) { [weak self] list, _ in
+            guard let self, let list else { return }
+            self.adRules = list
+            if self.blockAds { self.content.add(list) }
+        }
+    }
+
+    /// Turns the YouTube ad blocker on or off and reloads the page.
+    func setBlockAds(_ enabled: Bool) {
+        guard enabled != blockAds else { return }
+        blockAds = enabled
+        UserDefaults.standard.set(enabled, forKey: "blockAds")
+        installScripts()
+        if webView.url != nil { webView.reload() }
     }
 
     // MARK: Navigation

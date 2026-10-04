@@ -95,6 +95,7 @@ struct ContentView: View {
         .environmentObject(bashPlayer)
         .environmentObject(kits)
         .environmentObject(ui)
+        .environmentObject(youtube)
         .onAppear {
             ambience.attach(to: store)
             youtube.onCaptured = { file, name, source in

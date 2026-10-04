@@ -1,6 +1,9 @@
 // Runs inside the embedded YouTube page. Records the audio of the page's
 // <video> element between two timestamps and hands the bytes to the host app.
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, contextBridge } = require('electron');
+
+// The ad blocker has to run in the page's own world, before YouTube's scripts.
+if (ipcRenderer.sendSync('adblock:enabled')) contextBridge.executeInMainWorld({ func: youtubeAdBlocker });
 
 function getVideo() {
   return document.querySelector('video.html5-main-video') || document.querySelector('video');
@@ -133,3 +136,95 @@ async function capture(start, end, progress) {
     url: location.href,
   };
 }
+
+// BEGIN AD BLOCKER
+// Runs in the YouTube page itself, before YouTube's own scripts. Three layers:
+// 1. Removes the ad schedule from the video data YouTube sends its player,
+//    so most ads never start.
+// 2. If an ad still plays: mutes it, jumps to its end and presses "Skip".
+// 3. Hides banner and feed ads.
+function youtubeAdBlocker() {
+  if (window.__sbAdBlocker) return;
+  window.__sbAdBlocker = true;
+
+  const AD_KEYS = ['adPlacements', 'adSlots', 'playerAds', 'adBreakHeartbeatParams'];
+  const hasAds = (obj) => AD_KEYS.some((key) => key in obj);
+  const prune = (obj) => {
+    try {
+      if (!obj || typeof obj !== 'object') return obj;
+      for (const key of AD_KEYS) if (key in obj) delete obj[key];
+      if (obj.playerResponse && typeof obj.playerResponse === 'object') prune(obj.playerResponse);
+      if (Array.isArray(obj)) for (const item of obj) if (item && typeof item === 'object' && item.playerResponse) prune(item.playerResponse);
+    } catch (e) { /* never break the page */ }
+    return obj;
+  };
+  const worthPruning = (obj) => !!obj && typeof obj === 'object'
+    && (hasAds(obj) || (obj.playerResponse && typeof obj.playerResponse === 'object')
+      || (Array.isArray(obj) && obj.some((item) => item && typeof item === 'object' && item.playerResponse)));
+
+  // Video data embedded in the page.
+  for (const name of ['ytInitialPlayerResponse']) {
+    let value = window[name];
+    if (value) prune(value);
+    try {
+      Object.defineProperty(window, name, {
+        configurable: true,
+        get: () => value,
+        set: (next) => { value = prune(next); },
+      });
+    } catch (e) { /* already locked */ }
+  }
+
+  // Video data the player downloads later (when you open another video).
+  const parse = JSON.parse;
+  JSON.parse = function () {
+    const result = parse.apply(this, arguments);
+    return worthPruning(result) ? prune(result) : result;
+  };
+  if (window.Response && Response.prototype.json) {
+    const json = Response.prototype.json;
+    Response.prototype.json = function () {
+      return json.call(this).then((result) => (worthPruning(result) ? prune(result) : result));
+    };
+  }
+
+  // Ads that still get through: mute, jump to the end, press Skip.
+  const AD_SHOWING = '.html5-video-player.ad-showing, #movie_player.ad-showing, .ad-showing .html5-main-video, .ad-interrupting';
+  const SKIP = '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-skip-button-container button, .ytm-skip-ad-button, button[class*="skip-ad"], button[class*="skip-button"]';
+  let saved = null;
+  setInterval(() => {
+    try {
+      const video = document.querySelector('video.html5-main-video') || document.querySelector('video');
+      const skip = document.querySelector(SKIP);
+      if (skip) skip.click();
+      const ad = !!document.querySelector(AD_SHOWING);
+      if (ad && video) {
+        if (!saved) saved = { muted: video.muted, rate: video.playbackRate };
+        video.muted = true;
+        if (Number.isFinite(video.duration) && video.duration > 0 && video.currentTime < video.duration - 0.3) {
+          video.currentTime = video.duration - 0.1;
+        } else if (video.playbackRate < 16) {
+          video.playbackRate = 16;
+        }
+      } else if (saved && video) {
+        video.muted = saved.muted;
+        video.playbackRate = saved.rate >= 16 ? 1 : saved.rate;
+        saved = null;
+      }
+    } catch (e) { /* keep going */ }
+  }, 250);
+
+  // Banner, feed and sidebar ads.
+  const style = document.createElement('style');
+  style.textContent = [
+    '#masthead-ad', '#player-ads', 'ytd-ad-slot-renderer', 'ytd-in-feed-ad-layout-renderer', 'ytd-banner-promo-renderer',
+    'ytd-promoted-sparkles-web-renderer', 'ytd-promoted-video-renderer', 'ytd-display-ad-renderer', 'ytd-statement-banner-renderer',
+    'ytd-player-legacy-desktop-watch-ads-renderer', 'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]',
+    '.ytp-ad-overlay-container', '.ytp-ad-image-overlay', 'ad-slot-renderer', 'ytm-promoted-sparkles-web-renderer',
+    'ytm-companion-ad-renderer', 'ytm-promoted-video-renderer', 'ytm-ad-slot-renderer',
+  ].join(',\n') + ' { display: none !important; }';
+  const addStyle = () => { if (!style.isConnected) (document.head || document.documentElement).appendChild(style); };
+  if (document.documentElement) addStyle();
+  document.addEventListener('DOMContentLoaded', addStyle);
+}
+// END AD BLOCKER

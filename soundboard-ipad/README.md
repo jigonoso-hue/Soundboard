@@ -63,6 +63,10 @@ The app saves the audio that YouTube's player downloads, so nothing needs to pla
 2. Play the part of the video you want, in this app or in Safari, then stop the recording.
 3. In the app, tap **+ → Video from Photos**, pick the recording, trim it, and save.
 
+## Ad blocker
+
+The YouTube browser blocks ads, using the same blocker as the Mac app. It removes ad breaks from the video information, skips any ad that still plays, and hides banner ads. Turn it off or on with the settings button (sliders icon) → **Block YouTube ads**.
+
 ## Ambience
 
 The **Ambience** strip at the top of the board lists the built-in loops. Tap a layer to fade it in or out, and use its slider to set its volume. The slider next to the title sets all layers at once. **Stop All** stops only soundboard effects, while **Stop Ambience** fades out the background. To add a layer, tap **Add Layer**, or long-press any sound and choose **Add to Ambience**. Long-press a layer to remove it.
@@ -96,5 +100,7 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Audio/AmbienceMixer.swift` | Ambience layers |
 | `Resources/Ambience/` | Built-in loops (made by `tools/generate-ambience.py`) |
 | `YouTube/YouTubeController.swift` | The embedded YouTube view and capture bridge |
+| `YouTube/SegmentScript.swift` | Saves the audio YouTube's player downloads |
+| `YouTube/AdBlockScript.swift` | YouTube ad blocker (generated from the Mac app by `tools/sync-adblock.py`) |
 | `YouTube/CaptureScript.swift` | JavaScript injected into YouTube that records the video's audio |
 | `Views/` | Sidebar, library board, scene kit board and library panel, bash editor, icon picker, ambience strip, YouTube panel, trim and edit screens |

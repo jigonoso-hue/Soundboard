@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('soundboard', {
   reorder: (ids) => ipcRenderer.invoke('sounds:reorder', ids),
   reveal: (id) => ipcRenderer.invoke('sounds:reveal', id),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+  adblock: {
+    get: () => ipcRenderer.invoke('adblock:get'),
+    set: (enabled) => ipcRenderer.invoke('adblock:set', enabled),
+  },
   onHotkey: (callback) => ipcRenderer.on('hotkey:play', (_e, id) => callback(id)),
   readSound: (id) => ipcRenderer.invoke('sounds:read', id),
   kits: {

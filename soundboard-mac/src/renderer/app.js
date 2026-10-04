@@ -723,6 +723,14 @@ function prettyAccelerator(accel) {
 // ---------- YouTube browser & clipper ----------
 
 let webview = null;
+
+// "Block YouTube ads": takes effect when the YouTube page reloads.
+api.adblock.get().then((enabled) => { $('#block-ads').checked = enabled; });
+$('#block-ads').addEventListener('change', async (e) => {
+  await api.adblock.set(e.target.checked);
+  if (webview) webview.reload();
+  toast(e.target.checked ? 'YouTube ads will be blocked.' : 'YouTube ads are no longer blocked.');
+});
 let ytReady = false;
 let ytState = { hasVideo: false };
 let capturing = false;

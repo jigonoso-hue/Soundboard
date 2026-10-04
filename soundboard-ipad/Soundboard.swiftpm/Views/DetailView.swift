@@ -182,6 +182,7 @@ struct DetailView: View {
 /// Master volume and playback options.
 struct SettingsPopover: View {
     @EnvironmentObject private var player: SoundPlayer
+    @EnvironmentObject private var youtube: YouTubeController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -193,6 +194,11 @@ struct SettingsPopover: View {
             }
             Toggle("Restart instead of overlap", isOn: $player.restartInsteadOfOverlap)
             Text("When on, a sound restarts instead of layering over itself.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Divider()
+            Toggle("Block YouTube ads", isOn: Binding(get: { youtube.blockAds }, set: { youtube.setBlockAds($0) }))
+            Text("Skips video ads and hides banner ads in the YouTube browser.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
