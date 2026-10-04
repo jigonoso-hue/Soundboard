@@ -34,6 +34,7 @@ func toggleBash(_ bash: Bash, store: SoundStore, player: SoundPlayer, bashPlayer
 
 /// A bash on the board: tap to play, long-press for options.
 struct BashCard: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var player: SoundPlayer
     @EnvironmentObject private var bashPlayer: BashPlayer
@@ -72,17 +73,17 @@ struct BashCard: View {
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.secondary.opacity(playing ? 0.2 : 0.1))
+                    .fill(theme.cardFill(active: playing))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(playing ? Color(hex: 0xFFE156) : Color.secondary.opacity(0.25), lineWidth: 1)
+                    .strokeBorder(playing ? theme.bashColor : theme.cardStroke, lineWidth: 1)
             )
             .overlay(alignment: .bottomLeading) {
                 if playing {
                     GeometryReader { geo in
                         Rectangle()
-                            .fill(Color(hex: 0xFFE156))
+                            .fill(theme.bashColor)
                             .frame(width: geo.size.width * (bashPlayer.progress ?? 0), height: 3)
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }

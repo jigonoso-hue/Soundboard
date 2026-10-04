@@ -22,16 +22,16 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dark: return "Dark and quiet"
         case .light: return "Bright and clean"
         case .tavern: return "Old parchment on a tavern table"
-        case .spaceAge: return "Atomic shapes on a starship hull"
+        case .spaceAge: return "Deep space through a starship window"
         }
     }
 
-    /// Tavern pages are parchment, so text is dark ink.
+    /// Tavern pages are parchment, so text is dark ink; Space Age is dark.
     var colorScheme: ColorScheme? {
         switch self {
         case .system: return nil
-        case .dark: return .dark
-        case .light, .tavern, .spaceAge: return .light
+        case .dark, .spaceAge: return .dark
+        case .light, .tavern: return .light
         }
     }
 
@@ -39,7 +39,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var defaultAccent: String {
         switch self {
         case .tavern: return "#9c3d12"
-        case .spaceAge: return "#0e9e91"
+        case .spaceAge: return "#2ad4c0"
         default: return "#b04cff"
         }
     }
@@ -61,9 +61,81 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var barColor: Color? {
         switch self {
         case .tavern: return Color(hex: 0x3A2414)
-        case .spaceAge: return Color(hex: 0x2B3440)
+        case .spaceAge: return Color(hex: 0x0B1226)
         default: return nil
         }
+    }
+
+    /// Text colour in themes that paint their own backdrop (nil: the system's).
+    var ink: Color? {
+        switch self {
+        case .tavern: return Color(hex: 0x2B1A0C)
+        case .spaceAge: return Color(hex: 0xF6EFDD)
+        default: return nil
+        }
+    }
+
+    /// Quieter text: captions, timers, icons.
+    var secondaryInk: Color {
+        switch self {
+        case .tavern: return Color(hex: 0x5B4127)
+        case .spaceAge: return Color(hex: 0xA9B6D6)
+        default: return .secondary
+        }
+    }
+
+    /// Fill behind a card (a full sound, bash or ambience layer); stronger while it plays.
+    func cardFill(active: Bool = false) -> Color {
+        switch self {
+        case .tavern: return Color(hex: 0x7A5228).opacity(active ? 0.28 : 0.16)
+        case .spaceAge: return Color(hex: 0x0C142C).opacity(active ? 0.95 : 0.82)
+        default: return Color.secondary.opacity(active ? 0.18 : 0.1)
+        }
+    }
+
+    /// Outline of a card.
+    var cardStroke: Color {
+        switch self {
+        case .tavern: return Color(hex: 0x5A3A18).opacity(0.55)
+        case .spaceAge: return Color(hex: 0xF6EFDD).opacity(0.55)
+        default: return Color.secondary.opacity(0.25)
+        }
+    }
+
+    /// Colour of playing ambience: mint, or a deeper green that reads on parchment.
+    var ambienceColor: Color {
+        isTavern ? Color(hex: 0x2F7A4D) : Color(hex: 0x6EE7B7)
+    }
+
+    /// Icon colour on a playing ambience layer's badge.
+    var onAmbience: Color {
+        isTavern ? .white : Color(hex: 0x10261D)
+    }
+
+    /// Highlight of a playing bash: yellow, or old gold that reads on parchment.
+    var bashColor: Color {
+        isTavern ? Color(hex: 0xA86F00) : Color(hex: 0xFFE156)
+    }
+
+    /// Solid base under see-through tiles, so the backdrop doesn't show through.
+    var tileBase: Color {
+        switch self {
+        case .spaceAge: return Color(hex: 0x0C142C).opacity(0.85)
+        case .tavern: return Color(hex: 0xF3E6C8).opacity(0.6)
+        default: return .clear
+        }
+    }
+}
+
+private struct AppThemeKey: EnvironmentKey {
+    static let defaultValue: AppTheme = .dark
+}
+
+extension EnvironmentValues {
+    /// The current theme, for views that only need its colours.
+    var appTheme: AppTheme {
+        get { self[AppThemeKey.self] }
+        set { self[AppThemeKey.self] = newValue }
     }
 }
 
@@ -368,7 +440,7 @@ struct TavernBackdrop: View {
     }
 }
 
-/// A themed "sheet" behind a card or strip: parchment in Tavern, a neon panel
+/// A themed "sheet" behind a card or strip: parchment in Tavern, an atomic panel
 /// in Space Age, otherwise `fallback`.
 struct ThemePanel<Fallback: View>: View {
     let theme: AppTheme
@@ -385,8 +457,8 @@ struct ThemePanel<Fallback: View>: View {
 }
 
 extension View {
-    /// In the Tavern and Space Age themes: the backdrop behind everything, with this
-    /// screen on its own page (parchment or panel), or bare backdrop when `page` is nil.
+    /// In the Tavern theme: the table with this screen on its own parchment page, or the
+    /// bare table when `page` is nil. In Space Age: the window onto space.
     @ViewBuilder
     func themedBackground(_ theme: AppTheme, page: String? = "page") -> some View {
         switch theme {
@@ -397,7 +469,7 @@ extension View {
         case .spaceAge:
             self
                 .scrollContentBackground(.hidden)
-                .background(SpaceBackdropWithPage(page: page).ignoresSafeArea())
+                .background(SpaceScene(seed: page ?? "board").equatable().ignoresSafeArea())
         default:
             self
         }
@@ -411,6 +483,16 @@ extension View {
                 .toolbarBackground(bar, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
                 .toolbarColorScheme(.dark, for: .navigationBar)
+        } else {
+            self
+        }
+    }
+
+    /// In themes that paint their own backdrop: text in the theme's ink.
+    @ViewBuilder
+    func themedInk(_ theme: AppTheme) -> some View {
+        if let ink = theme.ink {
+            self.foregroundStyle(ink, theme.secondaryInk)
         } else {
             self
         }

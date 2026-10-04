@@ -21,6 +21,7 @@ func deleteSound(_ sound: Sound, store: SoundStore, player: SoundPlayer, bashes:
 
 /// A clip: a coloured tile that plays when tapped.
 struct SoundTile: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var player: SoundPlayer
     @EnvironmentObject private var ui: AppUI
@@ -38,13 +39,15 @@ struct SoundTile: View {
         } label: {
             ZStack(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: 14)
+                    .fill(theme.tileBase)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(color.opacity(isPlaying ? 0.55 : 0.26))
                 RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(color.opacity(0.7), lineWidth: 1)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(sound.name)
                         .font(size == .s ? Font.caption.weight(.semibold) : (size == .l ? Font.headline : Font.subheadline.weight(.semibold)))
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(.primary)
                         .lineLimit(size == .l ? 3 : 2)
                         .multilineTextAlignment(.leading)
                     if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
@@ -105,6 +108,7 @@ struct SoundTile: View {
 
 /// A full sound: a row with a play button, its tags and a timer.
 struct TrackRow: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var player: SoundPlayer
     @EnvironmentObject private var ui: AppUI
@@ -190,7 +194,11 @@ struct TrackRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.secondary.opacity(isPlaying ? 0.18 : 0.1))
+                .fill(theme.cardFill(active: isPlaying))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop ? 1 : 0)
         )
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 8)

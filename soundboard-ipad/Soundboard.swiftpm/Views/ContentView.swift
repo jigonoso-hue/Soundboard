@@ -109,6 +109,8 @@ struct ContentView: View {
         .tint(themes.accent)
         .preferredColorScheme(themes.theme.colorScheme)
         .fontDesign(themes.theme.fontDesign)
+        .themedInk(themes.theme)
+        .environment(\.appTheme, themes.theme)
         .onAppear {
             ambience.attach(to: store)
             youtube.onCaptured = { file, name, source in

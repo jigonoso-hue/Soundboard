@@ -401,6 +401,7 @@ enum KitDrag {
 
 /// One section of a kit's board.
 struct KitSectionView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var themes: ThemeSettings
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
@@ -422,7 +423,7 @@ struct KitSectionView: View {
     @State private var dropHover = false
     @State private var lastShuffled: KitItem?
 
-    private let ambienceColor = Color(hex: 0x6EE7B7)
+    private var ambienceColor: Color { theme.ambienceColor }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -477,7 +478,7 @@ struct KitSectionView: View {
 
     private var borderColor: Color {
         if targeted || dropHover { return .accentColor }
-        return section.isAmbience ? ambienceColor.opacity(0.35) : Color.secondary.opacity(0.25)
+        return section.isAmbience ? ambienceColor.opacity(0.35) : theme.cardStroke
     }
 
     // MARK: Head
@@ -778,16 +779,16 @@ struct KitSectionView: View {
             } label: {
                 HStack(spacing: 10) {
                     AppIcon(id: Self.layerIcon(layer), size: 20)
-                        .foregroundStyle(isOn ? Color(hex: 0x10261D) : Color.secondary)
+                        .foregroundStyle(isOn ? theme.onAmbience : theme.secondaryInk)
                         .frame(width: 30, height: 30)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(isOn ? ambienceColor : Color.secondary.opacity(0.15)))
+                        .background(RoundedRectangle(cornerRadius: 8).fill(isOn ? ambienceColor : theme.cardFill(active: true)))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(ambience.name(kind: layer.kind, ref: layer.ref))
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                         Text(isOn ? "Playing" : "Off")
                             .font(.caption2)
-                            .foregroundStyle(isOn ? ambienceColor : Color.secondary)
+                            .foregroundStyle(isOn ? ambienceColor : theme.secondaryInk)
                     }
                     Spacer(minLength: 0)
                 }
@@ -809,11 +810,11 @@ struct KitSectionView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(isOn ? ambienceColor.opacity(0.13) : Color.secondary.opacity(0.1))
+                .fill(isOn ? ambienceColor.opacity(0.13) : theme.cardFill())
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(isOn ? ambienceColor : Color.secondary.opacity(0.25), lineWidth: 1)
+                .strokeBorder(isOn ? ambienceColor : theme.cardStroke, lineWidth: 1)
         )
         .contextMenu {
             Button(role: .destructive) {

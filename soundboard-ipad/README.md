@@ -18,7 +18,7 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
 - **Options** (in the sidebar):
   - **Themes:** System, Light, Dark, plus two themed looks:
     - **Tavern:** every page is a sheet of worn parchment (torn and nicked edges, creases, mug rings and stains) on a wooden table, with book-style lettering.
-    - **Space Age:** 50s atomic: cream mid-century panels with offset colour shadows, sparkles, boomerangs and atoms, on a starship's riveted hull plating.
+    - **Space Age:** a starship window onto deep space (nebulae, stars, a ringed planet and a flying saucer) framed by riveted hull plating, with dark 50s atomic panels: cream outlines, offset colour shadows, sparkles, boomerangs and atoms.
   - **Highlight colour:** pick one of the presets or any colour.
   - **Settings:** volumes, sorting, tag options, whether to ask for tags after adding sounds, and signing out of YouTube.
   - **Storage:** shows how much space your sounds use.

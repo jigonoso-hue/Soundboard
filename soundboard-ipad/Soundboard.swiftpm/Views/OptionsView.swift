@@ -80,7 +80,7 @@ struct OptionsView: View {
         } header: {
             Text("Appearance")
         } footer: {
-            Text("Tavern puts every page on worn parchment on a wooden table. Space Age is 50s atomic: mid-century panels on a starship's riveted hull.")
+            Text("Tavern puts every page on worn parchment on a wooden table. Space Age looks out of a starship window onto deep space, with 50s atomic panels.")
         }
     }
 
@@ -230,7 +230,8 @@ struct ThemePreview: View {
 
     private var textColor: Color {
         switch theme {
-        case .light, .tavern, .spaceAge: return Color(hex: 0x2B1D0E)
+        case .light, .tavern: return Color(hex: 0x2B1D0E)
+        case .spaceAge: return Color(hex: 0xF6EFDD)
         default: return .white
         }
     }
@@ -251,10 +252,7 @@ struct ThemePreview: View {
                 Parchment(seed: "preview").equatable().padding(6)
             }
         case .spaceAge:
-            ZStack {
-                HullPlating().equatable()
-                AtomicPanel(seed: "preview").equatable().padding(.leading, 6).padding(.top, 6).padding(.trailing, 12).padding(.bottom, 12)
-            }
+            SpaceScene(seed: "preview").equatable()
         }
     }
 }

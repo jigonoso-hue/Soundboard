@@ -2,11 +2,12 @@ import SwiftUI
 
 /// The row of ambience layers shown under the board.
 struct AmbienceStrip: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var mixer: AmbienceMixer
     @EnvironmentObject private var store: SoundStore
     @AppStorage("ambienceCollapsed") private var collapsed = false
 
-    private let activeColor = Color(hex: 0x6EE7B7)
+    private var activeColor: Color { theme.ambienceColor }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -16,7 +17,7 @@ struct AmbienceStrip: View {
                 } label: {
                     Label("Ambience", systemImage: collapsed ? "chevron.right" : "chevron.down")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(mixer.playing.isEmpty ? Color.primary : activeColor)
+                        .foregroundStyle(mixer.playing.isEmpty ? (theme.ink ?? Color.primary) : activeColor)
                         .lineLimit(1)
                         .fixedSize()
                 }
@@ -118,11 +119,11 @@ struct AmbienceStrip: View {
         .frame(width: 150)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(isOn ? activeColor.opacity(0.15) : Color.secondary.opacity(0.12))
+                .fill(isOn ? activeColor.opacity(0.15) : theme.cardFill())
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(isOn ? activeColor : Color.secondary.opacity(0.3), lineWidth: 1)
+                .strokeBorder(isOn ? activeColor : theme.cardStroke, lineWidth: 1)
         )
         .contextMenu {
             Button(role: .destructive) {
