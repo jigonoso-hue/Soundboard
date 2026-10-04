@@ -18,12 +18,15 @@ struct OptionsView: View {
 
     var body: some View {
         Form {
-            appearance
-            playback
-            library
-            online
-            storage
-            about
+            Group {
+                appearance
+                playback
+                library
+                online
+                storage
+                about
+            }
+            .themedRows(themes.theme)
         }
         .themedBackground(themes.theme, page: "options")
         .task { storageText = await Self.measureStorage(SoundStore.folder) }

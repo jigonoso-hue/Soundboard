@@ -56,6 +56,7 @@ struct SidebarView: View {
                     Text("Group sounds, songs, bashes and ambience for a scene, like “Tavern Brawl”.")
                 }
             }
+            .themedRows(themes.theme, compactOnly: true)
 
             Section("Library") {
                 row(.all, "All", icon: "grid", count: store.sounds.count)
@@ -63,12 +64,14 @@ struct SidebarView: View {
                 row(.full, "Full Sounds", icon: "note", count: store.sounds.filter(\.isFull).count)
                 row(.bashes, "Bashes", icon: "bolt", count: bashes.bashes.count)
             }
+            .themedRows(themes.theme, compactOnly: true)
 
             Section {
                 NavigationLink(value: Destination.options) {
                     Label("Options", systemImage: "gearshape")
                 }
             }
+            .themedRows(themes.theme, compactOnly: true)
 
             Section {
                 if ui.tagsOpen {
@@ -98,6 +101,7 @@ struct SidebarView: View {
                     }
                 }
             }
+            .themedRows(themes.theme, compactOnly: true)
         }
         .listStyle(.sidebar)
         .themedBackground(themes.theme, page: "sidebar")

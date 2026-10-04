@@ -134,6 +134,11 @@ enum AppTheme: String, CaseIterable, Identifiable {
         isTavern ? Color(hex: 0xA86F00) : Color(hex: 0xFFE156)
     }
 
+    /// Background of list and form rows, in place of the system's white or grey.
+    var rowBackground: Color {
+        isTavern ? Color(hex: 0x7A5228).opacity(0.14) : cardFill()
+    }
+
     /// Solid base under see-through tiles, so the backdrop doesn't show through.
     var tileBase: Color {
         switch self {
@@ -519,6 +524,14 @@ extension View {
         }
     }
 
+    /// In themes that paint their own backdrop: list and form rows tinted to suit
+    /// the page instead of the system's white. With `compactOnly`, only on iPhone,
+    /// where the sidebar becomes a grouped list (on iPad its rows are clear, and a
+    /// row background would hide the selection).
+    func themedRows(_ theme: AppTheme, compactOnly: Bool = false) -> some View {
+        modifier(ThemedRows(theme: theme, compactOnly: compactOnly))
+    }
+
     /// In themes that paint their own backdrop: text in the theme's ink.
     @ViewBuilder
     func themedInk(_ theme: AppTheme) -> some View {
@@ -526,6 +539,20 @@ extension View {
             self.foregroundStyle(ink, theme.secondaryInk)
         } else {
             self
+        }
+    }
+}
+
+struct ThemedRows: ViewModifier {
+    let theme: AppTheme
+    let compactOnly: Bool
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func body(content: Content) -> some View {
+        if theme.hasBackdrop && (!compactOnly || sizeClass == .compact) {
+            content.listRowBackground(theme.rowBackground)
+        } else {
+            content
         }
     }
 }
