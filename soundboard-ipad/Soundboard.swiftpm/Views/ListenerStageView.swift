@@ -6,6 +6,7 @@ import SwiftUI
 /// playing is grouped into sounds, full sounds and ambience; the player's own
 /// sound pads sit at the bottom when the GM allows them.
 struct ListenerStageView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var live: LiveSession
     @Environment(\.appTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -55,7 +56,7 @@ struct ListenerStageView: View {
         .sheet(isPresented: $choosingSounds) {
             PlayerSoundPicker()
         }
-        .modifier(DicePresenter(tray: live.dice, active: true))
+        .modifier(DicePresenter(tray: live.dice, active: true, inset: 16))  // below the 44pt top bar
         .confirmationDialog("Leave the session?", isPresented: $confirmLeave, titleVisibility: .visible) {
             Button("Leave Session", role: .destructive) { live.leave() }
         }
@@ -83,7 +84,12 @@ struct ListenerStageView: View {
         VStack(spacing: 0) {
             topBar.diceCover(live.dice, "stageTop")
             Spacer(minLength: 12)
-            center
+            // When a lot is playing on a small screen, the middle scrolls rather
+            // than pushing the pads and Leave off the bottom.
+            ViewThatFits(in: .vertical) {
+                center
+                ScrollView(showsIndicators: false) { center.padding(.vertical, 8) }
+            }
             Spacer(minLength: 12)
             if live.allowedPlayerSounds != .off {
                 PlayerPads(style: style, choose: { choosingSounds = true })
@@ -124,15 +130,20 @@ struct ListenerStageView: View {
             .padding(.vertical, 6)
             .background(style.chipFill, in: Capsule())
             Spacer()
-            Button {
-                live.dice.open()
-            } label: {
-                Label("Dice", systemImage: "dice")
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(style.chipFill, in: Capsule())
+            // iPhone: Dice is at the bottom instead, in thumb reach.
+            if sizeClass != .compact {
+                Button {
+                    live.dice.open()
+                } label: {
+                    Label("Dice", systemImage: "dice")
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(style.chipFill, in: Capsule())
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             Button {
                 showVolumes = true
             } label: {
@@ -140,6 +151,8 @@ struct ListenerStageView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(style.chipFill, in: Capsule())
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -161,8 +174,10 @@ struct ListenerStageView: View {
             if live.connected {
                 Text("Tuned in to").font(.subheadline).foregroundStyle(style.secondaryInk)
                 Text(live.hostName ?? "the broadcaster")
-                    .font(.system(size: 34, weight: .bold, design: style.titleDesign))
+                    .font(.system(size: sizeClass == .compact ? 28 : 34, weight: .bold, design: style.titleDesign))
                     .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.7)
                 if let scene = live.scene {
                     Label(scene, systemImage: "theatermasks.fill")
                         .font(.headline)
@@ -180,6 +195,25 @@ struct ListenerStageView: View {
     }
 
     private var bottomBar: some View {
+        VStack(spacing: 10) {
+            if sizeClass == .compact {
+                // iPhone: the listener's main action, big and in thumb reach.
+                Button {
+                    live.dice.open()
+                } label: {
+                    Label("Roll Dice", systemImage: "dice.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(style.chipFill, in: RoundedRectangle(cornerRadius: 16))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            bottomRow
+        }
+    }
+
+    private var bottomRow: some View {
         HStack {
             Label("You can lock your screen; sounds keep playing.", systemImage: "lock.fill")
                 .font(.caption)
@@ -193,6 +227,8 @@ struct ListenerStageView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(Color.red.opacity(0.25), in: Capsule())
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -608,6 +644,7 @@ private struct ShakeEffect: GeometryEffect {
 /// theme's kind of panel.
 private struct PlayerPads: View {
     @EnvironmentObject private var live: LiveSession
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let style: StageStyle
     let choose: () -> Void
 
@@ -631,7 +668,9 @@ private struct PlayerPads: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                HStack(spacing: 10) {
+                // iPhone: three to a row, so each pad is big enough for its name.
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: sizeClass == .compact ? 3 : max(1, live.pickedSounds.count))
+                LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(live.pickedSounds) { sound in
                         PadButton(name: sound.name, color: Palette.color(sound.colorIndex)) {
                             live.playPick(sound.id)
@@ -640,7 +679,7 @@ private struct PlayerPads: View {
                 }
             }
         }
-        .padding(18)
+        .padding(sizeClass == .compact ? 14 : 18)
         .background(panel)
     }
 

@@ -1602,7 +1602,7 @@ body.game-locked { overflow: hidden; }
   .game-step { width: 100px; }
   .dice-title { display: none; }
   .dice-log, .dice-log.wide { left: 10px; right: 10px; width: auto; top: 70px; bottom: 190px; }
-  .table-turns { top: 64px; max-width: calc(100vw - 20px); }
+  .table-turns { top: 94px; max-width: calc(100vw - 20px); }
   .table-column { top: 70px; }
   .table-your-turn { padding: 18px 26px; white-space: nowrap; }
   .table-your-turn-big { font-size: 36px; }
@@ -1637,3 +1637,27 @@ body.game-locked { overflow: hidden; }
 @keyframes dice-flat-shake { from { transform: rotate(-8deg) translateY(-2px); } to { transform: rotate(8deg) translateY(2px); } }
 @keyframes dice-flat-land { from { transform: scale(1.25); } to { transform: scale(1); } }
 .dice-banner-nat { font-weight: 800; margin-top: 4px; }
+
+/* The stage on phones: Roll Dice big at the bottom (the top Dice button hides), 44pt targets. */
+.stage-roll { display: none; }
+@media (max-width: 560px) {
+  .stage-dice-top { display: none; }
+  .stage-roll { display: block; width: 100%; min-height: 50px; margin: 6px 0 10px; border-radius: 16px; border: none; font-weight: 800; font-size: 16px; color: inherit; background: rgba(255,255,255,0.14); }
+  .stage-roll:hover:not(:disabled) { background: rgba(255,255,255,0.2); }
+  .live-stage .stage-button, .stage-leave { min-height: 44px; }
+  .stage-host { font-size: 28px; }
+  .stage-center { overflow-y: auto; min-height: 0; }
+}
+@media (max-width: 560px) {
+  /* Pads three to a row on phones, big enough for their names. */
+  .stage-pad-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stage-pad { white-space: normal; overflow-wrap: anywhere; min-height: 56px; }
+  .stage-pads { padding: 14px; }
+}
+@media (max-width: 560px) {
+  /* An open panel gets the whole height on a phone; close it to roll. */
+  .dice-layer:has(.dice-log:not(.hidden)) .dice-ui { display: none; }
+  .dice-layer:has(.dice-log:not(.hidden)) .dice-log { bottom: 16px; }
+  /* Roll on its own full-width row, at the very bottom. */
+  .dice-roll { flex-basis: 100%; order: 10; min-height: 52px; }
+}

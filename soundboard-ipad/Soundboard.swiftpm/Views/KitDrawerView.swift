@@ -3,6 +3,7 @@ import SwiftUI
 /// The library panel beside a kit: search and filter the library, then tap
 /// to add or remove items from the chosen section (or drag them onto any section).
 struct KitDrawerView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var kits: KitStore
@@ -54,7 +55,7 @@ struct KitDrawerView: View {
                     Spacer()
                     Button("Done", action: onClose)
                         .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                        .controlSize(sizeClass == .compact ? .regular : .small)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Adding to").font(.caption).foregroundStyle(.secondary)
@@ -80,16 +81,20 @@ struct KitDrawerView: View {
                 }
                 let usedTags = store.allTags.filter { tag in store.sounds.contains { $0.tagList.contains(tag) } }
                 if !usedTags.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(usedTags, id: \.self) { tag in
-                                Button {
-                                    if tags.contains(tag) { tags.remove(tag) } else { tags.insert(tag) }
-                                } label: {
-                                    TagChip(tag: tag, selected: tags.contains(tag), small: true)
-                                }
-                                .buttonStyle(.plain)
-                            }
+                    let chips = ForEach(usedTags, id: \.self) { tag in
+                        Button {
+                            if tags.contains(tag) { tags.remove(tag) } else { tags.insert(tag) }
+                        } label: {
+                            TagChip(tag: tag, selected: tags.contains(tag), small: sizeClass != .compact)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if sizeClass == .compact {
+                        // iPhone: every tag in view, wrapping onto more lines.
+                        FlowLayout(spacing: 6) { chips }
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) { chips }
                         }
                     }
                 }

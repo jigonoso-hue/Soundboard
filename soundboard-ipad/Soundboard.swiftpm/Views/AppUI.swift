@@ -257,3 +257,16 @@ struct BlockTitle: View {
         .foregroundStyle(Color.primary.opacity(0.85))
     }
 }
+
+extension AnyLayout {
+    /// The layout's content, in a sideways ScrollView when `scrolls` (iPad),
+    /// or as it is (an iPhone layout that wraps instead).
+    @ViewBuilder
+    func wrappedInScroll<Content: View>(_ scrolls: Bool, @ViewBuilder content: () -> Content) -> some View {
+        if scrolls {
+            ScrollView(.horizontal, showsIndicators: false) { self { content() } }
+        } else {
+            self { content() }
+        }
+    }
+}

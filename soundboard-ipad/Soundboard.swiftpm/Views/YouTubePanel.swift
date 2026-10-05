@@ -3,6 +3,7 @@ import WebKit
 
 struct YouTubePanel: View {
     @ObservedObject var controller: YouTubeController
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var query = ""
     @State private var startText = "0:00.0"
@@ -66,57 +67,45 @@ struct YouTubePanel: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                Button("Set Start") { setStart() }
-                timeField("Start", text: $startText)
-                Image(systemName: "arrow.right").foregroundStyle(.secondary)
-                timeField("End", text: $endText)
-                Button("Set End") { setEnd() }
-            }
-            .disabled(controller.isRecording)
-
-            HStack(spacing: 8) {
-                TextField("Sound name (defaults to video title)", text: $name)
-                    .textFieldStyle(.roundedBorder)
-                Button {
-                    if let range { controller.preview(start: range.start, end: range.end) }
-                } label: {
-                    Image(systemName: "play.fill")
-                }
-                .accessibilityLabel("Preview")
-                .disabled(controller.isRecording || !controller.hasVideo || range == nil)
-
-                if controller.isRecording {
-                    Button("Cancel", role: .cancel) { controller.cancelCapture() }
-                } else {
-                    Button {
-                        create()
-                    } label: {
-                        Label("Create Sound", systemImage: "scissors")
+            if sizeClass == .compact {
+                // iPhone: one row per end of the clip, then the name, then the actions.
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Button("Set Start") { setStart() }.frame(minWidth: 92)
+                        timeField("Start", text: $startText)
                     }
-                    .buttonStyle(.borderedProminent)
+                    HStack(spacing: 8) {
+                        Button("Set End") { setEnd() }.frame(minWidth: 92)
+                        timeField("End", text: $endText)
+                    }
                 }
-            }
+                .disabled(controller.isRecording)
+                nameField
+                HStack(spacing: 8) {
+                    previewButton
+                    createButton.frame(maxWidth: .infinity)
+                }
+                fullAudioButton
+                fullAudioNote
+            } else {
+                HStack(spacing: 8) {
+                    Button("Set Start") { setStart() }
+                    timeField("Start", text: $startText).frame(width: 84)
+                    Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                    timeField("End", text: $endText).frame(width: 84)
+                    Button("Set End") { setEnd() }
+                }
+                .disabled(controller.isRecording)
 
-            HStack(spacing: 8) {
-                Button {
-                    controller.saveFullAudio(name: name.trimmingCharacters(in: .whitespaces), listen: listenWhileSaving)
-                    name = ""
-                } label: {
-                    Label("Save Full Audio", systemImage: "square.and.arrow.down")
+                HStack(spacing: 8) {
+                    nameField
+                    previewButton
+                    createButton
                 }
-                .disabled(controller.isRecording || !controller.hasVideo)
-                if AppAudioRecorder.isAvailable {
-                    // The app saves the audio the player downloads, muted and sped up.
-                    Text("Saves quietly: the video plays muted and sped up while the audio downloads.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                } else {
-                    Toggle("Play out loud", isOn: $listenWhileSaving)
-                        .fixedSize()
-                        .font(.subheadline)
-                        .disabled(controller.isRecording)
+
+                HStack(spacing: 8) {
+                    fullAudioButton
+                    fullAudioNote
                 }
             }
 
@@ -132,7 +121,63 @@ struct YouTubePanel: View {
             .keyboardType(.numbersAndPunctuation)
             .multilineTextAlignment(.center)
             .font(.body.monospacedDigit())
-            .frame(width: 84)
+    }
+
+    private var nameField: some View {
+        TextField("Sound name (defaults to video title)", text: $name)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private var previewButton: some View {
+        Button {
+            if let range { controller.preview(start: range.start, end: range.end) }
+        } label: {
+            Image(systemName: "play.fill").frame(minWidth: 28, minHeight: 28)
+        }
+        .accessibilityLabel("Preview")
+        .disabled(controller.isRecording || !controller.hasVideo || range == nil)
+    }
+
+    @ViewBuilder
+    private var createButton: some View {
+        if controller.isRecording {
+            Button("Cancel", role: .cancel) { controller.cancelCapture() }
+        } else {
+            Button {
+                create()
+            } label: {
+                Label("Create Sound", systemImage: "scissors")
+                    .frame(maxWidth: sizeClass == .compact ? .infinity : nil)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var fullAudioButton: some View {
+        Button {
+            controller.saveFullAudio(name: name.trimmingCharacters(in: .whitespaces), listen: listenWhileSaving)
+            name = ""
+        } label: {
+            Label("Save Full Audio", systemImage: "square.and.arrow.down")
+        }
+        .disabled(controller.isRecording || !controller.hasVideo)
+    }
+
+    @ViewBuilder
+    private var fullAudioNote: some View {
+        if AppAudioRecorder.isAvailable {
+            // The app saves the audio the player downloads, muted and sped up.
+            Text("Saves quietly: the video plays muted and sped up while the audio downloads.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(sizeClass == .compact ? nil : 2)
+                .fixedSize(horizontal: false, vertical: sizeClass == .compact)
+        } else {
+            Toggle("Play out loud", isOn: $listenWhileSaving)
+                .fixedSize()
+                .font(.subheadline)
+                .disabled(controller.isRecording)
+        }
     }
 
     @ViewBuilder

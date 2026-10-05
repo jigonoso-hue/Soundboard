@@ -1821,7 +1821,10 @@ struct DiceView: View {
                     DiceRolling(name: name).padding(.top, 8)
                 }
                 Spacer()
-                controls.diceCover(tray, "controls")
+                // iPhone: an open panel gets the whole height; close it to roll.
+                if !(sizeClass == .compact && tray.panel != nil) {
+                    controls.diceCover(tray, "controls")
+                }
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
@@ -1985,19 +1988,19 @@ struct DiceView: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(DiceGeometry.types, id: \.self) { type in dieButton(type, label: type == "coin" ? "Coin" : type) }
-                    // Custom dice in the roll, with their counts.
-                    ForEach(tray.allCustom.filter { (tray.counts["custom:\($0.id)"] ?? 0) > 0 }) { def in
-                        dieButton("custom:\(def.id)", label: def.name)
-                    }
-                    pill("Clear") { tray.counts = [:] }
+        let compact = sizeClass == .compact
+        return VStack(spacing: 10) {
+            // iPhone: the dice wrap onto rows, all in view; iPad: one row that scrolls.
+            (compact ? AnyLayout(FlowLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))).wrappedInScroll(!compact) {
+                ForEach(DiceGeometry.types, id: \.self) { type in dieButton(type, label: type == "coin" ? "Coin" : type) }
+                // Custom dice in the roll, with their counts.
+                ForEach(tray.allCustom.filter { (tray.counts["custom:\($0.id)"] ?? 0) > 0 }) { def in
+                    dieButton("custom:\(def.id)", label: def.name)
                 }
-                .padding(.top, 8)
-                .padding(.horizontal, 4)
+                pill("Clear") { tray.counts = [:] }
             }
+            .padding(.top, 8)
+            .padding(.horizontal, 4)
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     pill("−") { tray.modifier = max(-30, tray.modifier - 1) }
@@ -2036,7 +2039,7 @@ struct DiceView: View {
                     .accessibilityHint("Listeners see your next roll's dice but not the numbers")
                     .accessibilityAddTraits(tray.hiddenArmed ? .isSelected : [])
                 }
-                rollButton
+                if !compact { rollButton }
             }
             if tray.canShake {
                 Toggle(isOn: $tray.shakeToRoll) {
@@ -2046,6 +2049,8 @@ struct DiceView: View {
                 .tint(Color(hex: 0x1F9D55))
                 .padding(.horizontal, 6)
             }
+            // iPhone: Roll gets its own full-width row at the very bottom, under your thumb.
+            if compact { rollButton.frame(minHeight: 52) }
         }
         .padding(12)
         .background(.ultraThinMaterial.opacity(0.9), in: RoundedRectangle(cornerRadius: 18))
@@ -2151,7 +2156,7 @@ struct DiceView: View {
             .foregroundStyle(Color.white)
             // On an iPhone it takes the screen's width, less a margin.
             .frame(width: min(tray.panel == "log" || tray.panel == "stats" ? 290 : 340, UIScreen.main.bounds.width - 24))
-            .frame(maxHeight: 560)
+            .frame(maxHeight: sizeClass == .compact ? .infinity : 560)
             .fixedSize(horizontal: false, vertical: true)
             .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 16))
             // Just the panel itself, not the space around it.
@@ -2159,8 +2164,8 @@ struct DiceView: View {
             .environment(\.colorScheme, .dark)
             .padding(.trailing, 12)
             .padding(.top, sizeClass == .compact ? 130 : 60)
-            // Clear of the dice controls at the bottom.
-            .padding(.bottom, 180)
+            // Clear of the dice controls at the bottom (hidden on iPhone while a panel is open).
+            .padding(.bottom, sizeClass == .compact ? 24 : 180)
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -2365,6 +2370,8 @@ struct DicePresenter: ViewModifier {
     @ObservedObject var tray: DiceTray
     /// Off where something else covers the screen (the listener's stage shows its own).
     let active: Bool
+    /// Extra room at the top for the cards and the turn order (see TableOverlay).
+    var inset: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
@@ -2375,7 +2382,7 @@ struct DicePresenter: ViewModifier {
                 // Roll requests, results and the turn order; the session recap.
                 if active {
                     ZStack {
-                        TableOverlay(table: tray.table)
+                        TableOverlay(table: tray.table, inset: inset)
                         if tray.showRecap && !tray.isOpen { DiceRecap(tray: tray) }
                     }
                 }

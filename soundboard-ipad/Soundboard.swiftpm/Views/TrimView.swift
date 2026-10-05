@@ -8,6 +8,7 @@ struct TrimView: View {
     var onSave: (URL, String) throws -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var player: AVPlayer
     @State private var name: String
     @State private var duration: Double = 0
@@ -102,14 +103,28 @@ struct TrimView: View {
     }
 
     private func rangeRow(label: String, value: Binding<Double>, range: ClosedRange<Double>, setFromPlayhead: @escaping () -> Void) -> some View {
-        HStack(spacing: 12) {
-            Text(label).frame(width: 44, alignment: .leading)
-            Slider(value: value, in: range)
-            Text(TimeText.format(value.wrappedValue))
-                .monospacedDigit()
-                .frame(width: 70, alignment: .trailing)
-            Button("Use Playhead", action: setFromPlayhead)
-                .buttonStyle(.bordered)
+        let time = Text(TimeText.format(value.wrappedValue)).monospacedDigit()
+        let playhead = Button("Use Playhead", action: setFromPlayhead).buttonStyle(.bordered)
+        return Group {
+            if sizeClass == .compact {
+                // iPhone: the slider gets the whole width.
+                VStack(spacing: 6) {
+                    HStack(spacing: 12) {
+                        Text(label).font(.headline)
+                        time.foregroundStyle(.secondary)
+                        Spacer()
+                        playhead
+                    }
+                    Slider(value: value, in: range).accessibilityLabel(label)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    Text(label).frame(width: 44, alignment: .leading)
+                    Slider(value: value, in: range).accessibilityLabel(label)
+                    time.frame(width: 70, alignment: .trailing)
+                    playhead
+                }
+            }
         }
     }
 

@@ -37,12 +37,15 @@ struct EditSoundView: View {
                     .padding(.vertical, 4)
                 }
                 Section("Color") {
-                    HStack(spacing: 12) {
+                    // Wraps onto a second row on a narrow iPhone.
+                    FlowLayout(spacing: 2) {
                         ForEach(Palette.colors.indices, id: \.self) { index in
                             Circle()
                                 .fill(Palette.colors[index])
                                 .frame(width: 32, height: 32)
                                 .overlay(Circle().stroke(.white, lineWidth: sound.colorIndex == index ? 3 : 0))
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                                 .onTapGesture { sound.colorIndex = index }
                                 .accessibilityAddTraits(sound.colorIndex == index ? .isSelected : [])
                         }

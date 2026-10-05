@@ -5,6 +5,7 @@ import SwiftUI
 struct LiveView: View {
     @EnvironmentObject private var live: LiveSession
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var tab: Tab = .broadcast
     /// A name is needed to tune in.
     private var hasName: Bool { !live.yourName.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -260,6 +261,8 @@ struct LiveView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                // iPhone: icons only, so the name keeps the room.
+                .labelStyle(PeerButtonLabel(compact: sizeClass == .compact))
             }
         } header: {
             Text(live.peers.isEmpty ? "Listeners" : "Listening (\(live.peers.count))")
@@ -327,6 +330,20 @@ struct LiveView: View {
                 set: { live.levels[key] = $0 }
             ), in: 0...1)
             .accessibilityLabel("\(title) volume")
+        }
+    }
+}
+
+/// The listener row's buttons: icon and title, or just a big icon on iPhone.
+private struct PeerButtonLabel: LabelStyle {
+    let compact: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if compact {
+            // Icon only, still read out by its title.
+            Label(configuration).labelStyle(.iconOnly).frame(minWidth: 30, minHeight: 30)
+        } else {
+            Label(configuration)
         }
     }
 }

@@ -3,6 +3,7 @@ import WebKit
 
 /// Options: appearance, playback, library and online settings, and storage.
 struct OptionsView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var themes: ThemeSettings
     @EnvironmentObject private var player: SoundPlayer
     @EnvironmentObject private var ambience: AmbienceMixer
@@ -38,8 +39,8 @@ struct OptionsView: View {
 
     private var appearance: some View {
         Section {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+            // iPhone: the themes in a grid, all in view; iPad: one row that scrolls.
+            (sizeClass == .compact ? AnyLayout(FlowLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))).wrappedInScroll(sizeClass != .compact) {
                     ForEach(AppTheme.allCases) { theme in
                         Button {
                             withAnimation(.easeInOut(duration: 0.25)) { themes.theme = theme }
@@ -50,13 +51,12 @@ struct OptionsView: View {
                         .accessibilityLabel("\(theme.name) theme")
                         .accessibilityAddTraits(themes.theme == theme ? .isSelected : [])
                     }
-                }
-                .padding(.vertical, 6)
             }
+            .padding(.vertical, 6)
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Highlight colour")
-                HStack(spacing: 10) {
+                FlowLayout(spacing: 10) {
                     ForEach(ThemeSettings.accentPresets.indices, id: \.self) { index in
                         let preset = ThemeSettings.accentPresets[index]
                         Button {

@@ -644,6 +644,8 @@ struct GameHostView: View {
                             Image(systemName: correct == i ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(correct == i ? Color.green : Color.secondary)
                                 .font(.title3)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(correct == i ? "The right answer" : "Make this the right answer")
@@ -658,11 +660,14 @@ struct GameHostView: View {
                 Text("30 seconds").tag(30)
                 Text("1 minute").tag(60)
             }
-            HStack {
-                Text("Quick answers").foregroundStyle(.secondary)
-                Spacer()
-                Button("Yes / No") { answers = ["Yes", "No", "", ""] }.buttonStyle(.bordered)
-                Button("True / False") { answers = ["True", "False", "", ""] }.buttonStyle(.bordered)
+            // On a narrow iPhone the label goes, and the two buttons share the row.
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text("Quick answers").foregroundStyle(.secondary)
+                    Spacer()
+                    quickAnswers
+                }
+                HStack { quickAnswers }
             }
             Button("Ask everyone") { ask() }
                 .font(.headline)
@@ -672,6 +677,12 @@ struct GameHostView: View {
         } footer: {
             Text("Tick the right answer: right answers score up to 1000 points, more for answering fast.")
         }
+    }
+
+    @ViewBuilder
+    private var quickAnswers: some View {
+        Button("Yes / No") { answers = ["Yes", "No", "", ""] }.buttonStyle(.bordered).fixedSize()
+        Button("True / False") { answers = ["True", "False", "", ""] }.buttonStyle(.bordered).fixedSize()
     }
 
     private func ask() {

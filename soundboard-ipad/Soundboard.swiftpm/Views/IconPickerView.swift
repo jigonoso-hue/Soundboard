@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Pick an icon from the app's set, a background colour and an icon colour.
 struct IconPickerView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Binding var icon: String
     @Binding var color: String
     @Binding var iconColor: String
@@ -23,8 +24,8 @@ struct IconPickerView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+            // iPhone: the categories wrap onto more lines, all in view.
+            (sizeClass == .compact ? AnyLayout(FlowLayout(spacing: 6)) : AnyLayout(HStackLayout(spacing: 6))).wrappedInScroll(sizeClass != .compact) {
                     ForEach(["All"] + Icons.categories, id: \.self) { name in
                         Button {
                             category = name
@@ -38,7 +39,6 @@ struct IconPickerView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                }
             }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 6)], spacing: 6) {

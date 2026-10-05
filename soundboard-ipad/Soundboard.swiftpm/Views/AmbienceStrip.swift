@@ -6,6 +6,8 @@ struct AmbienceStrip: View {
     @EnvironmentObject private var mixer: AmbienceMixer
     @EnvironmentObject private var store: SoundStore
     @AppStorage("ambienceCollapsed") private var collapsed = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var compact: Bool { sizeClass == .compact }
 
     private var activeColor: Color { theme.ambienceColor }
 
@@ -23,10 +25,7 @@ struct AmbienceStrip: View {
                 }
                 .buttonStyle(.plain)
 
-                Image(systemName: "speaker.wave.1.fill")
-                    .foregroundStyle(.secondary)
-                Slider(value: $mixer.masterVolume, in: 0...1)
-                    .frame(minWidth: 70, maxWidth: 130)
+                if !compact { volume.frame(minWidth: 90, maxWidth: 160) }
 
                 addMenu
 
@@ -49,16 +48,33 @@ struct AmbienceStrip: View {
                         .fixedSize()
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
+                .controlSize(compact ? .regular : .small)
                 .disabled(mixer.playing.isEmpty)
                 .accessibilityLabel("Stop ambience")
             }
 
+            // iPhone: the master volume gets its own full-width row.
+            if compact && !collapsed { volume }
+
             if !collapsed {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(mixer.layers) { layer in
-                            card(for: layer)
+                if compact {
+                    // iPhone: two columns of wider cards (longer sliders), scrolling
+                    // down within a few rows rather than off the side.
+                    ScrollView {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            ForEach(mixer.layers) { layer in
+                                card(for: layer)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 190)
+                    .fixedSize(horizontal: false, vertical: mixer.layers.count <= 4)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(mixer.layers) { layer in
+                                card(for: layer)
+                            }
                         }
                     }
                 }
@@ -66,6 +82,15 @@ struct AmbienceStrip: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var volume: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "speaker.wave.1.fill")
+                .foregroundStyle(.secondary)
+            Slider(value: $mixer.masterVolume, in: 0...1)
+                .accessibilityLabel("Ambience volume")
+        }
     }
 
     private var addMenu: some View {
@@ -102,7 +127,7 @@ struct AmbienceStrip: View {
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: compact ? 30 : nil, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -115,8 +140,9 @@ struct AmbienceStrip: View {
             .accessibilityLabel("\(mixer.name(of: layer)) volume")
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(width: 150)
+        .padding(.vertical, compact ? 8 : 6)
+        .frame(width: compact ? nil : 150)
+        .frame(maxWidth: compact ? .infinity : nil)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(isOn ? activeColor.opacity(0.15) : theme.cardFill())

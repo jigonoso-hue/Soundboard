@@ -107,50 +107,89 @@ struct BashEditorView: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(spacing: 14) {
-            Button {
-                showCover = true
-            } label: {
-                coverPreview(size: 52)
+        Group {
+            if sizeClass == .compact {
+                // iPhone: the name on its own row, the controls below it.
+                VStack(spacing: 10) {
+                    HStack(spacing: 12) {
+                        coverButton
+                        nameField
+                    }
+                    HStack(spacing: 10) {
+                        playButton
+                        Text(timeText)
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        zoomSlider
+                        addButton
+                    }
+                }
+            } else {
+                HStack(spacing: 14) {
+                    coverButton
+                    nameField.frame(maxWidth: 320)
+                    playButton
+                    Text(timeText)
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    zoomSlider.frame(width: 172)
+                    addButton
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Change cover")
-
-            TextField("Bash name", text: $draft.name)
-                .font(.title3.weight(.semibold))
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 320)
-
-            Button {
-                togglePlay()
-            } label: {
-                IconLabel(isPlaying ? "Stop" : "Play", icon: isPlaying ? "stop" : "play")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(draft.clips.isEmpty)
-
-            Text(timeText)
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
-                Slider(value: $zoom, in: 20...240)
-                    .frame(width: 120)
-                Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
-            }
-
-            Button {
-                showAddSounds = true
-            } label: {
-                IconLabel("Add Sounds", icon: "plus")
-            }
-            .buttonStyle(.bordered)
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
+    }
+
+    private var coverButton: some View {
+        Button {
+            showCover = true
+        } label: {
+            coverPreview(size: 52)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Change cover")
+    }
+
+    private var nameField: some View {
+        TextField("Bash name", text: $draft.name)
+            .font(.title3.weight(.semibold))
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private var playButton: some View {
+        Button {
+            togglePlay()
+        } label: {
+            IconLabel(isPlaying ? "Stop" : "Play", icon: isPlaying ? "stop" : "play")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(draft.clips.isEmpty)
+    }
+
+    private var zoomSlider: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
+            Slider(value: $zoom, in: 20...240)
+                .accessibilityLabel("Zoom")
+            Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
+        }
+    }
+
+    private var addButton: some View {
+        Button {
+            showAddSounds = true
+        } label: {
+            // iPhone: just the icon, so the row fits.
+            if sizeClass == .compact {
+                Image(systemName: "plus").frame(minWidth: 24, minHeight: 28)
+            } else {
+                IconLabel("Add Sounds", icon: "plus")
+            }
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel("Add Sounds")
     }
 
     @ViewBuilder

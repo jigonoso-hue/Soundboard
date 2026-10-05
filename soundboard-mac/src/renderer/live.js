@@ -689,7 +689,7 @@ const Live = (() => {
       const volumes = el('button', 'stage-pill stage-button', 'Volumes');
       volumes.type = 'button';
       volumes.addEventListener('click', openVolumes);
-      const dice = el('button', 'stage-pill stage-button', 'Dice');
+      const dice = el('button', 'stage-pill stage-button stage-dice-top', 'Dice');
       dice.type = 'button';
       dice.title = 'Roll dice: everyone in the session sees them';
       dice.addEventListener('click', () => window.DiceTray?.open());
@@ -716,6 +716,11 @@ const Live = (() => {
       }
       renderNow(center, st);
 
+      // Phones: the listener's main action, big and in thumb reach (CSS shows it
+      // on narrow screens, where the Dice button at the top is hidden).
+      const roll = el('button', 'stage-roll', '🎲 Roll Dice');
+      roll.type = 'button';
+      roll.addEventListener('click', () => window.DiceTray?.open());
       const bottom = el('div', 'stage-bottom');
       bottom.append(el('span', 'stage-secondary small', 'You can switch to another app; sounds keep playing.'));
       bottom.append(el('span', 'spacer'));
@@ -729,7 +734,7 @@ const Live = (() => {
 
       content.append(top, el('div', 'stage-spacer'), center, el('div', 'stage-spacer'));
       renderPads(content);
-      content.append(bottom);
+      content.append(roll, bottom);
     }
 
     // The purple glow of a whisper.

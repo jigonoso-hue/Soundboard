@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SidebarView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var kits: KitStore
@@ -97,7 +98,8 @@ struct SidebarView: View {
                         Button(ui.matchAllTags ? "Match all" : "Match any") { ui.matchAllTags.toggle() }
                             .font(.caption)
                             .buttonStyle(.bordered)
-                            .controlSize(.mini)
+                            // A real tap target on iPhone.
+                            .controlSize(sizeClass == .compact ? .regular : .mini)
                     }
                 }
             }

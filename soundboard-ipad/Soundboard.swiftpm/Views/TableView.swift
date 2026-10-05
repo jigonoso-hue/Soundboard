@@ -798,6 +798,8 @@ struct TableOverlay: View {
     @ObservedObject var table: DiceTable
     /// The dice tray shows the turn order itself, under its top bar.
     var showStrip = true
+    /// Extra room at the top, below a taller bar (the listener's stage).
+    var inset: CGFloat = 0
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -814,13 +816,13 @@ struct TableOverlay: View {
             }
             .frame(maxWidth: 320, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.top, 84)
+            .padding(.top, 84 + inset)
 
             if showStrip, let turns = table.turns {
                 // Below the navigation bar, clear of the toolbar buttons.
                 TurnStrip(table: table, turns: turns)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 52)
+                    .padding(.top, 52 + inset)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             if table.yourTurn {
@@ -917,7 +919,8 @@ struct AskPanel: View {
                         }
                     }
                 }
-                HStack(alignment: .bottom, spacing: 10) {
+                // Stacked: the DC's buttons need the panel's whole width on an iPhone.
+                VStack(alignment: .leading, spacing: 4) {
                     VStack(alignment: .leading) {
                         FieldLabel(text: "Dice")
                         Picker("Dice", selection: $table.draftDice) {

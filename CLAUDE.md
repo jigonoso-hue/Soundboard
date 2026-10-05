@@ -52,6 +52,14 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 - On iPhone, a broadcaster's Whisper, Emphasis, Games and Dice sit in a bar at
   the bottom (BroadcastBar), Scene Kit sections stack full width, and
   editors stack their controls instead of scrolling sideways.
+- On the listener's stage on iPhone, Roll Dice is a big button at the bottom
+  (Volumes stays at the top), player pads are a 3-column grid, and the middle
+  scrolls when a lot is playing. In the dice tray the dice buttons wrap with
+  Roll on its own row at the bottom, and an open panel (custom dice, stats,
+  log) hides the roll controls instead of sitting on them.
+- Wrapping rows of chips (tags, icon categories, themes, accent colours,
+  colour swatches) use FlowLayout on iPhone (`AnyLayout.wrappedInScroll`)
+  rather than a sideways ScrollView.
 - Before calling UI work done, check it at phone size: run the Mac app at
   390×844 and check for overflow, overlaps and cramped rows, as well as at
   its usual size.
