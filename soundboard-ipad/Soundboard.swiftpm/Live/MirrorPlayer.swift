@@ -19,6 +19,16 @@ struct MirrorPlay {
     var by: String? = nil
 }
 
+/// One thing playing, for the stage's now-playing list.
+struct NowPlayingItem: Identifiable, Equatable {
+    enum Kind { case sound, music, ambience }
+    let id: String
+    let name: String
+    let kind: Kind
+    /// The player who played it, for sounds players add.
+    let by: String?
+}
+
 /// A looping ambience layer the host has playing.
 struct MirrorLayer {
     var key: String
@@ -167,15 +177,22 @@ final class MirrorPlayer {
         for entry in layers.values { entry.player.volume = Float(min(1, entry.layer.volume * level("ambience"))) }
     }
 
-    var nowPlaying: [String] {
-        var names: [String] = []
-        for voice in voices.values where !voice.play.whisper && !voice.play.name.isEmpty && !names.contains(voice.play.name) {
-            names.append(voice.play.name)
+    var nowPlaying: [NowPlayingItem] {
+        var items: [NowPlayingItem] = []
+        var seen = Set<String>()
+        for (pid, voice) in voices.sorted(by: { $0.value.play.at < $1.value.play.at }) {
+            let play = voice.play
+            guard !play.whisper, !play.name.isEmpty else { continue }
+            let kind: NowPlayingItem.Kind = play.category == "music" ? .music : .sound
+            let key = "\(kind)-\(play.name)-\(play.by ?? "")"
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            items.append(NowPlayingItem(id: pid, name: play.name, kind: kind, by: play.by))
         }
-        for entry in layers.values where !entry.layer.name.isEmpty && !names.contains(entry.layer.name) {
-            names.append(entry.layer.name)
+        for (key, entry) in layers.sorted(by: { $0.key < $1.key }) where !entry.layer.name.isEmpty {
+            items.append(NowPlayingItem(id: "a:" + key, name: entry.layer.name, kind: .ambience, by: nil))
         }
-        return names
+        return items
     }
 
     private func startTicker() {

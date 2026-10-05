@@ -38,7 +38,7 @@ final class LiveSession: ObservableObject {
     @Published private(set) var connected = false
     @Published private(set) var hostName: String?
     @Published private(set) var scene: String?
-    @Published private(set) var nowPlaying: [String] = []
+    @Published private(set) var nowPlaying: [NowPlayingItem] = []
     @Published private(set) var found: [FoundSession] = []
     /// Shows the full-screen listening stage.
     @Published var showStage = false
@@ -48,8 +48,6 @@ final class LiveSession: ObservableObject {
     /// Bumped when a whisper or a buzz arrives, for the stage's effects.
     @Published private(set) var whisperPulse = 0
     @Published private(set) var buzzPulse = 0
-    /// The latest sound a player added ("Sam: Thunder").
-    @Published private(set) var lastPlayerSound: String?
     /// A short message to show, such as a whisper sent.
     @Published var notice: String?
 
@@ -130,9 +128,6 @@ final class LiveSession: ObservableObject {
         }
         mirror.onWhisper = { [weak self] _ in self?.whisperPulse += 1 }
         mirror.onBuzz = { [weak self] play in self?.buzz(play) }
-        mirror.onStart = { [weak self] play in
-            if let by = play.by { self?.lastPlayerSound = "\(by): \(play.name)" }
-        }
         hostMirror.level = { [weak self] _ in self?.player?.masterVolume ?? 1 }
         browser.onChange = { [weak self] list in self?.found = list }
         LiveFiles.pruneCache()
@@ -538,7 +533,6 @@ final class LiveSession: ObservableObject {
         scene = nil
         allowedPlayerSounds = .off
         catalog = []
-        lastPlayerSound = nil
         browser.stop()
         // Stay connected and playing with the screen locked or in another app.
         BackgroundAudio.shared.keepAlive(true)
