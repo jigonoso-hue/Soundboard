@@ -1653,6 +1653,8 @@ struct DiceSceneView: UIViewRepresentable {
         view.scene = tray.scene.scene
         view.pointOfView = tray.scene.scene.rootNode.childNodes.first { $0.camera != nil }
         view.isPlaying = true
+        // Simulator only, for now: SceneKit's frame counter, to check the dice view draws.
+        view.showsStatistics = DiceScene.simulator
         return view
     }
 
@@ -1850,7 +1852,8 @@ struct DiceView: View {
     @ViewBuilder
     private var backdrop: some View {
         if theme.hasBackdrop {
-            Color.black.themedBackground(theme, page: nil).ignoresSafeArea()
+            // Clear, so the theme's backdrop (drawn behind it) shows.
+            Color.clear.themedBackground(theme, page: nil).ignoresSafeArea()
         } else {
             RadialGradient(colors: [Color(hex: 0x1F5A3D), Color(hex: 0x0D2A1C)], center: .center, startRadius: 20, endRadius: 700)
                 .ignoresSafeArea()
