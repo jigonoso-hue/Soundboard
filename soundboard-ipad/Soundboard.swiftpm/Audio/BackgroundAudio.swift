@@ -14,16 +14,22 @@ final class BackgroundAudio {
     private var silence: AVAudioPlayer?
     private var keepingAlive = false
     private var observers: [NSObjectProtocol] = []
+    /// Audio session calls can take a while (they wait on the system's audio
+    /// server), so they run here rather than on the main thread.
+    private nonisolated static let sessionQueue = DispatchQueue(label: "dungeonradio.audio-session", qos: .userInitiated)
 
     private init() {}
 
     /// Sets up the shared audio session: playback that mixes with other apps'
     /// audio and carries on in the background.
     func configure() {
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, options: [.mixWithOthers])
-        try? session.setActive(true)
+        Self.sessionQueue.async {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.playback, options: [.mixWithOthers])
+            try? session.setActive(true)
+        }
         guard observers.isEmpty else { return }
+        let session = AVAudioSession.sharedInstance()
         let center = NotificationCenter.default
         // A phone call or Siri pauses our audio; take the session back afterwards.
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { note in
@@ -53,7 +59,17 @@ final class BackgroundAudio {
     }
 
     private func resume() {
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // Re-activate the session off the main thread, then (back on it) make
+        // sure the keep-alive loop is playing.
+        Self.sessionQueue.async {
+            try? AVAudioSession.sharedInstance().setActive(true)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { BackgroundAudio.shared.startSilence() }
+            }
+        }
+    }
+
+    private func startSilence() {
         guard keepingAlive else { return }
         if silence == nil {
             silence = try? AVAudioPlayer(data: Self.silentWAV())
