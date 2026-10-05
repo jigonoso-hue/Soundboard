@@ -1661,3 +1661,7 @@ body.game-locked { overflow: hidden; }
   /* Roll on its own full-width row, at the very bottom. */
   .dice-roll { flex-basis: 100%; order: 10; min-height: 52px; }
 }
+
+/* While your dice roll in the tray, the roll controls step aside. */
+.dice-ui { transition: opacity 0.2s ease, visibility 0.2s; }
+.dice-layer.rolling .dice-ui { opacity: 0; visibility: hidden; pointer-events: none; }

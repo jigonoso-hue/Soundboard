@@ -542,6 +542,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         var target: [Int]?
         var done = false
         var quietFrames = 0
+        var flatFrames = 0
         var nudges = 0
         /// Shake rolls wait for the phone to be still before they count.
         var holdUntilStill = false
@@ -1037,8 +1038,19 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                 return speed < 0.3 && abs(body.angularVelocity.w) < 0.5
             }
             roll.quietFrames = still && (!roll.holdUntilStill || phoneStill) ? roll.quietFrames + 1 : 0
+            // Lying flat and barely moving: its face can't change, so it counts sooner.
+            let flatAndSlow = roll.local && roll.dice.allSatisfy { die in
+                guard let body = die.node.physicsBody else { return true }
+                let speed = simd_length(SIMD3<Float>(body.velocity.x, body.velocity.y, body.velocity.z))
+                // Spinning in place like a top doesn't count: only tipping over can change the face.
+                let w = body.angularVelocity
+                let tilt = abs(w.w) * hypot(w.x, w.z)
+                return speed < 0.8 && tilt < 1.5 && DiceGeometry.top(die.kind, rotation: rotation(die.node)).flat
+            }
+            roll.flatFrames = flatAndSlow && (!roll.holdUntilStill || phoneStill) ? roll.flatFrames + 1 : 0
+
             let timedOut = Date().timeIntervalSince(roll.started) > (roll.holdUntilStill ? 60 : 9)
-            if roll.quietFrames < 15 && !timedOut { continue }
+            if roll.quietFrames < 15 && roll.flatFrames < 6 && !timedOut { continue }
             if roll.local && !timedOut && roll.nudges < 4 {
                 // A die leaning on another or on a wall: give it a nudge.
                 let cocked = roll.dice.filter { !DiceGeometry.top($0.kind, rotation: rotation($0.node)).flat }
@@ -1055,6 +1067,15 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             roll.done = true
             let result: [Int]?
             if roll.local {
+                // Held where they are, so the faces read now stay on top; a die
+                // spinning flat keeps spinning down.
+                for die in roll.dice {
+                    guard let body = die.node.physicsBody else { continue }
+                    let w = body.angularVelocity
+                    let yaw = w.y * w.w
+                    body.velocity = SCNVector3Zero
+                    body.angularVelocity = SCNVector4(0, yaw < 0 ? -1 : 1, 0, abs(yaw))
+                }
                 result = roll.dice.map { die in die.values[DiceGeometry.top(die.kind, rotation: rotation(die.node)).index] }
             } else {
                 land(roll, force: true)
@@ -1136,6 +1157,8 @@ final class DiceTray: ObservableObject {
     }
 
     @Published var counts: [String: Int] { didSet { save() } }
+    /// Your roll in progress in the tray: its controls step aside meanwhile.
+    @Published private(set) var rollingId: String?
     @Published var modifier: Int { didSet { save() } }
     @Published var color: String { didSet { save() } }
     @Published var shakeToRoll: Bool { didSet { save(); updateMotion() } }
@@ -1345,6 +1368,7 @@ final class DiceTray: ObservableObject {
     }
 
     func close() {
+        rollingId = nil
         isOpen = false
         banner = nil
         rollingName = nil
@@ -1396,14 +1420,21 @@ final class DiceTray: ObservableObject {
         if options.overlay && !isOpen {
             watchTask?.cancel()
             watching = true
-        } else if !isOpen {
-            open()
+        } else {
+            if !isOpen { open() }
+            rollingId = id
         }
         banner = nil
         scene.volume = volume()
         if fromShake { shakeRoll = id }
         let finish: ([Int]?) -> Void = { [weak self] values in
-            guard let self, let values else { return }
+            guard let self else { return }
+            if self.rollingId == id {
+                self.rollingId = nil
+                // The dice you picked are used up: the next roll starts from none.
+                if values != nil && options.counts == nil && mode == .normal { self.counts = [:] }
+            }
+            guard let values else { return }
             if self.shakeRoll == id { self.shakeRoll = nil }
             let summary = start.summarize(values)
             let entry = RollEntry(id: id, start: start, values: values, summary: summary, mine: true)
@@ -1862,8 +1893,9 @@ struct DiceView: View {
                 }
                 Spacer()
                 // iPhone: an open panel gets the whole height; close it to roll.
-                if !(sizeClass == .compact && tray.panel != nil) {
+                if !(sizeClass == .compact && tray.panel != nil) && tray.rollingId == nil {
                     controls.diceCover(tray, "controls")
+                        .transition(.opacity)
                 }
             }
             .padding(.horizontal, 14)
@@ -1873,6 +1905,7 @@ struct DiceView: View {
             if tray.showRecap { DiceRecap(tray: tray) }
         }
         .animation(.easeOut(duration: 0.25), value: tray.banner)
+        .animation(.easeOut(duration: 0.2), value: tray.rollingId)
         .statusBarHidden(false)
     }
 
@@ -2134,7 +2167,7 @@ struct DiceView: View {
     private var rollButton: some View {
         let empty = DiceGeometry.plan(tray.counts, customs: tray.allCustom).kinds.isEmpty
         let what = DiceGeometry.describe(tray.counts, modifier: tray.modifier, customs: tray.allCustom)
-        return Text("Roll \(what)")
+        return Text(empty ? "Pick dice to roll" : "Roll \(what)")
             .font(.headline.weight(.heavy))
             .foregroundStyle(Color.white)
             .lineLimit(1)
@@ -2172,7 +2205,7 @@ struct DiceView: View {
                     }
             )
             .accessibilityElement()
-            .accessibilityLabel("Roll \(what)")
+            .accessibilityLabel(empty ? "Pick dice to roll" : "Roll \(what)")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { tray.roll() }
     }

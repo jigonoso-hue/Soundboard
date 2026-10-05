@@ -20,6 +20,9 @@ const MIN_HALF_EXTENT = 6.4;
 const FOV = 30;
 const GRAVITY = 60;
 const SETTLE_FRAMES = 24;
+// Lying flat and barely moving: its face can't change, so the roll counts sooner.
+// Spinning in place like a top doesn't count: only tipping over can change the face.
+const FLAT_SETTLE_FRAMES = 6;
 const MAX_ROLL_MS = 9000;
 const MAX_DICE = 40;
 // The same sixteen colours as the iPad. In a Live Session no two people share one.
@@ -489,9 +492,15 @@ class DiceScene {
       if (!roll.local) this.land(roll, false);
       const still = roll.dice.every((d) => d.body.sleepState === CANNON.Body.SLEEPING
         || (d.body.velocity.length() < 0.08 && d.body.angularVelocity.length() < 0.08));
+      const flatAndSlow = roll.local && roll.dice.every((d) => {
+        const q = d.body.quaternion;
+        const w = d.body.angularVelocity;
+        return d.body.velocity.length() < 0.8 && Math.hypot(w.x, w.z) < 1.5 && G.top(d.kind, [q.x, q.y, q.z, q.w]).flat;
+      });
       roll.quietFrames = still ? roll.quietFrames + 1 : 0;
+      roll.flatFrames = flatAndSlow ? (roll.flatFrames || 0) + 1 : 0;
       const timedOut = now - roll.started > MAX_ROLL_MS;
-      if (roll.quietFrames < SETTLE_FRAMES && !timedOut) continue;
+      if (roll.quietFrames < SETTLE_FRAMES && roll.flatFrames < FLAT_SETTLE_FRAMES && !timedOut) continue;
       if (roll.local && !timedOut && roll.nudges < 4) {
         // A die leaning on another or on a wall: give it a nudge.
         const cocked = roll.dice.filter((d) => {
@@ -511,6 +520,12 @@ class DiceScene {
       }
       roll.done = true;
       if (roll.local) {
+        // Held where they are, so the faces read now stay on top; a die spinning
+        // flat keeps spinning down.
+        for (const d of roll.dice) {
+          d.body.velocity.set(0, 0, 0);
+          d.body.angularVelocity.set(0, d.body.angularVelocity.y, 0);
+        }
         const values = roll.dice.map((d) => {
           const q = d.body.quaternion;
           return G.read(d.kind, [q.x, q.y, q.z, q.w], d.values).value;
@@ -688,6 +703,8 @@ function open(withPanel) {
 }
 
 function close() {
+  rollingId = null;
+  layer.classList.remove('rolling');
   setMode('closed');
   banner.classList.add('hidden');
 }
@@ -864,6 +881,8 @@ function claim(hex) {
 
 // Hidden: the broadcaster's next roll shows everyone the dice but not the numbers.
 let hiddenArmed = false;
+// Your roll in progress in the tray (its controls are hidden meanwhile).
+let rollingId = null;
 
 // Rolls the chosen dice (or 2d20 for advantage / disadvantage).
 // options: { counts, modifier, ask, by, owner, hidden, overlay } override the tray's own
@@ -894,6 +913,9 @@ function roll(rollMode = 'normal', strength = 1, options = {}) {
   if (options.ask) start.ask = options.ask;
   if (hidden) start.hidden = true;
   mine.add(id);
+  // In the tray, the controls step aside while the dice roll.
+  const inTray = !(options.overlay && mode !== 'tray');
+  if (inTray) { rollingId = id; layer.classList.add('rolling'); }
   // A roll from a request card tumbles over whatever is on screen (like other
   // people's rolls) instead of opening the tray.
   const overlay = !!options.overlay && mode !== 'tray';
@@ -908,6 +930,13 @@ function roll(rollMode = 'normal', strength = 1, options = {}) {
   throwIt({
     id, owner: options.owner || options.by || 'me', kinds, dice: start.dice, color, local: true, looks: looksFor(start, false),
     onDone: (values) => {
+      if (rollingId === id) {
+        rollingId = null;
+        layer.classList.remove('rolling');
+        // The dice you picked are used up: the next roll starts from none.
+        if (!options.counts && rollMode === 'normal') { settings.counts = {}; save(); }
+        renderUI();
+      }
       const summary = G.summarize(start, values);
       const entry = makeEntry(id, start, values, summary, true);
       if (summary.kept !== null) dimDropped(id, start, summary);
@@ -1520,8 +1549,9 @@ function renderUI() {
   go.id = 'dice-roll';
   go.title = 'Click to roll, or hold to throw harder';
   const ring = el('span', 'dice-charge');
-  go.append(ring, el('span', 'dice-roll-text', `Roll ${G.describe(counts, settings.modifier, allCustom())}`));
-  go.disabled = !G.plan(counts, 'normal', allCustom()).kinds.length;
+  const any = G.plan(counts, 'normal', allCustom()).kinds.length > 0;
+  go.append(ring, el('span', 'dice-roll-text', any ? `Roll ${G.describe(counts, settings.modifier, allCustom())}` : 'Pick dice to roll'));
+  go.disabled = !any;
   // Hold to throw harder: strength grows from 1 to 3 over a second and a half.
   const begin = (e) => {
     if (go.disabled || e.button > 0) return;

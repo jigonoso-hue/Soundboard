@@ -200,7 +200,7 @@ macOS asks for permission to use the local network the first time you broadcast 
 Click **Dice** in the toolbar (or on the stage, while tuned in). The tray fills the window: real 3D dice tumble with physics and bounce off its edges.
 
 - Click a die (d4, d6, d8, d10, d12, d20, d100, Coin) to add one; right-click to remove one. **−** / **+** set a modifier.
-- **Roll** throws them. Hold it down to throw harder (the button fills up over a second and a half).
+- **Roll** throws them. Hold it down to throw harder (the button fills up over a second and a half). The controls step aside while the dice roll, and once they land the dice you picked are cleared, ready for the next roll (the modifier stays).
 - **A** (green) rolls a d20 with advantage: two d20s, keep the higher. **DA** (red) is disadvantage: keep the lower. The die that doesn't count is dimmed.
 - A natural 1 on a d20 brings up a skull and crossbones over the die; a natural 20 sets off fireworks.
 - Your dice colour is the swatch at the top: click it to choose another. **Log** lists every roll: who rolled what.
