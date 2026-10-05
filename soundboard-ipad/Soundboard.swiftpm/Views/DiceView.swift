@@ -560,11 +560,20 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
     /// Fireworks sparks: fewer below Full.
     var sparkScale: Float = 1
 
+    /// The Simulator draws the see-through view black with shadows or
+    /// edge smoothing on, so it gets neither (real devices are unaffected).
+    #if targetEnvironment(simulator)
+    static let simulator = true
+    #else
+    static let simulator = false
+    #endif
+
     /// Full: shadows. Reduced and Lite: none, and fewer sparks.
     func setQuality(_ level: DiceEffects) {
         let full = level == .full
-        sun?.light?.castsShadow = full
-        floor?.isHidden = !full
+        let shadows = full && !Self.simulator
+        sun?.light?.castsShadow = shadows
+        floor?.isHidden = !shadows
         sparkScale = full ? 1 : 0.45
     }
     /// Set from the main thread in shake mode: phone motion as scene forces.
@@ -1635,7 +1644,9 @@ struct DiceSceneView: UIViewRepresentable {
     func makeUIView(context: Context) -> SCNView {
         let view = SCNView()
         view.backgroundColor = .clear
-        view.antialiasingMode = .multisampling4X
+        view.isOpaque = false
+        view.layer.isOpaque = false
+        view.antialiasingMode = .none
         view.rendersContinuously = true
         view.preferredFramesPerSecond = 60
         view.isUserInteractionEnabled = false
@@ -1647,7 +1658,7 @@ struct DiceSceneView: UIViewRepresentable {
 
     func updateUIView(_ view: SCNView, context: Context) {
         if view.scene !== tray.scene.scene { view.scene = tray.scene.scene }
-        view.antialiasingMode = tray.level == .full ? .multisampling4X : .none
+        view.antialiasingMode = tray.level == .full && !DiceScene.simulator ? .multisampling4X : .none
         let size = view.bounds.size
         if size.width > 0, size.height > 0 { tray.scene.layout(aspect: Float(size.width / size.height)) }
     }
