@@ -13,6 +13,7 @@ struct DetailView: View {
     @EnvironmentObject private var ui: AppUI
     @EnvironmentObject private var themes: ThemeSettings
     @EnvironmentObject private var live: LiveSession
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let destination: Destination
     @Binding var showBrowser: Bool
 
@@ -64,6 +65,10 @@ struct DetailView: View {
         // Scene kits show everything in them, so there's nothing to search there.
         .modifier(LibrarySearch(enabled: kit == nil && destination != .options, text: $ui.search))
         .toolbar { toolbar }
+        // iPhone while broadcasting: Whisper, Emphasis, Games and Dice at the bottom.
+        .safeAreaInset(edge: .bottom) {
+            if sizeClass == .compact && live.role == .host { BroadcastBar() }
+        }
         .themedNavigationBar(themes.theme)
         .safeAreaInset(edge: .top, spacing: 0) {
             if !live.whisperTargets.isEmpty || live.emphasis {
@@ -153,12 +158,17 @@ struct DetailView: View {
                 LiveControls(showLive: $showLive)
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
-                HStack(spacing: 6) {
-                    Image(systemName: "speaker.fill").font(.caption).foregroundStyle(.secondary)
-                    Slider(value: $player.masterVolume, in: 0...1)
-                        .frame(width: 150)
-                        .accessibilityLabel("Master volume")
-                    Image(systemName: "speaker.wave.3.fill").font(.caption).foregroundStyle(.secondary)
+                if sizeClass == .compact {
+                    // iPhone: a button that opens the slider, so the toolbar isn't crowded.
+                    VolumeButton()
+                } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: "speaker.fill").font(.caption).foregroundStyle(.secondary)
+                        Slider(value: $player.masterVolume, in: 0...1)
+                            .frame(width: 150)
+                            .accessibilityLabel("Master volume")
+                        Image(systemName: "speaker.wave.3.fill").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Button {
                     player.stopAll()
@@ -313,7 +323,8 @@ struct SettingsPopover: View {
                 .foregroundStyle(.secondary)
         }
         .padding(20)
-        .frame(minWidth: 360)
+        // Fits an iPhone SE's popover too.
+        .frame(minWidth: 300)
         .presentationCompactAdaptation(.popover)
     }
 }
@@ -365,5 +376,30 @@ struct ArmedBanner: View {
         if !whisperNames.isEmpty { parts.append("whispers to \(whisperNames.joined(separator: ", "))") }
         if emphasis { parts.append("vibrates phones") }
         return "Next sound " + parts.joined(separator: " and ") + "."
+    }
+}
+
+/// iPhone: the master volume behind a button in the Scene Kit toolbar.
+private struct VolumeButton: View {
+    @EnvironmentObject private var player: SoundPlayer
+    @State private var open = false
+
+    var body: some View {
+        Button {
+            open = true
+        } label: {
+            Label("Volume", systemImage: player.masterVolume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+        }
+        .popover(isPresented: $open) {
+            HStack(spacing: 10) {
+                Image(systemName: "speaker.fill").foregroundStyle(.secondary)
+                Slider(value: $player.masterVolume, in: 0...1)
+                    .accessibilityLabel("Master volume")
+                Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
+            }
+            .padding(20)
+            .frame(width: 280)
+            .presentationCompactAdaptation(.popover)
+        }
     }
 }

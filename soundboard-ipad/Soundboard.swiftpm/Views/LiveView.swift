@@ -336,13 +336,17 @@ struct LiveView: View {
 /// button that opens the Live sheet.
 struct LiveControls: View {
     @EnvironmentObject private var live: LiveSession
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Binding var showLive: Bool
     @State private var choosingWhisper = false
     @State private var showGames = false
 
+    /// iPhone while broadcasting: the tools are in the bar at the bottom instead.
+    private var toolsBelow: Bool { sizeClass == .compact && live.role == .host }
+
     var body: some View {
         HStack(spacing: 14) {
-            if live.role == .host {
+            if live.role == .host && !toolsBelow {
                 Button {
                     choosingWhisper = true
                 } label: {
@@ -365,7 +369,7 @@ struct LiveControls: View {
                 .accessibilityLabel("Emphasis: the next sound vibrates listeners' phones")
                 .accessibilityAddTraits(live.emphasis ? .isSelected : [])
             }
-            if live.role == .host {
+            if live.role == .host && !toolsBelow {
                 // A buzzer or a quiz; starting one locks listeners' screens to it.
                 Button {
                     showGames = true
@@ -378,12 +382,14 @@ struct LiveControls: View {
                     GameHostView().environmentObject(live)
                 }
             }
-            Button {
-                live.dice.open()
-            } label: {
-                Label("Dice", systemImage: "dice")
+            if !toolsBelow {
+                Button {
+                    live.dice.open()
+                } label: {
+                    Label("Dice", systemImage: "dice")
+                }
+                .accessibilityLabel("Roll dice")
             }
-            .accessibilityLabel("Roll dice")
             Button {
                 showLive = true
             } label: {
@@ -401,6 +407,62 @@ struct LiveControls: View {
         case .listener: return "Tuned In"
         case .idle: return "Live"
         }
+    }
+}
+
+/// iPhone while broadcasting: Whisper, Emphasis, Games and Dice in a bar at the
+/// bottom of the screen, big and within thumb reach, instead of crowding the
+/// toolbar.
+struct BroadcastBar: View {
+    @EnvironmentObject private var live: LiveSession
+    @State private var choosingWhisper = false
+    @State private var showGames = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            tool(live.whisperTargets.isEmpty ? "Whisper" : "Whisper (\(live.whisperTargets.count))",
+                 live.whisperTargets.isEmpty ? "ear" : "ear.fill", on: !live.whisperTargets.isEmpty, color: Color(hex: 0xB07CFF)) {
+                choosingWhisper = true
+            }
+            .popover(isPresented: $choosingWhisper) {
+                WhisperPicker().presentationCompactAdaptation(.popover)
+            }
+            .accessibilityLabel("Whisper the next sound")
+            tool("Emphasis", live.emphasis ? "iphone.radiowaves.left.and.right.circle.fill" : "iphone.radiowaves.left.and.right",
+                 on: live.emphasis, color: Color(hex: 0xFF6A3D)) {
+                live.emphasis.toggle()
+            }
+            .accessibilityLabel("Emphasis: the next sound vibrates listeners' phones")
+            .accessibilityAddTraits(live.emphasis ? .isSelected : [])
+            tool("Games", live.game == nil ? "bell" : "bell.fill", on: live.game != nil, color: Color(hex: 0xC41818)) {
+                showGames = true
+            }
+            .sheet(isPresented: $showGames) {
+                GameHostView().environmentObject(live)
+            }
+            .accessibilityLabel("Games: a buzzer or a quiz for everyone")
+            tool("Dice", "dice", on: false, color: .accentColor) { live.dice.open() }
+                .accessibilityLabel("Roll dice")
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private func tool(_ title: String, _ icon: String, on: Bool, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon).font(.title3)
+                Text(title).font(.caption2.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .foregroundStyle(on ? Color.white : Color.primary)
+            .background(on ? color : Color.clear, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

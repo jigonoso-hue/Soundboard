@@ -44,9 +44,14 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
   big and within thumb reach, near the bottom.
 - Panels, cards and banners never cover the controls they sit next to, and
   stay clear of the notch, the home indicator and the navigation bar.
-- Use `horizontalSizeClass == .compact` (SwiftUI) or a `max-width: 560px`
-  media query (Mac CSS) for the phone layout, so the Mac at a narrow window
-  matches what an iPhone shows.
+- Use `horizontalSizeClass == .compact` (SwiftUI) for the phone layout. The
+  Mac window is at least 900 points wide, so the Mac board never needs a
+  phone layout; but the web screens a future Android app would reuse (dice,
+  table tools, games, the listener stage) get a `max-width: 560px` layout in
+  the Mac CSS that matches the iPhone's.
+- On iPhone, a broadcaster's Whisper, Emphasis, Games and Dice sit in a bar at
+  the bottom (BroadcastBar), Scene Kit sections stack full width, and
+  editors stack their controls instead of scrolling sideways.
 - Before calling UI work done, check it at phone size: run the Mac app at
   390×844 and check for overflow, overlaps and cramped rows, as well as at
   its usual size.

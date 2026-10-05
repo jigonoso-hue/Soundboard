@@ -10,6 +10,7 @@ struct BashEditorView: View {
     @EnvironmentObject private var bashPlayer: BashPlayer
     @EnvironmentObject private var player: SoundPlayer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     let original: Bash
     @State private var draft: Bash
@@ -415,8 +416,12 @@ struct BashEditorView: View {
     private var inspector: some View {
         if let index = selectedIndex {
             let clip = draft.clips[index]
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .center, spacing: 22) {
+            // iPhone: the settings stack down the screen, all in view, instead of
+            // a row that scrolls sideways out of sight.
+            let compact = sizeClass == .compact
+            let layout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(alignment: .center, spacing: 22))
+            ScrollView(compact ? .vertical : .horizontal, showsIndicators: false) {
+                layout {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(store.sound(clip.soundId)?.name ?? "Missing sound").font(.headline).lineLimit(1)
                         Text("Lane \(clip.lane + 1)").font(.caption).foregroundStyle(.secondary)
@@ -430,13 +435,13 @@ struct BashEditorView: View {
                             set: { value in updateClip(clip.id) { $0.offset = min(BashStore.maxOffset, max(0, (value * 10).rounded() / 10)) } }
                         ), in: 0...BashStore.maxOffset, step: 0.1)
                         .monospacedDigit()
-                        .frame(width: 190)
+                        .frame(width: compact ? nil : 190)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Volume \(Int(clip.volume * 100))%").font(.caption).foregroundStyle(.secondary)
                         Slider(value: clipBinding(clip.id, \.volume, fallback: 1), in: 0...1)
-                            .frame(width: 150)
+                            .frame(width: compact ? nil : 150)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -444,14 +449,14 @@ struct BashEditorView: View {
                             get: { clip.repetition != nil },
                             set: { on in updateClip(clip.id) { $0.repetition = on ? ClipRepeat(gap: 0, times: 0) : nil } }
                         ))
-                        .frame(width: 140)
+                        .frame(width: compact ? nil : 140)
                         if clip.repetition != nil {
-                            HStack(spacing: 14) {
+                            (compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 14))) {
                                 Stepper("Gap \(String(format: "%.1f", clip.repetition?.gap ?? 0))s", value: Binding(
                                     get: { clip.repetition?.gap ?? 0 },
                                     set: { value in updateClip(clip.id) { $0.repetition?.gap = max(0, min(3600, (value * 10).rounded() / 10)) } }
                                 ), in: 0...3600, step: 0.5)
-                                .frame(width: 170)
+                                .frame(width: compact ? nil : 170)
                                 Stepper((clip.repetition?.times ?? 0) == 0 ? "Plays: until stopped" : "Plays: \(clip.repetition?.times ?? 0)", value: Binding(
                                     get: { clip.repetition?.times ?? 0 },
                                     set: { value in
@@ -463,7 +468,7 @@ struct BashEditorView: View {
                                         updateClip(clip.id) { $0.repetition?.times = max(0, min(999, next)) }
                                     }
                                 ), in: 0...999)
-                                .frame(width: 240)
+                                .frame(width: compact ? nil : 240)
                             }
                         }
                     }
@@ -486,7 +491,7 @@ struct BashEditorView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 12)
             }
-            .frame(height: clip.repetition != nil ? 110 : 80)
+            .frame(height: compact ? (clip.repetition != nil ? 330 : 250) : (clip.repetition != nil ? 110 : 80))
         } else {
             Text("Tap a sound to edit it. Drag sounds left or right to change when they start, and up or down to move them between lanes. Tap the ruler to move the playhead.")
                 .font(.callout)

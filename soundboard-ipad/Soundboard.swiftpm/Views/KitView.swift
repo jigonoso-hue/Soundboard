@@ -7,6 +7,7 @@ struct KitView: View {
     @EnvironmentObject private var kits: KitStore
     @EnvironmentObject private var ambience: AmbienceMixer
     @EnvironmentObject private var ui: AppUI
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var themes: ThemeSettings
     let kitId: UUID
 
@@ -49,7 +50,11 @@ struct KitView: View {
                         header(kit)
                             .padding(themes.theme.hasBackdrop ? 14 : 0)
                             .background(ThemePanel(theme: themes.theme, seed: "kit-header-\(kit.id)") { EmptyView() })
-                        board(kit, width: geo.size.width - 24)
+                        if sizeClass == .compact {
+                            stacked(kit, width: geo.size.width - 24)
+                        } else {
+                            board(kit, width: geo.size.width - 24)
+                        }
                     }
                     .padding(12)
                 }
@@ -137,13 +142,16 @@ struct KitView: View {
                 IconLabel(drawerOpen ? "Close Library" : "Add from Library", icon: drawerOpen ? "close" : "plus", size: 14)
             }
             .buttonStyle(.borderedProminent)
-            Button {
-                withAnimation { editing.toggle() }
-            } label: {
-                if editing { Text("Done") } else { IconLabel("Layout", icon: "grid", size: 14) }
+            // On iPhone sections stack one after another, so there's no layout to arrange.
+            if sizeClass != .compact {
+                Button {
+                    withAnimation { editing.toggle() }
+                } label: {
+                    if editing { Text("Done") } else { IconLabel("Layout", icon: "grid", size: 14) }
+                }
+                .buttonStyle(.bordered)
+                .tint(editing ? Color.accentColor : nil)
             }
-            .buttonStyle(.bordered)
-            .tint(editing ? Color.accentColor : nil)
             Button {
                 creatingSection = true
             } label: {
@@ -201,6 +209,38 @@ struct KitView: View {
 
     private func column(_ width: CGFloat) -> CGFloat {
         (width - Self.gap * CGFloat(KitStore.columns - 1)) / CGFloat(KitStore.columns)
+    }
+
+    /// iPhone: the sections full width, one after another in reading order (top
+    /// to bottom, then left to right on the iPad/Mac layout), so every tile has room.
+    private func stacked(_ kit: SoundKit, width: CGFloat) -> some View {
+        let ordered = kit.sections.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
+        return VStack(spacing: Self.gap) {
+            ForEach(ordered) { section in
+                KitSectionView(
+                    kit: kit,
+                    section: section,
+                    editing: false,
+                    targeted: drawerOpen && drawerTarget == section.id,
+                    onAdd: { openDrawer(kit, section: section.id) },
+                    onRename: {
+                        renameText = section.title
+                        renaming = section
+                    },
+                    onRemove: {
+                        if section.count == 0 { removeSection(section, from: kit) } else { removingSection = section }
+                    },
+                    onChange: { updated in
+                        change(kit) { k in
+                            if let i = k.sections.firstIndex(where: { $0.id == updated.id }) { k.sections[i] = updated }
+                        }
+                    },
+                    onMoveItem: { item, from, to in moveItem(item, from: from, to: to, in: kit) }
+                )
+                // Tall enough for its sounds at full width (it scrolls inside if needed).
+                .frame(width: max(0, width), height: max(120, span(min(section.h, 8), Self.row)))
+            }
+        }
     }
 
     private func board(_ kit: SoundKit, width: CGFloat) -> some View {
