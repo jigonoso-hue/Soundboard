@@ -1627,3 +1627,13 @@ body.game-locked { overflow: hidden; }
   .table-column { top: 150px; }
   .dice-layer.tray ~ .table-turns { top: 2px; }
 }
+
+/* Dice effects: Lite's flat dice (dice.js). */
+.dice-flat { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: min(520px, calc(100vw - 32px)); pointer-events: none; }
+.dice-flat-tile { min-width: 56px; height: 56px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 12px; color: #fff; font-weight: 900; font-size: 22px; box-shadow: inset 0 -4px 0 rgba(0,0,0,0.25), 0 6px 16px rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.3); animation: dice-flat-shake 0.14s linear infinite alternate; }
+.dice-flat-tile.d4 { clip-path: polygon(50% 0, 100% 100%, 0 100%); padding-top: 14px; }
+.dice-flat.landed .dice-flat-tile { animation: dice-flat-land 0.25s ease-out; }
+.dice-flat.landed { transition: opacity 0.6s 2.8s; opacity: 0; }
+@keyframes dice-flat-shake { from { transform: rotate(-8deg) translateY(-2px); } to { transform: rotate(8deg) translateY(2px); } }
+@keyframes dice-flat-land { from { transform: scale(1.25); } to { transform: scale(1); } }
+.dice-banner-nat { font-weight: 800; margin-top: 4px; }

@@ -585,9 +585,16 @@ const Live = (() => {
       const ctx = canvas.getContext('2d');
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.clearRect(0, 0, w, h);
-      const time = reduceMotion.matches ? 0 : now / 1000;
+      // Lite (dice effects): the stage holds still, redrawn now and then.
+      const still = document.body.dataset.perf === 'lite';
+      const time = reduceMotion.matches || still ? 0 : now / 1000;
       ThemeArt.stage(ctx, w, h, time, Mirror.nowPlaying().length > 0, style());
-      frame = requestAnimationFrame(draw);
+      if (still) {
+        frame = -1;
+        setTimeout(() => { frame = requestAnimationFrame(draw); }, 1000);
+      } else {
+        frame = requestAnimationFrame(draw);
+      }
     }
 
     function chip(item, st) {

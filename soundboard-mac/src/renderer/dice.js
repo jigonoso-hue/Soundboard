@@ -283,6 +283,7 @@ class DiceScene {
     this.camera.lookAt(0, 0, 0);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    this.sun = sun;
     sun.position.set(-6, 20, -8);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -295,6 +296,7 @@ class DiceScene {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.ShadowMaterial({ opacity: 0.35 }));
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
+    this.floor = floor;
     this.scene.add(floor);
 
     this.world = new CANNON.World({ gravity: new CANNON.Vec3(0, -GRAVITY, 0) });
@@ -316,6 +318,15 @@ class DiceScene {
     this.running = false;
     this.resize();
     new ResizeObserver(() => this.resize()).observe(host);
+  }
+
+  // Full: shadows and a sharp picture. Reduced and Lite: no shadows, fewer pixels.
+  setQuality(level) {
+    const full = level === 'full';
+    this.sun.castShadow = full;
+    this.floor.visible = full;
+    this.renderer.setPixelRatio(full ? Math.min(2, window.devicePixelRatio || 1) : 1);
+    this.resize();
   }
 
   // The floor's half-width and half-depth visible on screen.
@@ -455,6 +466,8 @@ class DiceScene {
     const tick = (now) => {
       if (!this.running) return;
       const dt = Math.min(0.05, (now - this.last) / 1000);
+      // How smoothly it's running: slow frames while dice roll can step the effects down.
+      this.onFrame?.((now - this.last) / 1000);
       this.last = now;
       this.world.step(1 / 120, dt, 10);
       for (const roll of this.rolls) for (const die of roll.dice) {
@@ -648,7 +661,11 @@ const resultHooks = new Set();
 const naturalHooks = new Set();
 
 function ensureScene() {
-  if (!scene) scene = new DiceScene(canvasHost);
+  if (!scene) {
+    scene = new DiceScene(canvasHost);
+    scene.onFrame = onFrame;
+    scene.setQuality(level());
+  }
   return scene;
 }
 
@@ -657,7 +674,8 @@ function setMode(next) {
   layer.classList.toggle('hidden', next === 'closed');
   layer.classList.toggle('tray', next === 'tray');
   layer.classList.toggle('watch', next === 'watch');
-  if (next !== 'closed') { ensureScene().resize(); }
+  // Lite never makes the 3D scene (it costs memory on slow devices).
+  if (next !== 'closed') { if (level() !== 'lite') ensureScene().resize(); else scene?.resize(); }
   if (next === 'closed' && scene) scene.clear();
 }
 
@@ -876,14 +894,18 @@ function roll(rollMode = 'normal', strength = 1, options = {}) {
   if (options.ask) start.ask = options.ask;
   if (hidden) start.hidden = true;
   mine.add(id);
-  const s = ensureScene();
   // A roll from a request card tumbles over whatever is on screen (like other
   // people's rolls) instead of opening the tray.
   const overlay = !!options.overlay && mode !== 'tray';
   if (overlay) watch();
   else if (mode === 'closed' || mode === 'watch') open();
   banner.classList.add('hidden');
-  s.throw({
+  const throwIt = level() === 'lite'
+    // Lite: a quick flat animation and fairly drawn numbers; everyone else's
+    // devices still throw these dice and land them on the same numbers.
+    ? (spec) => flatRoll(start, spec.looks, spec.onDone)
+    : (spec) => ensureScene().throw(spec);
+  throwIt({
     id, owner: options.owner || options.by || 'me', kinds, dice: start.dice, color, local: true, looks: looksFor(start, false),
     onDone: (values) => {
       const summary = G.summarize(start, values);
@@ -899,6 +921,119 @@ function roll(rollMode = 'normal', strength = 1, options = {}) {
   if (typeof Live !== 'undefined') Live.rollStart(start);
   renderUI();
   return id;
+}
+
+// ---- Performance: Full, Reduced or Lite ----
+
+// Full: 3D dice everywhere. Reduced: no shadows, fewer sparks, and only one
+// other person's roll on screen at a time. Lite: your roll is a quick flat
+// animation, other people's rolls show just their result, natural 20s and 1s
+// are a line on the result, and the listener stage holds still.
+// "Automatic" starts from what the device is and steps down for good if the
+// dice stutter; the Options setting can fix a level instead.
+const LEVELS = ['full', 'reduced', 'lite'];
+const LEVEL_KEY = 'dice.level';
+let autoLevel = (() => {
+  try {
+    const learned = localStorage.getItem(LEVEL_KEY);
+    if (LEVELS.includes(learned)) return learned;
+  } catch { /* ignore */ }
+  const cores = navigator.hardwareConcurrency || 4;
+  const memory = navigator.deviceMemory || 4;
+  if (memory <= 2 || cores <= 2) return 'lite';
+  if (memory <= 4 && cores <= 4) return 'reduced';
+  return 'full';
+})();
+
+function level() {
+  const chosen = settings.diceEffects || 'auto';
+  return LEVELS.includes(chosen) ? chosen : autoLevel;
+}
+
+function applyLevel() {
+  document.body.dataset.perf = level();
+  scene?.setQuality(level());
+  renderEffectsOption();
+}
+
+// Options → Performance: Dice effects.
+function renderEffectsOption() {
+  const host = document.getElementById('options-performance');
+  if (!host) return;
+  host.textContent = '';
+  const label = el('label', 'options-row');
+  label.append(el('span', null, 'Dice effects'));
+  const select = el('select');
+  select.id = 'dice-effects';
+  const names = { full: 'Full', reduced: 'Reduced', lite: 'Lite' };
+  for (const [value, text] of [['auto', `Automatic (${names[autoLevel]})`], ['full', 'Full'], ['reduced', 'Reduced'], ['lite', 'Lite']]) {
+    const option = el('option', null, text);
+    option.value = value;
+    select.append(option);
+  }
+  select.value = settings.diceEffects || 'auto';
+  select.addEventListener('change', () => setEffects(select.value));
+  label.append(select);
+  host.append(label, el('p', 'muted small', 'Full: 3D dice with shadows. Reduced: lighter effects. Lite: for slower devices; other people\'s rolls show just their result. Automatic picks for this device and steps down if the dice stutter.'));
+}
+
+// Slow frames while dice roll: well under 40 a second for most of two seconds.
+let slow = 0;
+let watched = 0;
+function onFrame(seconds) {
+  if ((settings.diceEffects || 'auto') !== 'auto' || autoLevel === 'lite') return;
+  watched++;
+  if (seconds > 1 / 40) slow++;
+  if (watched < 120) return;
+  const stutter = slow > 80;
+  slow = 0;
+  watched = 0;
+  if (!stutter) return;
+  autoLevel = LEVELS[LEVELS.indexOf(autoLevel) + 1];
+  try { localStorage.setItem(LEVEL_KEY, autoLevel); } catch { /* ignore */ }
+  applyLevel();
+}
+
+function setEffects(choice) {
+  settings.diceEffects = ['auto', ...LEVELS].includes(choice) ? choice : 'auto';
+  save();
+  applyLevel();
+}
+
+// Lite: the dice as flat tiles that flicker through faces, then the result.
+function flatRoll(start, looks, onDone) {
+  const kinds = start.kinds;
+  const values = kinds.map((kind) => {
+    const [low, high] = G.range(kind);
+    const n = high - low + 1;
+    const pick = new Uint32Array(1);
+    crypto.getRandomValues(pick);
+    return low + (pick[0] % n);
+  });
+  const text = (i, v) => (looks[i]?.custom ? G.customLabel(looks[i].custom, v) || '—' : G.label(kinds[i], v));
+  const box = el('div', 'dice-flat');
+  const tiles = kinds.map((kind) => {
+    const tile = el('div', `dice-flat-tile ${kind}`);
+    tile.style.background = start.color;
+    box.append(tile);
+    return tile;
+  });
+  layer.append(box);
+  let ticks = 0;
+  const flicker = () => {
+    ticks++;
+    tiles.forEach((tile, i) => {
+      const [low, high] = G.range(kinds[i]);
+      tile.textContent = ticks < 9 ? text(i, low + Math.floor(Math.random() * (high - low + 1))) : text(i, values[i]);
+    });
+    if (ticks < 9) setTimeout(flicker, 70);
+    else {
+      box.classList.add('landed');
+      setTimeout(() => box.remove(), 3500);
+      onDone(values);
+    }
+  };
+  flicker();
 }
 
 // ---- Natural 1s and 20s ----
@@ -918,8 +1053,10 @@ function countedD20s(start, summary) {
 function celebrate(id, start, summary) {
   for (const { index, score } of countedD20s(start, summary)) {
     if (score !== 1 && score !== 20) continue;
-    const at = scene?.screenPosition(id, index);
+    const at = level() === 'lite' ? null : scene?.screenPosition(id, index);
     if (at) { if (score === 1) skull(at); else fireworks(at); }
+    // Lite: no effects over the dice, just a line on the result.
+    else if (!start.hidden && !banner.classList.contains('hidden')) banner.append(el('div', 'dice-banner-nat', score === 20 ? '🎆 Natural 20!' : '☠️ Natural 1'));
     if (!start.hidden) for (const hook of naturalHooks) { try { hook(score, start); } catch (err) { console.error(err); } }
   }
 }
@@ -941,8 +1078,9 @@ function fireworks(at) {
   [[0, 0, 0], [-70, -50, 260], [80, -30, 520]].forEach(([dx, dy, delay]) => {
     setTimeout(() => {
       const color = colors[Math.floor(Math.random() * colors.length)];
-      for (let i = 0; i < 42; i++) {
-        const angle = (i / 42) * Math.PI * 2 + Math.random() * 0.2;
+      const count = level() === 'full' ? 42 : 18;
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.2;
         const speed = 90 + Math.random() * 120;
         sparks.push({
           x: at.x + dx, y: at.y + dy - 40, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 40,
@@ -991,7 +1129,7 @@ function drawSparks(now) {
 
 function dimDropped(id, start, summary) {
   const keptIndex = summary.scores.indexOf(summary.kept);
-  start.groups.forEach((g, i) => { if (i !== keptIndex) scene.dim(id, g.dice[0]); });
+  start.groups.forEach((g, i) => { if (i !== keptIndex) scene?.dim(id, g.dice[0]); });
 }
 
 // ---- Rolls from the Live Session ----
@@ -1003,6 +1141,18 @@ function remoteStart(msg) {
   if (!msg || !msg.id || mine.has(msg.id) || remote.has(msg.id) || log.some((e) => e.id === msg.id)) return;
   remote.set(msg.id, msg);
   if (remote.size > 50) remote.delete(remote.keys().next().value);
+  // Lite (or Reduced, with someone else's dice already rolling): no dice, just
+  // who's rolling, then their result when it comes. A hidden roll shows nothing.
+  const busy = scene?.rolls.some((r) => !r.local && !r.done);
+  if (level() === 'lite' || (level() === 'reduced' && busy)) {
+    msg.flat = true;
+    if (msg.hidden) return;
+    watch();
+    banner.textContent = '';
+    banner.append(el('div', 'dice-banner-who', `🎲 ${msg.by || 'Someone'} is rolling…`));
+    banner.classList.remove('hidden');
+    return;
+  }
   watch();
   ensureScene().throw({
     id: msg.id, owner: msg.by || 'someone', kinds: msg.kinds, dice: msg.dice, color: msg.color || DICE_COLORS[1][1], local: false,
@@ -1039,6 +1189,7 @@ function finishRemote(id, values) {
 function remoteResultLate(msg) {
   remoteResult(msg);
   const start = remote.get(msg.id);
+  if (start?.flat) { finishRemote(msg.id, msg.values); return; }
   const rollObj = scene?.rolls.find((r) => r.id === msg.id);
   if (start && rollObj && rollObj.done) finishRemote(msg.id, msg.values);
 }
@@ -1425,8 +1576,11 @@ window.DiceTray = {
   setInitiativeModifier: (n) => { settings.initiativeModifier = n; save(); },
   modifier: () => settings.modifier,
   showRecap,
+  // Dice effects: 'auto', 'full', 'reduced' or 'lite'; and the level in use.
+  setEffects, effects: () => settings.diceEffects || 'auto', level,
   // For trying the effects: DiceTray.effect(1 | 20).
   effect: (n) => { const at = { x: layer.clientWidth / 2, y: layer.clientHeight / 2 }; if (n === 1) skull(at); else fireworks(at); },
 };
 if (typeof Themes !== 'undefined') Themes.onChange(() => { /* the tray's backdrop is repainted by Themes */ });
+applyLevel();
 window.dispatchEvent(new Event('dice-ready'));
