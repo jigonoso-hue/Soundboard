@@ -871,6 +871,8 @@ const Live = (() => {
     else if (message.t === 'customDice') tray.setSharedCustom(message.list);
     // Roll requests, results and the turn order (table.js).
     else if (['ask', 'askClosed', 'askResult', 'turns'].includes(message.t)) window.Table?.receive(message);
+    // The buzzer or quiz (games.js).
+    else if (message.t === 'game') window.Games?.receive(message);
   });
 
   // The broadcaster's custom dice, for listeners to roll too.
@@ -950,6 +952,7 @@ const Live = (() => {
       shareCustomDice(window.DiceTray?.myCustomDice());
     }
     window.Table?.statusChanged();
+    window.Games?.statusChanged();
     // Tuning in: the dialog closes and the stage takes over the window until you leave.
     if (status.role === 'listen') { if ($('#live-dialog').open) $('#live-dialog').close(); Stage.show(); } else Stage.hide();
     // No need to add sounds while broadcasting.

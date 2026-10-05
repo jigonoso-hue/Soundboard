@@ -383,6 +383,7 @@ function registerLiveIpc() {
     host.on('peers', () => { if (live === session) sendToMain('live:status', liveStatus()); });
     host.on('roll', (message) => { if (live === session) sendToMain('live:roll', message); });
     host.on('colors', (message) => { if (live === session) sendToMain('live:roll', { ...message, you: 'host' }); });
+    host.on('game', (message) => { if (live === session) sendToMain('live:roll', message); });
     // A player played a sound for everyone: the board plays it here and sends it on.
     host.on('cue', (peer, playerName, cue) => {
       if (live !== session) return;
@@ -429,6 +430,7 @@ function registerLiveIpc() {
       case 'turns':
         host.table(event);
         break;
+      case 'gameControl': host.gameControl(event); break;
       case 'catalog': host.setCatalog(event.items); break;
       case 'stop': host.stop(event.group); break;
       case 'volume': host.volume(event.group, event.volume); break;

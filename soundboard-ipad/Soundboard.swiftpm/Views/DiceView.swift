@@ -1749,13 +1749,16 @@ struct DiceView: View {
                 .padding(12)
             }
             .foregroundStyle(Color.white)
-            .frame(width: tray.panel == "log" || tray.panel == "stats" ? 290 : 340)
+            // On an iPhone it takes the screen's width, less a margin.
+            .frame(width: min(tray.panel == "log" || tray.panel == "stats" ? 290 : 340, UIScreen.main.bounds.width - 24))
             .frame(maxHeight: 560)
             .fixedSize(horizontal: false, vertical: true)
             .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 16))
             .environment(\.colorScheme, .dark)
             .padding(.trailing, 12)
             .padding(.top, 60)
+            // Clear of the dice controls at the bottom.
+            .padding(.bottom, 180)
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .transition(.move(edge: .trailing).combined(with: .opacity))

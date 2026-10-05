@@ -219,6 +219,13 @@ Click **Dice** in the toolbar (or on the stage, while tuned in). The tray fills 
 
 In a Live Session everyone rolls in their own colour, and no two people can have the same one: pick a free colour before your first roll (colours others have are crossed out, with their name). Everyone's dice roll on their own, so dice thrown at the same time never knock into each other. Everyone sees every roll: the dice tumble across everyone's screen (over whatever they're looking at), with who rolled them and the result, and the roll log is shared. Late joiners get the rolls made before they arrived.
 
+## Games: buzzer and quiz
+
+While broadcasting, **Games** in the toolbar starts a game for everyone. Starting one locks every listener's window to it (no closing it, no other screens) until you click **End game**. Your own window isn't locked: **Hide** tucks the panel away (a red pill brings it back) so you can keep playing sounds.
+
+- **Buzzer:** listeners see a big button that says **Wait…** until you click **Arm buzzer**; then it turns red. The order is by when each person pressed, measured in your app's clock, so a slow connection doesn't cost anyone. A press only counts if it starts after the buzzer goes live: pressing early does nothing, and a finger (or the Space key) held down from before doesn't count. **Arm again** starts a new round.
+- **Quiz:** write a question with two to four answers, tick the right one (or make it a vote), pick a time limit, and **Ask everyone**. Listeners get big coloured answer tiles; you see the answers come in. The question ends when time runs out, everyone has answered, or you click **Show answer**: everyone sees the right answer, how many chose each, their points (up to 1000, more for answering fast) and the leaderboard. **Final scores** shows a podium on every screen.
+
 ## Themes
 
 Click **Options** at the bottom of the sidebar to pick a theme and a highlight colour. The themes are the same as on the iPhone/iPad:
@@ -271,6 +278,8 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/live.js` | Live window, forwarding what the board plays, listeners' sounds, and the listener's player and stage |
 | `src/renderer/recorder.js` | Record a Sound: microphone recording, level meter, listen back and save as WAV |
 | `src/renderer/dice.js` | The dice tray: 3D dice and coins (three.js) with physics (cannon-es), throwing, results, the roll log, stats and the recap, custom dice, hidden rolls, showing others' rolls |
+| `src/game.js` | The buzzer and quiz rules: who buzzed first, scoring, what each person may see (shared with the tests; the iPad has a copy) |
+| `src/renderer/games.js` | The games' screens: a listener's locked screen and the broadcaster's panel |
 | `src/renderer/table.js` | The broadcaster's table: roll requests, initiative and the turn order, who goes first; listeners' request cards |
 | `src/renderer/dice-geometry.js` | The dice's shapes, numbering, reading a die, advantage and totals, custom and ready-made dice, stats, who won, initiative order (shared with the tests; the iPad has a copy) |
 | `src/renderer/themes.js` | Themes and the Options window: colours, fonts, where backdrops and panels go, book-cover tiles and playing effects |

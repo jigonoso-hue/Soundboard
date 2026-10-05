@@ -338,6 +338,7 @@ struct LiveControls: View {
     @EnvironmentObject private var live: LiveSession
     @Binding var showLive: Bool
     @State private var choosingWhisper = false
+    @State private var showGames = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -363,6 +364,19 @@ struct LiveControls: View {
                 .tint(live.emphasis ? Color(hex: 0xFF6A3D) : nil)
                 .accessibilityLabel("Emphasis: the next sound vibrates listeners' phones")
                 .accessibilityAddTraits(live.emphasis ? .isSelected : [])
+            }
+            if live.role == .host {
+                // A buzzer or a quiz; starting one locks listeners' screens to it.
+                Button {
+                    showGames = true
+                } label: {
+                    Label("Games", systemImage: live.game == nil ? "bell" : "bell.fill")
+                }
+                .tint(live.game == nil ? nil : Color(hex: 0xC41818))
+                .accessibilityLabel("Games: a buzzer or a quiz for everyone")
+                .sheet(isPresented: $showGames) {
+                    GameHostView().environmentObject(live)
+                }
             }
             Button {
                 live.dice.open()

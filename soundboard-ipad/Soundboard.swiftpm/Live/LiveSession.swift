@@ -61,6 +61,14 @@ final class LiveSession: ObservableObject {
     /// Scene Kit sounds that play for everyone on a natural 20 or a natural 1 ("" for none).
     @Published var nat20Sound: String { didSet { save("live.nat20Sound", nat20Sound) } }
     @Published var nat1Sound: String { didSet { save("live.nat1Sound", nat1Sound) } }
+    /// The buzzer or quiz running, as this device may see it (all of it for the
+    /// broadcaster), or nil. While a listener has one, their screen is locked to it.
+    @Published private(set) var game: GameState?
+    /// This device's id in the session ("host" for the broadcaster).
+    private(set) var myPeer = ""
+    /// Buzzer rounds this device buzzed in, and its quiz answers (question → choice).
+    @Published private(set) var buzzedRounds: Set<Int> = []
+    @Published private(set) var myAnswers: [Int: Int] = [:]
     /// Listener levels: "master", "music", "sfx", "ambience".
     @Published var levels: [String: Double] {
         didSet {
@@ -204,11 +212,60 @@ final class LiveSession: ObservableObject {
         case "rolls": dice.setHistory((message["list"] as? [Any]) ?? [])
         case "diceColors": dice.setSessionColors((message["colors"] as? [Any]) ?? [], you: LiveNet.string(message["you"]) ?? "")
         case "customDice": dice.setSharedCustom((message["list"] as? [Any]) ?? [])
+        // The buzzer or quiz (GamesView.swift).
+        case "game": receiveGame(message)
         // Roll requests, results and the turn order (TableView.swift).
         case "ask", "askClosed", "askResult", "turns": dice.table.receive(message)
         default: break
         }
     }
+
+    // MARK: Games
+
+    /// The game from the host (a listener) or from this device's own engine (the broadcaster).
+    private func receiveGame(_ message: LiveJSON) {
+        if let you = LiveNet.string(message["you"]), !you.isEmpty { myPeer = you }
+        if role == .host { myPeer = "host" }
+        let next = GameState(message)
+        if next == nil {
+            buzzedRounds = []
+            myAnswers = [:]
+        }
+        let starting = game == nil && next != nil
+        game = next
+        if starting && role == .listener {
+            // The game takes over a listener's screen: the dice close.
+            dice.close()
+            nudge(title: next?.kind == "buzzer" ? "🔔 Buzzer" : "🧠 Quiz", body: "The broadcaster started a game.")
+        }
+        GameLock.shared.update(self)
+    }
+
+    /// The broadcaster's commands (see LiveGame).
+    func gameControl(_ action: String, _ extra: LiveJSON = [:]) {
+        guard role == .host else { return }
+        var cmd = extra
+        cmd["action"] = action
+        host?.gameControl(cmd)
+    }
+
+    /// A listener buzzes: only once per round, and only while it's live.
+    func buzz() {
+        guard role == .listener, let game, game.kind == "buzzer", game.phase == "armed", !buzzedRounds.contains(game.round) else { return }
+        buzzedRounds.insert(game.round)
+        listener?.sendRoll(["t": "gameInput", "id": game.id, "buzz": true])
+        haptics.impactOccurred(intensity: 1)
+    }
+
+    /// A listener answers the question: once.
+    func answer(_ choice: Int) {
+        guard role == .listener, let game, game.phase == "question", myAnswers[game.n] == nil else { return }
+        myAnswers[game.n] = choice
+        listener?.sendRoll(["t": "gameInput", "id": game.id, "q": game.n, "choice": choice])
+        haptics.impactOccurred(intensity: 0.6)
+    }
+
+    var myPeerId: String { myPeer }
 
     /// Sounds to choose from for natural 20s and 1s: the open Scene Kit's first.
     var natSoundChoices: (kit: String?, inKit: [Sound], others: [Sound]) {
@@ -325,6 +382,7 @@ final class LiveSession: ObservableObject {
         }
         engine.onCue = { [weak self] peer, name, cue in self?.playPlayerSound(from: peer, name: name, cue: cue) }
         engine.onRoll = { [weak self] message in self?.receiveRoll(message) }
+        engine.onGame = { [weak self] message in self?.receiveGame(message) }
         engine.onColors = { [weak self] message in
             self?.dice.setSessionColors((message["colors"] as? [Any]) ?? [], you: "host")
         }
@@ -355,6 +413,8 @@ final class LiveSession: ObservableObject {
         host?.end()
         dice.setSessionColors(nil, you: "")
         dice.table.reset()
+        game = nil
+        GameLock.shared.update(self)
         // The end-of-session recap.
         if was { dice.recap() }
         host = nil
@@ -689,6 +749,10 @@ final class LiveSession: ObservableObject {
         listener = nil
         dice.setSessionColors(nil, you: "")
         dice.table.reset()
+        game = nil
+        buzzedRounds = []
+        myAnswers = [:]
+        GameLock.shared.update(self)
         if was { dice.recap() }
         mirror.stopAll(ambienceToo: true)
         role = .idle

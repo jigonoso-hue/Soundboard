@@ -357,6 +357,11 @@ final class LiveHostEngine {
     private var hostDiceName = "Broadcaster"
     /// The colour list changed, for the host's own dice tray.
     var onColors: ((LiveJSON) -> Void)?
+    /// The game as the broadcaster sees it (everything), for the host's own screen.
+    var onGame: ((LiveJSON) -> Void)?
+    /// The buzzer or quiz running (locks listeners' screens to it), or nil.
+    private var game: LiveGame?
+    private var gameTimer: Task<Void, Never>?
 
     private struct PeerInfo {
         var name = "Listener"
@@ -438,6 +443,7 @@ final class LiveHostEngine {
             if let tableDice { transport.send(tableDice, to: peer) }
             for id in tableAskOrder { if let ask = tableAsks[id], ask["to"] == nil { transport.send(ask, to: peer) } }
             if let tableTurns { transport.send(tableTurns, to: peer) }
+            if game != nil { transport.send(LiveGame.publicView(game), to: peer) }
             send(ambience, to: peer)
             send(await prefetchMessage(), to: peer)
             let now = LiveNet.now
@@ -464,6 +470,11 @@ final class LiveHostEngine {
             if peers[peer]?.ready == true { finishRoll(message, peer: peer) }
         case "diceColor":
             if peers[peer]?.ready == true { _ = claimColor(peer, LiveNet.string(message["color"]) ?? "") }
+        case "gameInput":
+            if let info = peers[peer], info.ready, let game,
+               game.input(peer: peer, name: info.name, message, expected: peerList.count) {
+                sendGame()
+            }
         case "cue":
             handleCue(from: peer, message)
         case "offer":
@@ -850,7 +861,47 @@ final class LiveHostEngine {
         }
     }
 
+    // MARK: Games: the buzzer and the quiz
+
+    /// The broadcaster's commands: start {kind}, arm, reset (buzzer), ask {text,
+    /// answers, correct, timer}, reveal, lobby, final (quiz), end.
+    func gameControl(_ cmd: LiveJSON) {
+        enqueue { [weak self] in
+            guard let self else { return }
+            switch LiveNet.string(cmd["action"]) ?? "" {
+            case "start": self.game = LiveGame(kind: LiveNet.string(cmd["kind"]) ?? "")
+            case "end": self.game = nil
+            default:
+                guard let game = self.game, game.control(cmd) else { return }
+            }
+            self.sendGame()
+        }
+    }
+
+    /// Everyone gets the game as they may see it; the broadcaster's screen gets all of it.
+    private func sendGame() {
+        gameTimer?.cancel()
+        // A question with a time limit ends by itself.
+        if let game, game.phase == "question", let q = game.question, q.endsAt > 0 {
+            let n = game.n
+            let wait = max(0, q.endsAt - LiveNet.now) + 300
+            gameTimer = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000))
+                guard !Task.isCancelled, let self else { return }
+                self.enqueue { [weak self] in
+                    guard let self, let game = self.game, game.n == n, game.reveal() else { return }
+                    self.sendGame()
+                }
+            }
+        }
+        transport.send(LiveGame.publicView(game), to: nil)
+        var host = LiveGame.hostView(game)
+        host["host"] = true
+        onGame?(host)
+    }
+
     func end() {
+        gameTimer?.cancel()
         transport.send(["t": "bye"], to: nil)
         let transport = self.transport
         Task { @MainActor in
@@ -944,7 +995,14 @@ final class LiveListenerEngine {
 
     /// A dice roll starting or finished on this device, for everyone to see.
     func sendRoll(_ message: LiveJSON) {
-        guard let t = LiveNet.string(message["t"]), ["roll", "rollResult", "diceColor"].contains(t) else { return }
+        guard let t = LiveNet.string(message["t"]), ["roll", "rollResult", "diceColor", "gameInput"].contains(t) else { return }
+        if t == "gameInput" {
+            // A buzz or an answer, stamped with when it happened in the host's clock.
+            var stamped = message
+            stamped["at"] = LiveNet.now + offset
+            socket.send(stamped)
+            return
+        }
         socket.send(message)
     }
 
@@ -989,7 +1047,7 @@ final class LiveListenerEngine {
         case "scene": onScene?(LiveNet.string(message["name"]))
         case "roll", "rollResult", "rolls", "customDice", "ask", "askClosed", "askResult":
             onRoll?(message)
-        case "diceColors", "turns":
+        case "diceColors", "turns", "game":
             var tagged = message
             tagged["you"] = peerId ?? ""
             onRoll?(tagged)

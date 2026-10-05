@@ -56,6 +56,7 @@ On the local network the host assigns peer ids itself.
 | `chunk {…}` / `missing {hash}` | Answers to the host's `need` for an offered sound |
 | `roll {…}` / `rollResult {id, values}` | A dice roll on this listener's device (see Dice) |
 | `diceColor {color}` | Asks for a dice colour (see Dice) |
+| `gameInput {id, buzz: true, at}` / `gameInput {id, q, choice, at}` | A buzz or a quiz answer (see Games) |
 
 ### Host → listener
 
@@ -81,6 +82,7 @@ On the local network the host assigns peer ids itself.
 | `ask {id, kind, label, counts, dc?, lowest?, to?}` | A roll request: a card to roll from (see The table) |
 | `askClosed {id}` / `askResult {id, kind, label, …}` | A request ended; its results for everyone |
 | `turns {phase, round, current, order}` | The initiative order (`phase` `"off"` clears it) |
+| `game {…}` | The buzzer or quiz running; `phase` `"off"` when none (see Games) |
 | `rules {playerSounds, limit}` | Whether listeners may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
 | `catalog {sounds: [{id, name, color}]}` | The broadcaster's sounds listeners may choose from (when `playerSounds` is `"gm"`) |
 | `need {hash, i}` | Request chunk `i` of a sound the listener offered |
@@ -248,6 +250,38 @@ again when the fight starts and on each turn, it sends:
 Each listener knows its own peer id (from `welcome`), so it knows when it's
 its turn: that device buzzes and shows "Your turn!"; the others show whose turn
 it is and who's next.
+
+## Games
+
+The broadcaster can start a **buzzer** or a **quiz**. Only the host's own app
+starts, runs and ends a game; while one runs, every listener's app locks its
+screen to it (nothing else can be reached) until the host sends
+`game {phase: "off"}`. The host keeps the game and decides everything, and
+sends the whole state to everyone after every change; a listener who joins
+mid-game gets it after `welcome`.
+
+```jsonc
+// Buzzer: "waiting", then "armed" (round counts each arming)
+{ "t": "game", "id": "game-…", "kind": "buzzer", "phase": "armed", "round": 2,
+  "buzzes": [{"peer": "p3", "name": "Ana", "ms": 2310}, {"peer": "p5", "name": "Sam", "ms": 2520}] }
+// Quiz: "lobby", "question", "reveal" or "final"
+{ "t": "game", "id": "game-…", "kind": "quiz", "phase": "question", "round": 0, "n": 3, "answered": 2,
+  "question": {"text": "…", "answers": ["…", "…"], "timer": 20, "left": 14200, "vote": false} }
+// after the reveal, also:
+  "correct": 0, "counts": [3, 1], "results": [{"peer": "p3", "choice": 0, "points": 930}],
+  "leaderboard": [{"peer": "p3", "name": "Ana", "score": 1850, "right": 2}]
+```
+
+A listener's app sends `gameInput {id, buzz: true}` (once per round, only for
+a press that started after the buzzer went live) or `gameInput {id, q, choice}`
+(once per question), adding `at`: when it happened in the host's clock, from
+its clock sync. The host keeps `at` between the start (arming, or the
+question) and the moment the message arrived, so the buzz order is by when
+people pressed rather than by network speed. Right answers score
+`1000 × (1 − ½ × time / limit)`, or with no time limit `1000 − ms / 20` (at
+least 500); a question with no right answer (`correct: null`) is a vote.
+Before the reveal nobody but the host sees the right answer or who chose
+what. A question ends when its time runs out or everyone has answered.
 
 ## Host-only features
 

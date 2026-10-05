@@ -174,6 +174,7 @@ async function chunkOf(file, hash, ext, index) {
 // Dice rolls, shared with everyone in the session (see PROTOCOL.md, Dice).
 
 const DiceRules = require('./renderer/dice-geometry');
+const Game = require('./game');
 
 const DIE_KINDS = { d4: [1, 4], d6: [1, 6], d8: [1, 8], d10: [0, 9], d10t: [0, 9], d12: [1, 12], d20: [1, 20], coin: [1, 2] };
 const ROLL_TYPES = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100', 'coin', 'custom'];
@@ -420,6 +421,9 @@ class LiveHost extends EventEmitter {
     this.diceColors = new Map(); // peer (or 'host') -> dice colour
     // The broadcaster's table: shared custom dice, open roll requests, initiative.
     this.tableState = { customDice: null, asks: new Map(), turns: null };
+    // The buzzer or quiz running (locks listeners' screens to it), or null.
+    this.game = null;
+    this.gameTimer = null;
     this.peers = new Map(); // peer -> { name, device, allowed: Set<hash>, cued, lastCue, offers, fetcher, waitingCues }
     this.files = new Map(); // hash -> { file, ext }
     this.active = new Map(); // pid -> { message, group, until }
@@ -470,6 +474,7 @@ class LiveHost extends EventEmitter {
       if (this.tableState.customDice) this.transport.send(peer, this.tableState.customDice);
       for (const ask of this.tableState.asks.values()) if (!ask.to) this.transport.send(peer, ask);
       if (this.tableState.turns) this.transport.send(peer, this.tableState.turns);
+      if (this.game) this.transport.send(peer, Game.publicView(this.game));
       await this.sendTo(peer, this.ambience);
       const prefetch = await this.prefetchMessage();
       await this.sendTo(peer, prefetch);
@@ -486,6 +491,9 @@ class LiveHost extends EventEmitter {
       if (info.ready) this.finishRoll(message, peer);
     } else if (message.t === 'diceColor') {
       if (info.ready) this.claimColor(peer, message.color);
+    } else if (message.t === 'gameInput') {
+      const expected = this.peerList().length;
+      if (info.ready && Game.input(this.game, peer, info.name, message, Date.now(), expected)) this.sendGame();
     } else if (message.t === 'cue') {
       this.handleCue(peer, info, message);
     } else if (message.t === 'offer') {
@@ -566,6 +574,38 @@ class LiveHost extends EventEmitter {
         this.transport.send(null, m);
       }
     });
+  }
+
+  // ---- Games: the buzzer and the quiz ----
+
+  // The broadcaster's commands: start {kind}, arm, reset (buzzer), ask {text,
+  // answers, correct, timer}, reveal, lobby, final (quiz), end.
+  gameControl(cmd) {
+    return this.enqueue(() => {
+      if (!cmd || typeof cmd !== 'object') return;
+      if (cmd.action === 'start') {
+        this.game = Game.create(cmd.kind);
+      } else if (cmd.action === 'end') {
+        this.game = null;
+      } else if (!Game.control(this.game, cmd)) {
+        return;
+      }
+      this.sendGame();
+    });
+  }
+
+  // Everyone gets the game as they may see it; the broadcaster's window gets all of it.
+  sendGame() {
+    clearTimeout(this.gameTimer);
+    const q = this.game?.question;
+    // A question with a time limit ends by itself.
+    if (this.game?.phase === 'question' && q?.endsAt) {
+      this.gameTimer = setTimeout(() => this.enqueue(() => {
+        if (this.game?.question === q && Game.reveal(this.game)) this.sendGame();
+      }), Math.max(0, q.endsAt - Date.now()) + 300);
+    }
+    this.transport.send(null, Game.publicView(this.game));
+    this.emit('game', { ...Game.hostView(this.game), host: true });
   }
 
   // Who has which dice colour: [{ peer, name, color }] ('host' is the broadcaster).
@@ -843,6 +883,7 @@ class LiveHost extends EventEmitter {
   }
 
   end() {
+    clearTimeout(this.gameTimer);
     this.transport.send(null, { t: 'bye' });
     setTimeout(() => this.transport.close(), 200);
   }
@@ -949,6 +990,7 @@ class LiveListener extends EventEmitter {
         break;
       case 'diceColors':
       case 'turns':
+      case 'game':
         this.emit('roll', { ...message, you: this.peerId });
         break;
       case 'customDice':
@@ -1026,6 +1068,8 @@ class LiveListener extends EventEmitter {
   // A dice roll starting or finished on this device, for everyone to see.
   sendRoll(message) {
     if (message && (message.t === 'roll' || message.t === 'rollResult' || message.t === 'diceColor')) sendJSON(this.socket, message);
+    // A buzz or an answer, stamped with when it happened in the host's clock.
+    if (message && message.t === 'gameInput') sendJSON(this.socket, { ...message, at: Date.now() + this.offset });
   }
 
   // Asks the host to play one of the GM's sounds for everyone.

@@ -395,6 +395,44 @@ test('hidden rolls, custom dice, roll requests and the turn order', async () => 
   }
 });
 
+test('games: the broadcaster starts a buzzer, listeners buzz, late joiners are locked in too', async () => {
+  const transport = new LanHostTransport({ name: 'Games' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Games', transport, resolveSound: () => null });
+  const url = `ws://127.0.0.1:${transport.port}`;
+  const sam = new LiveListener({ cacheDir: tempDir('game-sam'), name: 'Sam' });
+  const samGames = [];
+  const hostGames = [];
+  sam.on('roll', (m) => { if (m.t === 'game') samGames.push(m); });
+  host.on('game', (m) => hostGames.push(m));
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    sam.connect(url);
+    await waitFor(host, 'peers', (list) => list.length === 1);
+    host.gameControl({ action: 'start', kind: 'buzzer' });
+    host.gameControl({ action: 'arm' });
+    await wait(150);
+    const armed = samGames.at(-1);
+    assert.equal(armed.phase, 'armed');
+    assert.ok(armed.you, 'listeners know which entry is theirs');
+    sam.sendRoll({ t: 'gameInput', id: armed.id, buzz: true });
+    await wait(150);
+    assert.deepEqual(samGames.at(-1).buzzes.map((b) => b.name), ['Sam']);
+    assert.equal(hostGames.at(-1).host, true);
+    const late = new LiveListener({ cacheDir: tempDir('game-late'), name: 'Late' });
+    const lateGame = waitFor(late, 'roll', (m) => m.t === 'game');
+    late.connect(url);
+    assert.equal((await lateGame).kind, 'buzzer');
+    host.gameControl({ action: 'end' });
+    await wait(150);
+    assert.equal(samGames.at(-1).phase, 'off');
+    late.leave();
+  } finally {
+    sam.leave();
+    transport.close();
+  }
+});
+
 let createRelay = null;
 try { ({ createRelay } = require('../../live-relay/server')); } catch { /* relay deps not installed */ }
 

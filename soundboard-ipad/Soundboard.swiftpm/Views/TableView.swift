@@ -747,9 +747,12 @@ struct TurnStrip: View {
             }
         }
         .lineLimit(1)
+        // Narrow screens: the text shrinks a little rather than spilling off.
+        .minimumScaleFactor(0.7)
         .foregroundStyle(Color.white)
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
+        .frame(maxWidth: UIScreen.main.bounds.width - 20)
         .background(stripBackground, in: Capsule())
         .overlay(Capsule().strokeBorder(stripMine ? Color(hex: 0xFFD27A) : Color(hex: 0xFF8A65).opacity(0.6)))
         .shadow(color: .black.opacity(0.45), radius: 10, y: 4)
