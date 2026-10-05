@@ -938,5 +938,3 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
 .whisper-menu .menu-check { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
 .whisper-menu .menu-check:hover { background: var(--panel-2); }
 .whisper-menu .menu-check input { accent-color: #b07cff; }
-.live-advanced { margin: 8px 0 4px; }
-.live-advanced summary { cursor: pointer; margin-bottom: 8px; }

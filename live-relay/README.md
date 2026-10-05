@@ -4,9 +4,10 @@ Online Live Sessions need a small relay server. It routes messages between the
 GM's app and the players' apps; no audio passes through it, only the sound
 files each player fetches once and short "play this now" commands.
 
-The apps use Dungeon Radio's own relay (`soundboard-r1zt.onrender.com`, hosted
-on Render from this folder) unless someone sets a different one under
-**Live → Advanced**. Everyone in a session must use the same relay.
+The apps use Dungeon Radio's own relay, `soundboard-r1zt.onrender.com`, hosted
+on Render from this folder. Its address is built into the apps
+(`LiveNet.defaultRelay` on iPhone/iPad, `DEFAULT_RELAY` in the Mac app's
+`src/renderer/live.js`); change both if the relay moves.
 
 ## Run it on your own computer (testing)
 

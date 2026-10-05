@@ -75,11 +75,10 @@ struct LiveView: View {
                 Text("At the table").tag(LiveSession.Mode.local)
                 Text("Online").tag(LiveSession.Mode.online)
             }
-            if live.mode == .online { relayField }
         } footer: {
             Text(live.mode == .local
                  ? "Players on the same Wi-Fi find your session under Tune In."
-                 : "Players anywhere join with a code, through a relay server.")
+                 : "Players anywhere join with a code.")
         }
         playerSoundsSection
         Section {
@@ -130,7 +129,6 @@ struct LiveView: View {
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .font(.body.monospaced())
-            relayField
             Button("Tune In Online") { live.tuneInOnline() }
                 .disabled(live.busy)
         } header: {
@@ -153,17 +151,6 @@ struct LiveView: View {
             case .gm: Text("Each player picks up to \(PlayerSounds.limit) of your sounds (not GM-only ones). When they play one, everyone hears it. You can still use all your sounds.")
             }
         }
-    }
-
-    /// The relay server is built in; a custom one can be set under Advanced.
-    private var relayField: some View {
-        DisclosureGroup("Advanced") {
-            TextField("Custom relay server (empty: built-in)", text: $live.relay)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-        }
-        .foregroundStyle(.secondary)
     }
 
     // MARK: Hosting

@@ -4,9 +4,12 @@
 // The networking lives in the main process (src/live.js).
 const Live = (() => {
   const SETTINGS_KEY = 'live';
-  // The relay built into the app, used unless someone sets their own under Advanced.
+  // Online sessions go through Dungeon Radio's own relay server. (Tests can
+  // point at a local relay with localStorage 'liveTestRelay'.)
   const DEFAULT_RELAY = 'soundboard-r1zt.onrender.com';
-  const relayAddress = () => settings.relay || DEFAULT_RELAY;
+  const relayAddress = () => {
+    try { return localStorage.getItem('liveTestRelay') || DEFAULT_RELAY; } catch { return DEFAULT_RELAY; }
+  };
   const settings = loadSettings();
   let status = { role: null };
   let bonjour = true;
@@ -22,7 +25,7 @@ const Live = (() => {
 
   function loadSettings() {
     const defaults = {
-      sessionName: '', yourName: '', mode: 'local', relay: '', code: '',
+      sessionName: '', yourName: '', mode: 'local', code: '',
       volumes: { master: 1, music: 1, sfx: 1, ambience: 1 },
     };
     try {
@@ -469,7 +472,7 @@ const Live = (() => {
       const modes = el('div', 'live-modes');
       for (const [id, title, hint] of [
         ['local', 'At the table', 'Players on the same Wi-Fi find your session.'],
-        ['online', 'Online', 'Players anywhere join with a code, through a relay server.'],
+        ['online', 'Online', 'Players anywhere join with a code.'],
       ]) {
         const option = el('label', `live-mode${settings.mode === id ? ' selected' : ''}`);
         const radio = el('input');
@@ -483,7 +486,6 @@ const Live = (() => {
         modes.append(option);
       }
       body.append(modes);
-      if (settings.mode === 'online') body.append(relayField());
       if (settings.mode === 'local' && !bonjour) body.append(el('p', 'live-error', 'Local sessions aren’t available in this build. Use Online instead.'));
       const start = el('button', 'primary', busy ? 'Starting…' : 'Start Broadcasting');
       start.type = 'button';
@@ -517,18 +519,7 @@ const Live = (() => {
     join.disabled = busy;
     join.addEventListener('click', () => run(() => api.live.listen({ code: settings.code, relay: relayAddress(), name: settings.yourName })));
     codeRow.append(code, join);
-    body.append(codeRow, relayField());
-  }
-
-  // The relay server is built in; a custom one can be set under Advanced.
-  function relayField() {
-    const details = el('details', 'live-advanced');
-    if (settings.relay) details.open = true;
-    details.append(el('summary', 'muted small', 'Advanced'));
-    const wrap = field('Custom relay server', textInput(settings.relay, 'e.g. relay.example.com (empty: built-in)', (v) => { settings.relay = v.trim(); }, 200));
-    wrap.append(el('span', 'muted small', 'Leave empty to use Dungeon Radio’s own relay. Everyone in a session must use the same one.'));
-    details.append(wrap);
-    return details;
+    body.append(codeRow);
   }
 
   function renderHosting(body) {

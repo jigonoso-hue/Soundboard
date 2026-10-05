@@ -55,13 +55,8 @@ final class LiveSession: ObservableObject {
     @Published var sessionName: String { didSet { save("live.sessionName", sessionName) } }
     @Published var yourName: String { didSet { save("live.yourName", yourName) } }
     @Published var mode: Mode { didSet { save("live.mode", mode.rawValue) } }
-    /// A custom relay server, or empty for the built-in one.
-    @Published var relay: String { didSet { save("live.relay", relay) } }
-    /// The relay to use: the custom one if set, otherwise the app's own.
-    var relayAddress: String {
-        let custom = relay.trimmingCharacters(in: .whitespacesAndNewlines)
-        return custom.isEmpty ? LiveNet.defaultRelay : custom
-    }
+    /// Online sessions go through Dungeon Radio's own relay server.
+    private var relayAddress: String { LiveNet.defaultRelay }
     @Published var codeInput: String { didSet { save("live.code", codeInput) } }
     /// Listener levels: "master", "music", "sfx", "ambience".
     @Published var levels: [String: Double] {
@@ -116,7 +111,8 @@ final class LiveSession: ObservableObject {
         sessionName = defaults.string(forKey: "live.sessionName") ?? ""
         yourName = defaults.string(forKey: "live.yourName") ?? ""
         mode = Mode(rawValue: defaults.string(forKey: "live.mode") ?? "") ?? .local
-        relay = defaults.string(forKey: "live.relay") ?? ""
+        // Custom relay addresses from older versions are no longer used.
+        defaults.removeObject(forKey: "live.relay")
         codeInput = defaults.string(forKey: "live.code") ?? ""
         playerSounds = PlayerSounds(rawValue: defaults.string(forKey: "live.playerSounds") ?? "") ?? .off
         let saved = (defaults.dictionary(forKey: "live.levels") as? [String: Double]) ?? [:]
