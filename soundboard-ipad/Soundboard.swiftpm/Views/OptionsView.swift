@@ -148,8 +148,10 @@ struct OptionsView: View {
     private func clearWebData() {
         let store = WKWebsiteDataStore.default()
         store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
-            youtube.goHome()
-            signedOut = true
+            Task { @MainActor in
+                youtube.goHome()
+                signedOut = true
+            }
         }
     }
 
@@ -186,7 +188,7 @@ struct OptionsView: View {
         await Task.detached(priority: .utility) {
             var total: Int64 = 0
             if let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey]) {
-                for case let url as URL in files {
+                while let url = files.nextObject() as? URL {
                     total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
                 }
             }
