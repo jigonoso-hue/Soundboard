@@ -181,6 +181,8 @@ struct RollEntry: Identifiable, Equatable {
     var d20s: [Int] = []
     var nat20 = 0
     var nat1 = 0
+    /// Lite: a natural 20 or 1, shown as a line on the result.
+    var natural: Int?
 
     init(id: String, start: RollStart, values: [Int], summary: RollSummary, mine: Bool) {
         self.id = id
@@ -196,6 +198,22 @@ struct RollEntry: Identifiable, Equatable {
         let counted = DiceGeometry.countedD20s(mode: start.mode, groups: start.groups, values: values)
         nat20 = counted.filter { $0 == 20 }.count
         nat1 = counted.filter { $0 == 1 }.count
+    }
+}
+
+/// Dice effects: Automatic, or Full (3D everywhere), Reduced (no shadows, fewer
+/// sparks, one other person's 3D roll at a time) or Lite (your roll as flat
+/// tiles, others' as just their result, a still stage). Matches the Mac.
+enum DiceEffects: String, CaseIterable, Identifiable {
+    case auto, full, reduced, lite
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .auto: return "Automatic"
+        case .full: return "Full"
+        case .reduced: return "Reduced"
+        case .lite: return "Lite"
+        }
     }
 }
 
@@ -536,7 +554,19 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         }
     }
 
-    private var rolls: [Roll] = []
+    private(set) var rolls: [Roll] = []
+    private var sun: SCNNode?
+    private var floor: SCNNode?
+    /// Fireworks sparks: fewer below Full.
+    var sparkScale: Float = 1
+
+    /// Full: shadows. Reduced and Lite: none, and fewer sparks.
+    func setQuality(_ level: DiceEffects) {
+        let full = level == .full
+        sun?.light?.castsShadow = full
+        floor?.isHidden = !full
+        sparkScale = full ? 1 : 0.45
+    }
     /// Set from the main thread in shake mode: phone motion as scene forces.
     var motionGravity: SIMD3<Float>?
     var motionPush: SIMD3<Float> = .zero
@@ -564,6 +594,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         ambient.light?.intensity = 500
         scene.rootNode.addChildNode(ambient)
         let sun = SCNNode()
+        self.sun = sun
         sun.light = SCNLight()
         sun.light?.type = .directional
         sun.light?.intensity = 1200
@@ -584,6 +615,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         let floor = SCNNode(geometry: plane)
         floor.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
         scene.rootNode.addChildNode(floor)
+        self.floor = floor
         let ground = SCNNode()
         ground.position = SCNVector3(0, -0.5, 0)
         ground.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: 200, height: 1, length: 200, chamferRadius: 0)))
@@ -772,7 +804,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                     let burst = SCNParticleSystem()
                     burst.loops = false
                     burst.emissionDuration = 0.05
-                    burst.birthRate = 840
+                    burst.birthRate = 840 * CGFloat(self.sparkScale)
                     burst.particleLifeSpan = 1.1
                     burst.particleLifeSpanVariation = 0.4
                     burst.emittingDirection = SCNVector3(0, 1, 0)
@@ -1089,6 +1121,18 @@ final class DiceTray: ObservableObject {
     @Published var hiddenArmed = false
     /// The end-of-session recap is showing.
     @Published var showRecap = false
+    /// Dice effects: Automatic (picked for this device), or a fixed level.
+    @Published var effects: DiceEffects { didSet { save(); applyLevel() } }
+    /// The level Automatic has picked; it steps down for good if the dice stutter.
+    @Published private(set) var autoLevel: DiceEffects
+    var level: DiceEffects { effects == .auto ? autoLevel : effects }
+    /// Lite: your roll as flat tiles, flickering, then the numbers.
+    @Published private(set) var flat: (tiles: [String], color: String, landed: Bool)?
+    /// Lite: whose roll is on its way, before its result shows.
+    @Published private(set) var rollingName: String?
+    private var slowTicks = 0
+    private var watchedTicks = 0
+    private var lastTick = Date()
     /// The broadcaster's table: roll requests, initiative, who goes first.
     let table = DiceTable()
     var hosting: () -> Bool = { false }
@@ -1105,6 +1149,8 @@ final class DiceTray: ObservableObject {
     var volume: () -> Double = { 1 }
 
     private var mine: Set<String> = []
+    /// Lite: other people's rolls shown as just their result.
+    private var flatRemote: Set<String> = []
     private var remote: [String: (start: RollStart, values: [Int]?, finished: Bool)] = [:]
     private var watchTask: Task<Void, Never>?
     private let motion = CMMotionManager()
@@ -1121,9 +1167,19 @@ final class DiceTray: ObservableObject {
         color = defaults.string(forKey: "dice.color") ?? DiceTray.colors[0].1
         shakeToRoll = defaults.bool(forKey: "dice.shake")
         customDice = (defaults.data(forKey: "dice.custom").flatMap { try? JSONDecoder().decode([CustomDie].self, from: $0) }) ?? []
+        effects = DiceEffects(rawValue: defaults.string(forKey: "dice.effects") ?? "") ?? .auto
+        autoLevel = DiceEffects(rawValue: defaults.string(forKey: "dice.level") ?? "") ?? DiceTray.guessLevel()
         initiativeModifier = defaults.integer(forKey: "dice.initiative")
         table.tray = self
         addResultHook { [weak self] outcome in self?.table.collect(outcome) }
+        scene.setQuality(level)
+        // A phone that's getting hot slows down: step the effects down first.
+        NotificationCenter.default.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                let state = ProcessInfo.processInfo.thermalState
+                if state == .serious || state == .critical { self?.stepDown() }
+            }
+        }
     }
 
     private func save() {
@@ -1134,6 +1190,66 @@ final class DiceTray: ObservableObject {
         defaults.set(shakeToRoll, forKey: "dice.shake")
         if let data = try? JSONEncoder().encode(customDice) { defaults.set(data, forKey: "dice.custom") }
         defaults.set(initiativeModifier, forKey: "dice.initiative")
+        defaults.set(effects.rawValue, forKey: "dice.effects")
+    }
+
+    // MARK: Dice effects
+
+    /// A first guess from the device: older iPhones with little memory get Lite.
+    static func guessLevel() -> DiceEffects {
+        let memory = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        if memory < 2.5 || cores <= 2 { return .lite }
+        if memory < 3.5 || cores <= 4 { return .reduced }
+        return .full
+    }
+
+    private func applyLevel() {
+        scene.setQuality(level)
+    }
+
+    /// Automatic only: one level down, remembered.
+    private func stepDown() {
+        guard effects == .auto, autoLevel != .lite else { return }
+        autoLevel = autoLevel == .full ? .reduced : .lite
+        UserDefaults.standard.set(autoLevel.rawValue, forKey: "dice.level")
+        applyLevel()
+    }
+
+    /// Watches how smoothly the dice run: well under 40 frames a second for
+    /// most of two seconds while they roll steps the effects down.
+    private func watchFrames() {
+        let now = Date()
+        let gap = now.timeIntervalSince(lastTick)
+        lastTick = now
+        guard scene.isBusy, effects == .auto, autoLevel != .lite, gap < 1 else { return }
+        watchedTicks += 1
+        if gap > 1.0 / 40 { slowTicks += 1 }
+        guard watchedTicks >= 120 else { return }
+        let stutter = slowTicks > 80
+        watchedTicks = 0
+        slowTicks = 0
+        if stutter { stepDown() }
+    }
+
+    /// Lite: flat tiles that flicker through faces, then fairly drawn numbers.
+    private func flatRoll(_ start: RollStart, looks: [DieLook], then: @escaping ([Int]) -> Void) {
+        let values = start.kinds.map { Int.random(in: $0.range) }
+        func text(_ i: Int, _ v: Int) -> String {
+            if let custom = looks[i].custom { let t = custom.label(v); return t.isEmpty ? "—" : t }
+            return DiceGeometry.label(start.kinds[i], v)
+        }
+        Task { @MainActor [weak self] in
+            for _ in 0..<8 {
+                self?.flat = (start.kinds.indices.map { text($0, Int.random(in: start.kinds[$0].range)) }, start.color, false)
+                try? await Task.sleep(nanoseconds: 70_000_000)
+            }
+            guard let self else { return }
+            self.flat = (start.kinds.indices.map { text($0, values[$0]) }, start.color, true)
+            then(values)
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            if self.flat?.landed == true { self.flat = nil }
+        }
     }
 
     // MARK: Custom dice
@@ -1195,6 +1311,7 @@ final class DiceTray: ObservableObject {
     func close() {
         isOpen = false
         banner = nil
+        rollingName = nil
         scene.clear()
     }
 
@@ -1249,8 +1366,7 @@ final class DiceTray: ObservableObject {
         banner = nil
         scene.volume = volume()
         if fromShake { shakeRoll = id }
-        scene.throwDice(id: id, owner: options.owner ?? options.by ?? "me", kinds: start.kinds, specs: start.dice, color: color, local: true,
-                        looks: looks(start, blank: false), holdUntilStill: fromShake) { [weak self] values in
+        let finish: ([Int]?) -> Void = { [weak self] values in
             guard let self, let values else { return }
             if self.shakeRoll == id { self.shakeRoll = nil }
             let summary = start.summarize(values)
@@ -1261,6 +1377,13 @@ final class DiceTray: ObservableObject {
             self.onResult?(id, values)
             self.finished(RollOutcome(id: id, start: start, values: values, summary: summary, entry: entry))
             self.endWatch(after: 4.5)
+        }
+        if level == .lite {
+            // Everyone else's devices still throw these dice and land them on the same numbers.
+            flatRoll(start, looks: looks(start, blank: false)) { values in finish(values) }
+        } else {
+            scene.throwDice(id: id, owner: options.owner ?? options.by ?? "me", kinds: start.kinds, specs: start.dice, color: color, local: true,
+                            looks: looks(start, blank: false), holdUntilStill: fromShake, onDone: finish)
         }
         onStart?(start)
         return id
@@ -1274,6 +1397,7 @@ final class DiceTray: ObservableObject {
     /// Shows a result: the banner, then any dice it (or the controls) would cover
     /// slide into view, then the natural 20 / 1 effects over where they end up.
     private func reveal(id: String, start: RollStart, summary: RollSummary, entry: RollEntry) {
+        rollingName = nil
         banner = entry
         Task { @MainActor [weak self] in
             // Once the banner has been laid out and measured.
@@ -1312,7 +1436,15 @@ final class DiceTray: ObservableObject {
             if let keptIndex, keptIndex != i { continue }
             let score = summary.scores[i]
             if (score == 1 || score == 20), let die = group.dice.first {
-                scene.celebrate(id: id, die: die, natural: score)
+                // Lite: a line on the result instead of effects over the dice.
+                if level == .lite || scene.rolls.first(where: { $0.id == id }) == nil {
+                    if !start.hidden, var shown = banner, shown.id == id {
+                        shown.natural = score
+                        banner = shown
+                    }
+                } else {
+                    scene.celebrate(id: id, die: die, natural: score)
+                }
                 if !start.hidden { for hook in naturalHooks { hook(score, start) } }
             }
         }
@@ -1330,6 +1462,20 @@ final class DiceTray: ObservableObject {
         guard let start = RollStart(json: json), !mine.contains(start.id), remote[start.id] == nil,
               !log.contains(where: { $0.id == start.id }) else { return }
         remote[start.id] = (start, nil, false)
+        // Lite (or Reduced, with someone else's dice already rolling): no dice,
+        // just who's rolling, then their result. A hidden roll shows nothing.
+        let busy = scene.rolls.contains { !$0.local && !$0.done }
+        if level == .lite || (level == .reduced && busy) {
+            flatRemote.insert(start.id)
+            if start.hidden { return }
+            if !isOpen {
+                watchTask?.cancel()
+                watching = true
+            }
+            banner = nil
+            rollingName = start.by
+            return
+        }
         if !isOpen {
             watchTask?.cancel()
             watching = true
@@ -1357,6 +1503,7 @@ final class DiceTray: ObservableObject {
             guard let self, !Task.isCancelled, self.watching else { return }
             self.watching = false
             self.banner = nil
+            self.rollingName = nil
             self.scene.clear()
         }
     }
@@ -1365,6 +1512,10 @@ final class DiceTray: ObservableObject {
         guard let id = LiveNet.string(json["id"]), remote[id] != nil else { return }
         let values = ((json["values"] as? [Any]) ?? []).compactMap { LiveNet.number($0).map(Int.init) }
         remote[id]?.values = values
+        if flatRemote.contains(id) {
+            finishRemote(id, values: values)
+            return
+        }
         scene.setTarget(id: id, values: values)
         // The dice may already have stopped: finish now.
         if scene.isDone(id) { finishRemote(id, values: values) }
@@ -1411,7 +1562,10 @@ final class DiceTray: ObservableObject {
         let on = isOpen || watching
         if on && ticker == nil {
             let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.scene.tick() }
+                MainActor.assumeIsolated {
+                    self?.scene.tick()
+                    self?.watchFrames()
+                }
             }
             RunLoop.main.add(timer, forMode: .common)
             ticker = timer
@@ -1493,6 +1647,7 @@ struct DiceSceneView: UIViewRepresentable {
 
     func updateUIView(_ view: SCNView, context: Context) {
         if view.scene !== tray.scene.scene { view.scene = tray.scene.scene }
+        view.antialiasingMode = tray.level == .full ? .multisampling4X : .none
         let size = view.bounds.size
         if size.width > 0, size.height > 0 { tray.scene.layout(aspect: Float(size.width / size.height)) }
     }
@@ -1544,6 +1699,9 @@ struct DiceBanner: View {
                 // Words (a coin, custom dice).
                 Text(entry.detail).font(.system(size: 26, weight: .black, design: .rounded)).multilineTextAlignment(.center).padding(.vertical, 4)
             }
+            if let natural = entry.natural {
+                Text(natural == 20 ? "🎆 Natural 20!" : "☠️ Natural 1").font(.subheadline.weight(.heavy)).padding(.top, 2)
+            }
         }
         .foregroundStyle(Color.white)
         .padding(.horizontal, 22)
@@ -1555,6 +1713,68 @@ struct DiceBanner: View {
     }
 }
 
+/// Lite: someone's dice are on their way.
+struct DiceRolling: View {
+    let name: String
+
+    var body: some View {
+        Text("🎲 \(name.uppercased()) IS ROLLING…")
+            .font(.caption.weight(.bold))
+            .tracking(1)
+            .foregroundStyle(Color.white.opacity(0.85))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(Color(red: 0.04, green: 0.04, blue: 0.06).opacity(0.75), in: RoundedRectangle(cornerRadius: 18))
+            .allowsHitTesting(false)
+    }
+}
+
+/// Lite: your roll as flat tiles in your colour, flickering, then landing.
+struct DiceFlatView: View {
+    @ObservedObject var tray: DiceTray
+
+    var body: some View {
+        if let flat = tray.flat {
+            let color = Color(hexString: flat.color) ?? .blue
+            FlowTiles(tiles: flat.tiles) { text in
+                Text(text)
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(.horizontal, 8)
+                    .frame(minWidth: 56, minHeight: 56)
+                    .background(color, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.3), lineWidth: 2))
+                    .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
+                    .rotationEffect(.degrees(flat.landed ? 0 : Double.random(in: -8...8)))
+            }
+            .frame(maxWidth: 520)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
+    }
+}
+
+/// Tiles in rows that wrap.
+private struct FlowTiles<Tile: View>: View {
+    let tiles: [String]
+    let tile: (String) -> Tile
+
+    var body: some View {
+        let perRow = 6
+        VStack(spacing: 10) {
+            ForEach(Array(stride(from: 0, to: tiles.count, by: perRow)), id: \.self) { start in
+                HStack(spacing: 10) {
+                    ForEach(start..<min(start + perRow, tiles.count), id: \.self) { i in tile(tiles[i]) }
+                }
+            }
+        }
+    }
+}
+
 /// Someone else's roll over whatever is on screen.
 struct DiceWatchOverlay: View {
     @ObservedObject var tray: DiceTray
@@ -1562,9 +1782,12 @@ struct DiceWatchOverlay: View {
     var body: some View {
         if tray.watching && !tray.isOpen {
             ZStack(alignment: .top) {
-                DiceStage(tray: tray)
+                if tray.level != .lite { DiceStage(tray: tray) }
+                DiceFlatView(tray: tray)
                 if let banner = tray.banner {
                     DiceBanner(entry: banner).diceCover(tray, "banner").padding(.top, 70)
+                } else if let name = tray.rollingName {
+                    DiceRolling(name: name).padding(.top, 70)
                 }
             }
             .allowsHitTesting(false)
@@ -1585,13 +1808,17 @@ struct DiceView: View {
     var body: some View {
         ZStack {
             backdrop
-            DiceStage(tray: tray)
+            // Lite never draws the 3D scene.
+            if tray.level != .lite { DiceStage(tray: tray) }
+            DiceFlatView(tray: tray)
             VStack(spacing: 0) {
                 topBar.diceCover(tray, "top")
                 // The turn order, between the top bar and the result.
                 TurnStripSlot(table: tray.table)
                 if let banner = tray.banner {
                     DiceBanner(entry: banner).diceCover(tray, "banner").padding(.top, 8)
+                } else if let name = tray.rollingName {
+                    DiceRolling(name: name).padding(.top, 8)
                 }
                 Spacer()
                 controls.diceCover(tray, "controls")

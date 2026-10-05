@@ -21,7 +21,8 @@ struct ListenerStageView: View {
 
     var body: some View {
         ZStack {
-            StageBackdrop(style: style, active: playing, reduceMotion: reduceMotion)
+            // Lite dice effects: the stage holds still too.
+            StageBackdrop(style: style, active: playing, reduceMotion: reduceMotion || live.dice.level == .lite)
                 .ignoresSafeArea()
             effects
             content

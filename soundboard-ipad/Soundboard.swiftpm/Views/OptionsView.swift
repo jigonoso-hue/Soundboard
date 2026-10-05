@@ -11,6 +11,7 @@ struct OptionsView: View {
     @EnvironmentObject private var kits: KitStore
     @EnvironmentObject private var ui: AppUI
     @EnvironmentObject private var youtube: YouTubeController
+    @EnvironmentObject private var live: LiveSession
 
     @State private var storageText = "Measuring…"
     @State private var confirmSignOut = false
@@ -21,6 +22,7 @@ struct OptionsView: View {
             Group {
                 appearance
                 playback
+                DiceEffectsSection(tray: live.dice)
                 library
                 online
                 storage
@@ -88,6 +90,25 @@ struct OptionsView: View {
     }
 
     // MARK: Playback
+
+    /// Dice effects: Automatic picks for this device and steps down if the dice stutter.
+    private struct DiceEffectsSection: View {
+        @ObservedObject var tray: DiceTray
+
+        var body: some View {
+            Section {
+                Picker("Dice effects", selection: $tray.effects) {
+                    ForEach(DiceEffects.allCases) { effect in
+                        Text(effect == .auto ? "Automatic (\(tray.autoLevel.label))" : effect.label).tag(effect)
+                    }
+                }
+            } header: {
+                Text("Performance")
+            } footer: {
+                Text("Full: 3D dice with shadows. Reduced: lighter effects. Lite: for older iPhones; other people's rolls show just their result. Automatic picks for this device and steps down if the dice stutter or the phone gets hot.")
+            }
+        }
+    }
 
     private var playback: some View {
         Section("Playback") {

@@ -93,7 +93,7 @@ When the Android app is made, the plan is:
     people's rolls show no dice, just the result when they land; banner-only
     nat 20/1; a still stage background.
   - A manual "Dice effects" setting overrides it.
-  - Bring the same levels to the iPhone and Mac apps (older iPhones benefit),
-    keeping them 1:1.
+  - Already built into the Mac (dice.js) and iPhone (DiceView.swift) apps;
+    the Android app reuses the Mac's.
 - Android joins the 1:1 rule like the others, iPhone-first layouts included.
 
