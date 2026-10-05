@@ -630,8 +630,9 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         let ground = SCNNode()
         ground.position = SCNVector3(0, -10, 0)
         ground.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: 200, height: 20, length: 200, chamferRadius: 0)))
-        ground.physicsBody?.friction = 0.25
-        ground.physicsBody?.restitution = 0.35
+        // SceneKit multiplies the two bodies' friction and bounce: table × die.
+        ground.physicsBody?.friction = 0.9
+        ground.physicsBody?.restitution = 0.7
         ground.physicsBody?.categoryBitMask = 1
         ground.physicsBody?.collisionBitMask = -1
         scene.rootNode.addChildNode(ground)
@@ -659,8 +660,8 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             let node = SCNNode()
             node.position = SCNVector3(x, 6, z)
             node.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: width, height: 14, length: length, chamferRadius: 0)))
-            node.physicsBody?.friction = 0.25
-            node.physicsBody?.restitution = 0.35
+            node.physicsBody?.friction = 0.5
+            node.physicsBody?.restitution = 0.7
             node.physicsBody?.categoryBitMask = 1
             node.physicsBody?.collisionBitMask = -1
             scene.rootNode.addChildNode(node)
@@ -711,9 +712,10 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             node.simdOrientation = simd_quatf(ix: Float(spec.q[0]), iy: Float(spec.q[1]), iz: Float(spec.q[2]), r: Float(spec.q[3])).normalized
             let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: DiceArt.geometry(kind), options: [.type: SCNPhysicsShape.ShapeType.convexHull]))
             body.mass = 1
-            body.friction = 0.25
+            // Times the table's 0.9: grippy enough to tumble rather than skate.
+            body.friction = 0.6
             body.rollingFriction = 0.02
-            body.restitution = 0.4
+            body.restitution = 0.55
             body.damping = 0.05
             body.angularDamping = 0.12
             body.allowsResting = true
@@ -1030,11 +1032,12 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                 guard let body = die.node.physicsBody else { return true }
                 if body.isResting { return true }
                 let speed = simd_length(SIMD3<Float>(body.velocity.x, body.velocity.y, body.velocity.z))
-                return speed < 0.08 && abs(body.angularVelocity.w) < 0.08
+                // Dice in SceneKit never quite stop jiggling: near enough counts.
+                return speed < 0.3 && abs(body.angularVelocity.w) < 0.5
             }
             roll.quietFrames = still && (!roll.holdUntilStill || phoneStill) ? roll.quietFrames + 1 : 0
             let timedOut = Date().timeIntervalSince(roll.started) > (roll.holdUntilStill ? 60 : 9)
-            if roll.quietFrames < 24 && !timedOut { continue }
+            if roll.quietFrames < 15 && !timedOut { continue }
             if roll.local && !timedOut && roll.nudges < 4 {
                 // A die leaning on another or on a wall: give it a nudge.
                 let cocked = roll.dice.filter { !DiceGeometry.top($0.kind, rotation: rotation($0.node)).flat }
