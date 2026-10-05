@@ -625,9 +625,11 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         floor.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
         scene.rootNode.addChildNode(floor)
         self.floor = floor
+        // Thick, so a fast die can't pass through it between two physics steps
+        // (when frames come slowly, as in the Simulator). Its top is at 0.
         let ground = SCNNode()
-        ground.position = SCNVector3(0, -0.5, 0)
-        ground.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: 200, height: 1, length: 200, chamferRadius: 0)))
+        ground.position = SCNVector3(0, -10, 0)
+        ground.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: 200, height: 20, length: 200, chamferRadius: 0)))
         ground.physicsBody?.friction = 0.25
         ground.physicsBody?.restitution = 0.35
         ground.physicsBody?.categoryBitMask = 1
@@ -662,17 +664,20 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             scene.rootNode.addChildNode(node)
             return node
         }
-        let w = CGFloat(hx * 2 + 4)
-        let l = CGFloat(hz * 2 + 4)
+        // Thick walls and lid, for the same reason as the floor; their inner
+        // faces are where they always were.
+        let thick: Float = 10
+        let w = CGFloat(hx * 2 + thick * 2)
+        let l = CGFloat(hz * 2 + thick * 2)
         walls = [
-            wall(x: -hx + inset - 1, z: 0, width: 2, length: l),
-            wall(x: hx - inset + 1, z: 0, width: 2, length: l),
-            wall(x: 0, z: -hz + inset - 1, width: w, length: 2),
-            wall(x: 0, z: hz - inset + 1, width: w, length: 2),
+            wall(x: -hx + inset - thick / 2, z: 0, width: CGFloat(thick), length: l),
+            wall(x: hx - inset + thick / 2, z: 0, width: CGFloat(thick), length: l),
+            wall(x: 0, z: -hz + inset - thick / 2, width: w, length: CGFloat(thick)),
+            wall(x: 0, z: hz - inset + thick / 2, width: w, length: CGFloat(thick)),
         ]
         let lid = SCNNode()
-        lid.position = SCNVector3(0, 13, 0)
-        lid.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: w, height: 2, length: l, chamferRadius: 0)))
+        lid.position = SCNVector3(0, 12 + thick / 2, 0)
+        lid.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: w, height: CGFloat(thick), length: l, chamferRadius: 0)))
         lid.physicsBody?.categoryBitMask = 1
         scene.rootNode.addChildNode(lid)
         walls.append(lid)
@@ -709,6 +714,8 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             body.damping = 0.05
             body.angularDamping = 0.12
             body.allowsResting = true
+            // Checked between steps too, so a fast die can't skip through a wall.
+            body.continuousCollisionDetectionThreshold = CGFloat(kind.radius) * 0.5
             // Each person's dice only hit their own dice (and the tray), never someone else's.
             let group = groupFor(owner)
             body.categoryBitMask = group
@@ -1000,6 +1007,17 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                 for die in roll.dice { die.node.physicsBody?.applyForce(SCNVector3(push.x, push.y, push.z), asImpulse: true) }
             }
             motionPush = .zero
+        }
+        // A die that got through the table anyway goes back on it.
+        let (hx, hz) = extents()
+        for roll in rolls where !roll.done {
+            for die in roll.dice where die.node.presentation.position.y < -1.5 {
+                let p = die.node.presentation.position
+                die.node.orientation = die.node.presentation.orientation
+                die.node.position = SCNVector3(max(-hx + 2, min(hx - 2, p.x)), 4, max(-hz + 2, min(hz - 2, p.z)))
+                die.node.physicsBody?.velocity = SCNVector3(0, -2, 0)
+                die.node.physicsBody?.resetTransform()
+            }
         }
         for roll in rolls where !roll.done {
             if !roll.local { land(roll, force: false) }
