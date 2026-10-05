@@ -103,7 +103,7 @@ final class LiveGame {
             n += 1
             question = Question(text: text.isEmpty ? "Question" : text, answers: answers, correct: correct, timer: timer,
                                 startedAt: now, endsAt: timer > 0 ? now + Double(timer * 1000) : 0)
-            answers.removeAll()
+            self.answers.removeAll()
             answerOrder = []
             points = [:]
             phase = "question"
