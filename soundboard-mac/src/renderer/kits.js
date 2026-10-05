@@ -156,6 +156,7 @@ const Kits = (() => {
     const kit = activeKit();
     const board = $('#kit-board');
     board.classList.toggle('hidden', !kit);
+    document.body.classList.toggle('kit-open', !!kit);
     syncDock();
     if (!kit) return;
     board.classList.toggle('editing', editing);

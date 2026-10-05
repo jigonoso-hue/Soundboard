@@ -1,7 +1,9 @@
-/* global api, $, sounds, prefs, toast, Ambience, Kits, Bashes, isFull, Icons */
+/* global api, $, sounds, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS */
 // Live Session in the window: the Live dialog, forwarding what the board plays
-// to listeners (when hosting), and playing what the host sends (when tuned in).
-// The networking lives in the main process (src/live.js).
+// to listeners (when hosting), and playing what the host sends (when tuned in)
+// on a full-window stage in the theme's style, with the player's own sound pads.
+// The networking lives in the main process (src/live.js). Matches the iPad
+// app's LiveSession, LiveView and ListenerStageView.
 const Live = (() => {
   const SETTINGS_KEY = 'live';
   // Online sessions go through Dungeon Radio's own relay server. (Tests can
@@ -22,11 +24,24 @@ const Live = (() => {
   const seenRuns = new Set();
   let busy = false;
   let error = '';
+  const LIMIT = 5;
+  const PLAYER_SOUNDS = [
+    ['off', 'Off', 'Only you play sounds.'],
+    ['own', 'Their own sounds', `Each player picks up to ${LIMIT} sounds from their own library. When they play one, everyone hears it. You can still use all your sounds.`],
+    ['gm', 'My soundboard', `Each player picks up to ${LIMIT} of your sounds (not GM-only ones). When they play one, everyone hears it. You can still use all your sounds.`],
+  ];
+  // Listener: what the GM allows, and the GM's sounds to choose from.
+  let allowed = 'off';
+  let catalog = [];
 
   function loadSettings() {
     const defaults = {
       sessionName: '', yourName: '', mode: 'local', code: '',
       volumes: { master: 1, music: 1, sfx: 1, ambience: 1 },
+      // Which sounds players may play for everyone: 'off', 'own' or 'gm'.
+      playerSounds: 'off',
+      // A player's chosen sounds: the GM's (catalog ids) and their own (library ids).
+      picksGM: [], picksOwn: [],
     };
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
@@ -126,6 +141,7 @@ const Live = (() => {
   let lastAmbience = '';
   let lastScene;
   let lastPrefetch = '';
+  let lastCatalog = '';
   function syncHostState(force = false) {
     if (!hosting()) return;
     const gmOnly = new Set(sounds.filter((s) => s.gmOnly).map((s) => s.id));
@@ -146,7 +162,51 @@ const Live = (() => {
       lastPrefetch = prefetch;
       api.live.hostEvent({ t: 'prefetch', ids: JSON.parse(prefetch) });
     }
+    const items = JSON.stringify(catalogItems());
+    if (force || items !== lastCatalog) {
+      lastCatalog = items;
+      api.live.hostEvent({ t: 'catalog', items: JSON.parse(items) });
+    }
   }
+
+  // The GM's sounds players may choose from: everything except GM-only sounds.
+  // Colours travel as palette positions, as on the iPad.
+  function catalogItems() {
+    return sounds.filter((s) => !s.gmOnly).map((s) => ({ id: s.id, name: s.name, color: Math.max(0, COLORS.indexOf(s.color)) }));
+  }
+
+  // A player played a sound: it plays for everyone, the GM included, in a
+  // quarter of a second so every device starts together.
+  api.live.onCue(({ peer, name: playerName, cue }) => {
+    if (!hosting() || !cue) return;
+    const at = Date.now() + 250;
+    let url;
+    let soundName;
+    let volume = 1;
+    let buzzIt = false;
+    const playId = pid();
+    const event = { t: 'play', pid: playId, group: `p:${peer}:${playId}`, at, cat: 'sfx', by: playerName };
+    if (cue.kind === 'library') {
+      const sound = sounds.find((s) => s.id === cue.soundId);
+      if (!sound || sound.gmOnly) return;
+      url = `sound://local/${encodeURIComponent(sound.file)}`;
+      soundName = sound.name;
+      volume = sound.volume ?? 1;
+      buzzIt = !!sound.buzz;
+      event.soundId = sound.id;
+    } else {
+      url = cue.url;
+      soundName = cue.name || 'Sound';
+      event.file = { hash: cue.hash, ext: cue.ext };
+    }
+    Object.assign(event, { name: soundName, volume, buzz: buzzIt });
+    api.live.hostEvent(event);
+    const audio = new Audio(url);
+    audio.volume = Math.min(1, volume * prefs.master);
+    if (prefs.outputDevice && audio.setSinkId) audio.setSinkId(prefs.outputDevice).catch(() => {});
+    setTimeout(() => audio.play().catch(() => {}), Math.max(0, at - Date.now()));
+    toast(`${playerName} played “${soundName}”.`);
+  });
   setInterval(syncHostState, 500);
 
   // The open kit's sounds (including inside its bashes and ambience), or the
@@ -247,7 +307,7 @@ const Live = (() => {
       stopPlay(cmd.pid);
       const audio = new Audio(cmd.url);
       sink(audio);
-      const entry = { audio, group: cmd.group, cat: cmd.cat, volume: cmd.volume, timer: null, name: cmd.name, whisper: cmd.whisper };
+      const entry = { audio, group: cmd.group, cat: cmd.cat, volume: cmd.volume, timer: null, name: cmd.name, whisper: cmd.whisper, by: cmd.by || null, at: cmd.at };
       plays.set(cmd.pid, entry);
       audio.volume = Math.min(1, cmd.volume * level(cmd.cat));
       if (cmd.loop) audio.loop = true;
@@ -255,8 +315,8 @@ const Live = (() => {
       const startAt = (position) => {
         audio.currentTime = position;
         audio.play().catch(finish);
-        if (cmd.whisper) toast('A whisper only you can hear…');
-        if (cmd.buzz) buzz();
+        if (cmd.whisper) Stage.whisper();
+        if (cmd.buzz) buzz(cmd);
         renderNowPlaying();
       };
       audio.addEventListener('ended', () => {
@@ -354,22 +414,39 @@ const Live = (() => {
       for (const layer of layers.values()) { clearInterval(layer.fade); layer.audio.volume = Math.min(1, layer.volume * level('ambience')); }
     }
 
+    // What's playing: sounds and full sounds (with who played them), then ambience.
     function nowPlaying() {
-      const names = [];
-      for (const entry of plays.values()) if (!entry.whisper && entry.name && !names.includes(entry.name)) names.push(entry.name);
-      for (const layer of layers.values()) if (layer.name && !names.includes(layer.name)) names.push(layer.name);
-      return names;
+      const items = [];
+      const seen = new Set();
+      for (const [id, entry] of [...plays].sort((a, b) => a[1].at - b[1].at)) {
+        if (entry.whisper || !entry.name) continue;
+        const kind = entry.cat === 'music' ? 'music' : 'sound';
+        const key = `${kind}-${entry.name}-${entry.by || ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({ id, name: entry.name, kind, by: entry.by });
+      }
+      for (const [key, layer] of [...layers].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+        if (layer.name) items.push({ id: `a:${key}`, name: layer.name, kind: 'ambience', by: null });
+      }
+      return items;
     }
 
     return { play, stopGroup, setGroupVolume, setAmbience, stopAll, applyVolumes, nowPlaying };
   })();
 
-  // Macs can't vibrate; give the window a quick shake instead.
-  function buzz() {
+  // Macs can't vibrate: the stage shakes and flashes, and if the window isn't
+  // in front, a notification pops up and the Dock icon bounces.
+  function buzz(cmd) {
     document.body.classList.remove('live-buzz');
     void document.body.offsetWidth;
     document.body.classList.add('live-buzz');
-    setTimeout(() => document.body.classList.remove('live-buzz'), 400);
+    setTimeout(() => document.body.classList.remove('live-buzz'), 450);
+    Stage.flash();
+    api.live.notify({
+      title: `💥 ${status.host || 'Your GM'}`,
+      body: cmd && cmd.whisper ? 'Something only you can feel…' : (cmd && cmd.name ? cmd.name : 'Brace yourself!'),
+    });
   }
 
   api.live.onCommand((cmd) => {
@@ -384,6 +461,368 @@ const Live = (() => {
     }
   });
 
+
+  // ---------------------------------------------------------------------
+  // Players' sounds (listener): up to five picks that play for everyone.
+
+  api.live.onRules((mode) => {
+    allowed = ['own', 'gm'].includes(mode) ? mode : 'off';
+    if (allowed === 'own') offerOwnSounds();
+    Stage.render();
+  });
+  api.live.onCatalog((items) => {
+    catalog = Array.isArray(items) ? items : [];
+    // Drop picks the GM no longer offers.
+    const ids = new Set(catalog.map((c) => c.id));
+    const kept = settings.picksGM.filter((id) => ids.has(id));
+    if (kept.length !== settings.picksGM.length) { settings.picksGM = kept; saveSettings(); }
+    Stage.render();
+  });
+
+  const paletteColor = (index) => COLORS[((Number(index) || 0) % COLORS.length + COLORS.length) % COLORS.length];
+
+  // The player's chosen sounds for the current rules: [{ id, name, color }].
+  function pickedSounds() {
+    if (allowed === 'gm') return settings.picksGM.map((id) => catalog.find((c) => c.id === id)).filter(Boolean).map((c) => ({ id: c.id, name: c.name, color: paletteColor(c.color) }));
+    if (allowed === 'own') return settings.picksOwn.map((id) => sounds.find((s) => s.id === id)).filter(Boolean).map((s) => ({ id: s.id, name: s.name, color: s.color }));
+    return [];
+  }
+
+  const picks = () => (allowed === 'gm' ? settings.picksGM : settings.picksOwn);
+
+  function togglePick(id) {
+    const list = picks();
+    const index = list.indexOf(id);
+    if (index >= 0) list.splice(index, 1);
+    else if (list.length < LIMIT) list.push(id);
+    saveSettings();
+    if (allowed === 'own') offerOwnSounds();
+  }
+
+  // Plays one of the player's chosen sounds for everyone.
+  function playPick(id) {
+    if (!listening()) return;
+    if (allowed === 'gm') api.live.cue({ id });
+    else if (allowed === 'own') api.live.cue({ soundId: id });
+  }
+
+  // Sends the host the player's own chosen sounds, so it can fetch them ahead of time.
+  function offerOwnSounds() {
+    if (!listening() || allowed !== 'own') return;
+    api.live.offer(settings.picksOwn.filter((id) => sounds.some((s) => s.id === id)));
+  }
+
+  // ---------------------------------------------------------------------
+  // The stage: what a player sees while tuned in, in the theme's style. Rings
+  // ripple out while sounds play; whispers glow purple; buzz sounds shake and
+  // flash; what's playing is grouped into sounds, full sounds and ambience; the
+  // player's own pads sit at the bottom when the GM allows them.
+
+  const STAGE_STYLES = {
+    tavern: { ink: '#2B1A0C', secondary: '#5B4127', accent: '#9C3D12', ringA: '#7A5228', ringB: '#9C3D12', chip: 'rgba(122,82,40,0.16)', font: 'serif', title: 'serif', symbol: 'note', overlay: 'candle' },
+    spaceAge: { ink: '#F6EFDD', secondary: '#A9B6D6', accent: '#2AD4C0', ringA: '#12B5A5', ringB: '#F0643C', chip: 'rgba(12,20,44,0.8)', font: 'rounded', title: 'rounded', symbol: 'speaker', overlay: 'orbit' },
+    scifi: { ink: '#DDF6FF', secondary: '#7FB6D4', accent: '#3FD2FF', ringA: '#3FD2FF', ringB: '#1E8FBF', chip: 'rgba(8,32,58,0.8)', font: 'mono', title: 'mono', symbol: 'speaker', overlay: 'radar' },
+    academia: { ink: '#F1E6C8', secondary: '#A9A3C9', accent: '#D4A94A', ringA: '#D4A94A', ringB: '#8FA6FF', chip: 'rgba(20,22,74,0.8)', font: 'serif', title: 'serif', symbol: 'moon', overlay: 'sigil' },
+    default: { ink: '#FFFFFF', secondary: 'rgba(255,255,255,0.6)', accent: '#FFB35C', ringA: '#FF6A3D', ringB: '#B07CFF', chip: 'rgba(255,255,255,0.12)', font: 'default', title: 'serif', symbol: 'speaker', overlay: 'sparks' },
+  };
+
+  const Stage = (() => {
+    let root = null;
+    let canvas = null;
+    let frame = 0;
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+    const style = () => STAGE_STYLES[typeof Themes !== 'undefined' ? Themes.theme : 'dark'] || STAGE_STYLES.default;
+
+    function build() {
+      root = el('section', 'live-stage hidden');
+      root.id = 'live-stage';
+      root.setAttribute('aria-label', 'Live Session');
+      canvas = el('canvas', 'stage-anim');
+      root.append(canvas, el('div', 'stage-flash'), el('div', 'stage-whisper-glow'));
+      const content = el('div', 'stage-content');
+      content.id = 'stage-content';
+      root.append(content);
+      const card = el('div', 'stage-whisper-card');
+      card.append(el('div', 'stage-whisper-icon', '👂'), el('div', null, 'A whisper only you can hear…'));
+      root.append(card);
+      document.getElementById('app').after(root);
+      if (typeof Themes !== 'undefined') Themes.onChange(() => { if (!root.classList.contains('hidden')) render(); });
+    }
+
+    function show() {
+      if (!root) build();
+      if (root.classList.contains('hidden')) {
+        root.classList.remove('hidden');
+        document.body.classList.add('stage-open');
+      }
+      render();
+      if (!frame) frame = requestAnimationFrame(draw);
+    }
+
+    function hide() {
+      if (!root || root.classList.contains('hidden')) return;
+      root.classList.add('hidden');
+      document.body.classList.remove('stage-open');
+      cancelAnimationFrame(frame);
+      frame = 0;
+      document.getElementById('live-volumes')?.close();
+      document.getElementById('live-picker')?.close();
+    }
+
+    function draw(now) {
+      frame = 0;
+      if (!root || root.classList.contains('hidden')) return;
+      const w = root.clientWidth;
+      const h = root.clientHeight;
+      const scale = Math.min(2, window.devicePixelRatio || 1);
+      if (canvas.width !== Math.round(w * scale) || canvas.height !== Math.round(h * scale)) {
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+      }
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      const time = reduceMotion.matches ? 0 : now / 1000;
+      ThemeArt.stage(ctx, w, h, time, Mirror.nowPlaying().length > 0, style());
+      frame = requestAnimationFrame(draw);
+    }
+
+    function chip(item, st) {
+      const me = (settings.yourName || '').trim().toLowerCase();
+      if (item.kind === 'ambience') {
+        const c = el('span', 'stage-chip ambience');
+        const icon = el('span', 'stage-chip-icon');
+        Icons.set(icon, 'wind', '', { size: 13 });
+        c.append(icon, el('span', 'stage-chip-name', item.name));
+        return c;
+      }
+      const c = el('span', 'stage-chip');
+      const bars = el('span', 'eq-bars');
+      bars.append(el('i'), el('i'), el('i'));
+      c.append(bars, el('span', 'stage-chip-name', item.name));
+      if (item.by) c.append(el('span', 'stage-chip-by', me && item.by.toLowerCase() === me ? 'you' : item.by));
+      c.style.setProperty('--chip', st.chip);
+      return c;
+    }
+
+    function renderNow(container, st) {
+      const items = Mirror.nowPlaying();
+      const now = el('div', 'stage-now');
+      now.id = 'live-now';
+      if (!items.length) now.append(el('div', 'stage-secondary', 'Waiting for the GM…'));
+      for (const [title, kind] of [['SOUNDS', 'sound'], ['FULL SOUNDS', 'music'], ['AMBIENCE', 'ambience']]) {
+        const list = items.filter((i) => i.kind === kind);
+        if (!list.length) continue;
+        const group = el('div', 'stage-group');
+        group.append(el('div', 'stage-group-title', title));
+        const row = el('div', 'stage-chips');
+        for (const item of list) row.append(chip(item, st));
+        group.append(row);
+        now.append(group);
+      }
+      container.append(now);
+    }
+
+    function renderPads(container) {
+      if (allowed === 'off') return;
+      const panel = el('div', 'stage-pads');
+      panel.dataset.artSeed = 'stage-pads';
+      const head = el('div', 'stage-pads-head');
+      head.append(el('div', 'stage-group-title', allowed === 'gm' ? "YOUR PICKS FROM THE GM'S SOUNDS" : 'YOUR SOUNDS'));
+      const list = pickedSounds();
+      const choose = el('button', 'link-btn', list.length ? 'Change' : 'Choose');
+      choose.type = 'button';
+      choose.addEventListener('click', openPicker);
+      head.append(choose);
+      panel.append(head);
+      if (!list.length) {
+        const empty = el('button', 'stage-pads-empty', `＋ Choose up to ${LIMIT} sounds to play for everyone`);
+        empty.type = 'button';
+        empty.addEventListener('click', openPicker);
+        panel.append(empty);
+      } else {
+        const row = el('div', 'stage-pad-row');
+        for (const sound of list) {
+          const pad = el('button', 'stage-pad', sound.name);
+          pad.type = 'button';
+          pad.title = `Play ${sound.name} for everyone`;
+          pad.style.setProperty('--pad', sound.color);
+          pad.addEventListener('click', () => {
+            playPick(sound.id);
+            pad.classList.add('pressed');
+            setTimeout(() => pad.classList.remove('pressed'), 250);
+          });
+          row.append(pad);
+        }
+        panel.append(row);
+      }
+      container.append(panel);
+    }
+
+    function render() {
+      if (!root || root.classList.contains('hidden')) return;
+      const st = style();
+      root.dataset.font = st.font;
+      root.style.setProperty('--stage-ink', st.ink);
+      root.style.setProperty('--stage-secondary', st.secondary);
+      root.style.setProperty('--stage-accent', st.accent);
+      root.style.setProperty('--stage-ring', st.ringA);
+      root.style.setProperty('--stage-chip', st.chip);
+      root.classList.toggle('playing', Mirror.nowPlaying().length > 0);
+      const content = root.querySelector('#stage-content');
+      content.textContent = '';
+      const connected = status.state === 'connected';
+
+      const top = el('div', 'stage-top');
+      const live = el('div', `stage-pill${connected ? ' on' : ''}`);
+      live.append(el('span', 'stage-dot'), el('span', null, connected ? 'LIVE' : 'CONNECTING'));
+      const volumes = el('button', 'stage-pill stage-button', 'Volumes');
+      volumes.type = 'button';
+      volumes.addEventListener('click', openVolumes);
+      top.append(live, el('span', 'spacer'), volumes);
+
+      const center = el('div', 'stage-center');
+      const emblem = el('div', 'stage-emblem');
+      Icons.set(emblem, st.symbol, '', { size: 72 });
+      center.append(emblem);
+      if (connected) {
+        center.append(el('div', 'stage-secondary', 'Tuned in to'));
+        const name = el('div', 'stage-host', status.host || 'the GM');
+        name.dataset.font = st.title;
+        center.append(name);
+        if (status.scene) {
+          const scene = el('div', 'stage-pill stage-scene');
+          const icon = el('span');
+          Icons.set(icon, 'mask', '', { size: 14 });
+          scene.append(icon, el('span', null, status.scene));
+          center.append(scene);
+        }
+      } else {
+        center.append(el('div', 'stage-spinner'), el('div', 'stage-secondary', 'Connecting…'));
+      }
+      renderNow(center, st);
+
+      const bottom = el('div', 'stage-bottom');
+      bottom.append(el('span', 'stage-secondary small', 'You can switch to another app; sounds keep playing.'));
+      bottom.append(el('span', 'spacer'));
+      const leave = el('button', 'stage-leave', 'Leave');
+      leave.type = 'button';
+      leave.addEventListener('click', () => {
+        // eslint-disable-next-line no-alert
+        if (window.confirm('Leave the session?')) run(() => api.live.leave());
+      });
+      bottom.append(leave);
+
+      content.append(top, el('div', 'stage-spacer'), center, el('div', 'stage-spacer'));
+      renderPads(content);
+      content.append(bottom);
+    }
+
+    // The purple glow of a whisper.
+    let whisperTimer;
+    function whisper() {
+      if (!root) return;
+      root.classList.add('whispering');
+      clearTimeout(whisperTimer);
+      whisperTimer = setTimeout(() => root.classList.remove('whispering'), 2800);
+    }
+
+    function flash() {
+      if (!root) return;
+      root.classList.remove('flash');
+      void root.offsetWidth;
+      root.classList.add('flash');
+      setTimeout(() => root.classList.remove('flash'), 600);
+    }
+
+    // The listener's volume sliders.
+    function openVolumes() {
+      let dialog = document.getElementById('live-volumes');
+      if (!dialog) {
+        dialog = el('dialog');
+        dialog.id = 'live-volumes';
+        document.body.append(dialog);
+      }
+      dialog.textContent = '';
+      const form = el('form');
+      form.method = 'dialog';
+      form.append(el('h2', null, 'Your Volumes'));
+      for (const [key, text] of [['master', 'Volume'], ['music', 'Music'], ['sfx', 'Effects'], ['ambience', 'Ambience']]) {
+        const input = el('input');
+        input.type = 'range';
+        input.min = '0';
+        input.max = '1';
+        input.step = '0.01';
+        input.value = String(settings.volumes[key]);
+        input.setAttribute('aria-label', `${text} volume`);
+        input.addEventListener('input', () => { settings.volumes[key] = Number(input.value); saveSettings(); Mirror.applyVolumes(); });
+        const row = el('label', 'volume-row');
+        row.append(el('span', null, text), input);
+        form.append(row);
+      }
+      form.append(el('p', 'muted small', 'These only change what you hear.'));
+      const actions = el('div', 'dialog-actions');
+      actions.append(el('span', 'spacer'));
+      const done = el('button', 'primary', 'Done');
+      done.value = 'done';
+      actions.append(done);
+      form.append(actions);
+      dialog.append(form);
+      dialog.showModal();
+    }
+
+    // Choose up to five sounds, from the GM's soundboard or your own library.
+    function openPicker() {
+      let dialog = document.getElementById('live-picker');
+      if (!dialog) {
+        dialog = el('dialog', 'wide');
+        dialog.id = 'live-picker';
+        document.body.append(dialog);
+        dialog.addEventListener('close', render);
+      }
+      const fill = () => {
+        dialog.textContent = '';
+        const form = el('form');
+        form.method = 'dialog';
+        form.append(el('h2', null, allowed === 'gm' ? "The GM's Sounds" : 'Your Sounds'));
+        const chosen = picks().length;
+        form.append(el('div', 'live-subhead', `${chosen} of ${LIMIT} chosen`));
+        const list = el('div', 'picker-list');
+        const options = allowed === 'gm'
+          ? catalog.map((c) => ({ id: c.id, name: c.name, color: paletteColor(c.color) }))
+          : sounds.map((s) => ({ id: s.id, name: s.name, color: s.color }));
+        if (!options.length) list.append(el('p', 'muted', allowed === 'gm' ? "The GM hasn't any sounds to share yet." : 'Your library is empty. Add sounds to it first.'));
+        for (const option of options) {
+          const picked = picks().includes(option.id);
+          const row = el('label', 'picker-row');
+          const box = el('input');
+          box.type = 'checkbox';
+          box.checked = picked;
+          box.disabled = !picked && chosen >= LIMIT;
+          box.addEventListener('change', () => { togglePick(option.id); fill(); });
+          const dot = el('span', 'picker-dot');
+          dot.style.background = option.color;
+          row.append(box, dot, el('span', null, option.name));
+          list.append(row);
+        }
+        form.append(list);
+        form.append(el('p', 'muted small', 'When you play one of these on the stage, everyone in the session hears it.'));
+        const actions = el('div', 'dialog-actions');
+        actions.append(el('span', 'spacer'));
+        const done = el('button', 'primary', 'Done');
+        done.value = 'done';
+        actions.append(done);
+        form.append(actions);
+        dialog.append(form);
+      };
+      fill();
+      dialog.showModal();
+    }
+
+    return { show, hide, render, whisper, flash };
+  })();
+
   // ---------------------------------------------------------------------
   // Status and the dialog.
 
@@ -391,7 +830,11 @@ const Live = (() => {
     const was = status.role;
     status = next || { role: null };
     if (next && next.error) error = next.error;
-    if (was === 'listen' && status.role !== 'listen') Mirror.stopAll(true);
+    if (was === 'listen' && status.role !== 'listen') { Mirror.stopAll(true); allowed = 'off'; catalog = []; }
+    // Tuning in: the dialog closes and the stage takes over the window until you leave.
+    if (status.role === 'listen') { if ($('#live-dialog').open) $('#live-dialog').close(); Stage.show(); } else Stage.hide();
+    // No need to add sounds while broadcasting.
+    $('#add-btn').classList.toggle('hidden', status.role === 'host');
     if (status.role === 'host' && was !== 'host') { lastScene = undefined; syncHostState(true); }
     if (status.role !== 'host') { whisper.clear(); emphasis = false; $('#whisper-menu').classList.add('hidden'); }
     // Drop whisper targets who left.
@@ -399,7 +842,15 @@ const Live = (() => {
     renderArmed();
     renderButton();
     if ($('#live-dialog').open) renderDialog();
-    if (status.role === 'listen' && status.state === 'ended' && status.error) toast(status.error);
+    if (status.role === 'listen') Stage.render();
+    if (!status.role && was === 'listen' && status.error) {
+      if (status.state === 'error') {
+        // Couldn't tune in (a wrong code, a full session): back to the dialog with the reason.
+        tab = 'listen';
+        renderDialog();
+        if (!$('#live-dialog').open) $('#live-dialog').showModal();
+      } else toast(status.error);
+    }
   }
 
   api.live.onStatus(setStatus);
@@ -447,11 +898,32 @@ const Live = (() => {
     }
   }
 
+  // Players' sounds: Off, their own sounds, or picks from the GM's soundboard.
+  function playerSoundsField() {
+    const wrap = el('div', 'live-player-sounds');
+    const select = el('select');
+    select.id = 'live-player-sounds';
+    for (const [id, label] of PLAYER_SOUNDS) {
+      const option = el('option', null, label);
+      option.value = id;
+      select.append(option);
+    }
+    select.value = settings.playerSounds;
+    const hint = el('p', 'muted small', PLAYER_SOUNDS.find((m) => m[0] === settings.playerSounds)[2]);
+    select.addEventListener('change', () => {
+      settings.playerSounds = select.value;
+      saveSettings();
+      hint.textContent = PLAYER_SOUNDS.find((m) => m[0] === settings.playerSounds)[2];
+      if (hosting()) api.live.hostEvent({ t: 'playerSounds', mode: settings.playerSounds });
+    });
+    wrap.append(field("Players' sounds", select), hint);
+    return wrap;
+  }
+
   function renderDialog() {
     const body = $('#live-body');
     body.textContent = '';
     if (hosting()) renderHosting(body);
-    else if (listening()) renderListening(body);
     else renderIdle(body);
     if (error) body.append(el('p', 'live-error', error));
   }
@@ -487,10 +959,14 @@ const Live = (() => {
       }
       body.append(modes);
       if (settings.mode === 'local' && !bonjour) body.append(el('p', 'live-error', 'Local sessions aren’t available in this build. Use Online instead.'));
+      body.append(playerSoundsField());
       const start = el('button', 'primary', busy ? 'Starting…' : 'Start Broadcasting');
       start.type = 'button';
       start.disabled = busy;
-      start.addEventListener('click', () => run(() => api.live.hostStart({ name: settings.sessionName, mode: settings.mode, relay: relayAddress() })));
+      start.addEventListener('click', () => run(() => api.live.hostStart({
+        name: settings.sessionName, mode: settings.mode, relay: relayAddress(),
+        playerSounds: settings.playerSounds, catalog: catalogItems(),
+      })));
       body.append(start);
       return;
     }
@@ -557,48 +1033,14 @@ const Live = (() => {
     }
     body.append(list);
     body.append(el('p', 'muted small', 'Mark sounds GM only (never sent) or Buzz (vibrates phones) in each sound’s Edit window. Players set their own music, effects and ambience volumes.'));
+    body.append(playerSoundsField());
     const end = el('button', 'danger', 'End Session');
     end.type = 'button';
     end.addEventListener('click', () => run(() => api.live.leave()));
     body.append(end);
   }
 
-  function renderListening(body) {
-    const head = el('div', 'live-hero');
-    head.append(el('div', 'muted small', status.state === 'connected' ? 'Tuned in to' : 'Connecting to'));
-    head.append(el('div', 'live-hero-name', status.host || 'the GM'));
-    if (status.scene) head.append(el('div', 'muted small', `Scene: ${status.scene}`));
-    body.append(head);
-
-    const sliders = el('div', 'live-sliders');
-    for (const [key, text] of [['master', 'Volume'], ['music', 'Music'], ['sfx', 'Effects'], ['ambience', 'Ambience']]) {
-      const input = el('input');
-      input.type = 'range';
-      input.min = '0';
-      input.max = '1';
-      input.step = '0.01';
-      input.value = String(settings.volumes[key]);
-      input.addEventListener('input', () => { settings.volumes[key] = Number(input.value); saveSettings(); Mirror.applyVolumes(); });
-      sliders.append(field(text, input));
-    }
-    body.append(sliders);
-    body.append(el('div', 'live-subhead', 'Now playing'));
-    const now = el('div', 'live-now muted small');
-    now.id = 'live-now';
-    body.append(now);
-    renderNowPlaying();
-    const leave = el('button', 'danger', 'Leave Session');
-    leave.type = 'button';
-    leave.addEventListener('click', () => run(() => api.live.leave()));
-    body.append(leave);
-  }
-
-  function renderNowPlaying() {
-    const now = document.getElementById('live-now');
-    if (!now) return;
-    const names = Mirror.nowPlaying();
-    now.textContent = names.length ? names.join(' · ') : 'Nothing right now.';
-  }
+  function renderNowPlaying() { Stage.render(); }
 
   $('#live-btn').addEventListener('click', async () => {
     const current = await api.live.status();
@@ -606,6 +1048,7 @@ const Live = (() => {
     status = current;
     error = '';
     renderButton();
+    if (listening()) { Stage.show(); return; }
     renderDialog();
     if (!status.role && tab === 'listen') api.live.browse(true);
     $('#live-dialog').showModal();

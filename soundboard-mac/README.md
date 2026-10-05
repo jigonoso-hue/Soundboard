@@ -181,13 +181,26 @@ Everything you play is sent to listeners: sounds, full sounds, bashes, ambience 
 - **GM only:** tick it in a sound's Edit window, and it plays only on your device. Tiles show a **GM** badge.
 - **Buzz:** tick it in a sound's Edit window for big hits. Listeners' phones vibrate when it plays (a Mac shakes its window instead).
 
-**Players' sounds** (players playing up to 5 sounds for everyone) are set up from the iPhone/iPad app; a Mac in the session hears them but doesn't offer them yet.
+- **Players' sounds:** choose who else may play sounds for everyone, when you start broadcasting or any time after in the Live window. **Off**: only you. **Their own sounds**: each player picks up to 5 sounds from their own library. **My soundboard**: each player picks up to 5 of your sounds (GM-only sounds are never offered). When a player plays one, it plays for everyone, you included, and you see who played it. You can still use all your sounds.
+- **Add Sounds** hides while you broadcast.
 
-**Tune In (a player).** Enter your name, then pick a session on this Wi-Fi or enter the GM's code. You get your own volume sliders for music, effects and ambience, and a "Now playing" list. Stop All stops what's playing on your device only.
+**Tune In (a player).** Enter your name, then pick a session on this Wi-Fi or enter the GM's code. The window turns into a full-window stage in your theme's style, until you click **Leave**: rings ripple out while sounds play, whispers glow purple, buzz sounds shake the stage (with a notification and a bouncing Dock icon if Dungeon Radio isn't in front), and what's playing is grouped into sounds, full sounds and, last, ambience. A sound a player played shows their name. **Volumes** sets your own levels for music, effects and ambience. When the GM allows players' sounds, your pads sit at the bottom: **Choose** up to 5, then click one to play it for everyone.
 
 How it works: the GM's app sends commands, not audio. Each player's app fetches every sound file once (cached by its SHA-256 hash, cleared after 30 days unused), syncs its clock with the GM's and plays each sound itself, in time. The first time a sound plays it may start a moment late while the file arrives; sounds in the open scene kit (or your clips, when no kit is open) are fetched ahead of time.
 
 macOS asks for permission to use the local network the first time you broadcast or browse. Players on the same Wi-Fi also need the Mac's firewall to allow incoming connections for Dungeon Radio.
+
+## Themes
+
+Click **Options** at the bottom of the sidebar to pick a theme and a highlight colour. The themes are the same as on the iPhone/iPad:
+
+- **System**, **Dark** and **Light**.
+- **Tavern**: every page on worn parchment on a wooden table.
+- **Space Age**: a starship window onto deep space, with 50s atomic panels.
+- **Sci-Fi**: a glowing holographic HUD. Tiles are see-through glass with a glowing edge, and synth waves ripple through them while they play.
+- **Dark Academia**: deep indigo pages in gilded frames under a starry night. Tiles are leather-bound book covers that glow with magic while they play.
+
+The listener's stage in a Live Session takes on the theme too.
 
 ## Saving a whole video's audio
 
@@ -226,7 +239,9 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/bashes.js` | Bash storage (`bashes.json` + `covers/`) |
 | `src/kits.js` | Scene Kit storage (`kits.json`) |
 | `src/live.js` | Live Session networking: local server, Bonjour, relay client, host and listener logic |
-| `src/renderer/live.js` | Live window, forwarding what the board plays, and the listener's player |
+| `src/renderer/live.js` | Live window, forwarding what the board plays, players' sounds, and the listener's player and stage |
+| `src/renderer/themes.js` | Themes and the Options window: colours, fonts, where backdrops and panels go, book-cover tiles and playing effects |
+| `src/renderer/theme-art.js` | The themes' drawings (parchment, wood, space, HUD, gilded frames, book covers, synth waves, magic, the stage) |
 | `src/renderer/kits.js` | Scene Kits sidebar, kit page (including ambience sections) and dialogs |
 | `src/renderer/icons.js` | The app's 100-icon set |
 | `src/renderer/icon-picker.*` | Icon picker with icon and background colours |

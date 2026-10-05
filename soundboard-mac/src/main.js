@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, shell, globalShortcut, nativeImage, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, globalShortcut, nativeImage, session, Notification } = require('electron');
 const path = require('path');
 const { Readable } = require('stream');
 const fs = require('fs');
@@ -325,6 +325,7 @@ function registerIpc() {
 let live = null; // { role: 'host', host, transport, mode } or { role: 'listen', listener }
 let lanBrowser = null;
 const liveCacheDir = () => path.join(app.getPath('userData'), 'live-cache');
+const liveHasher = new Live.FileHasher();
 
 function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
@@ -352,7 +353,7 @@ function endLive() {
 function registerLiveIpc() {
   ipcMain.handle('live:status', () => ({ ...liveStatus(), bonjour: Live.hasBonjour() }));
 
-  ipcMain.handle('live:host-start', async (_e, { name, mode, relay }) => {
+  ipcMain.handle('live:host-start', async (_e, { name, mode, relay, playerSounds, catalog }) => {
     endLive();
     const sessionName = String(name || '').trim().slice(0, 40) || `${Live.deviceName()}'s game`;
     const transport = mode === 'online'
@@ -367,10 +368,23 @@ function registerLiveIpc() {
         const file = sound && library.resolveFile(sound.file);
         return file ? { file, ext: path.extname(file).slice(1).toLowerCase() } : null;
       },
+      cacheDir: liveCacheDir(),
     });
+    host.setCatalog(catalog);
+    host.setPlayerSounds(playerSounds);
     const session = { role: 'host', host, transport, mode: mode === 'online' ? 'online' : 'local' };
     live = session;
     host.on('peers', () => { if (live === session) sendToMain('live:status', liveStatus()); });
+    // A player played a sound for everyone: the board plays it here and sends it on.
+    host.on('cue', (peer, playerName, cue) => {
+      if (live !== session) return;
+      const out = { ...cue };
+      if (cue.file) {
+        out.url = `sound://live/${encodeURIComponent(path.basename(cue.file))}`;
+        delete out.file;
+      }
+      sendToMain('live:cue', { peer, name: playerName, cue: out });
+    });
     transport.on('reconnecting', () => { session.reconnecting = true; if (live === session) sendToMain('live:status', liveStatus()); });
     transport.on('connected', () => { session.reconnecting = false; if (live === session) sendToMain('live:status', liveStatus()); });
     transport.on('failed', (err) => {
@@ -386,7 +400,17 @@ function registerLiveIpc() {
     if (!live || live.role !== 'host' || !event) return;
     const { host } = live;
     switch (event.t) {
-      case 'play': host.play(event); break;
+      case 'play': {
+        if (event.file) {
+          // A player's own sound, from the cache.
+          const file = resolveLiveCache(`${event.file.hash}.${event.file.ext}`);
+          if (!file || !fs.existsSync(file)) return;
+          host.play({ ...event, file: { hash: event.file.hash, ext: event.file.ext, file } });
+        } else host.play(event);
+        break;
+      }
+      case 'playerSounds': host.setPlayerSounds(event.mode); break;
+      case 'catalog': host.setCatalog(event.items); break;
       case 'stop': host.stop(event.group); break;
       case 'volume': host.volume(event.group, event.volume); break;
       case 'stopAll': host.stopAll(); break;
@@ -417,6 +441,8 @@ function registerLiveIpc() {
       if (status.state === 'error' || status.state === 'ended') live = null;
       sendToMain('live:status', { role: live ? 'listen' : null, ...status });
     });
+    listener.on('rules', (mode) => { if (live === session) sendToMain('live:rules', mode); });
+    listener.on('catalog', (items) => { if (live === session) sendToMain('live:catalog', items); });
     listener.on('command', (command) => {
       if (command.file) command.url = `sound://live/${encodeURIComponent(path.basename(command.file))}`;
       if (command.layers) {
@@ -433,6 +459,43 @@ function registerLiveIpc() {
   });
 
   ipcMain.handle('live:leave', () => { endLive(); return liveStatus(); });
+
+  // A player's own sounds: offered to the host so it can fetch them ahead of time.
+  ipcMain.handle('live:offer', async (_e, ids) => {
+    if (!live || live.role !== 'listen') return;
+    const { listener } = live;
+    const sounds = [];
+    for (const id of (Array.isArray(ids) ? ids : []).slice(0, Live.PLAYER_SOUND_LIMIT)) {
+      const sound = library.get(id);
+      const file = sound && library.resolveFile(sound.file);
+      if (!file) continue;
+      try {
+        const hash = await liveHasher.hash(file);
+        sounds.push({ file, hash, ext: path.extname(file).slice(1).toLowerCase(), name: sound.name });
+      } catch { /* skip */ }
+    }
+    if (live && live.listener === listener) listener.offer(sounds);
+  });
+
+  // A player plays one of their picks for everyone: one of the GM's sounds (id),
+  // or one of their own (soundId).
+  ipcMain.handle('live:cue', async (_e, { id, soundId }) => {
+    if (!live || live.role !== 'listen') return;
+    if (id) { live.listener.cue(id); return; }
+    const sound = library.get(soundId);
+    const file = sound && library.resolveFile(sound.file);
+    if (!file) return;
+    try { live.listener.cueHash(await liveHasher.hash(file)); } catch { /* ignore */ }
+  });
+
+  // A buzz while the window isn't in front: a notification and a bounce of the Dock icon.
+  ipcMain.on('live:notify', (_e, { title, body }) => {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isFocused()) return;
+    try {
+      if (Notification.isSupported()) new Notification({ title: String(title || 'Dungeon Radio').slice(0, 80), body: String(body || '').slice(0, 200) }).show();
+    } catch { /* ignore */ }
+    try { app.dock?.bounce('critical'); } catch { /* ignore */ }
+  });
 
   ipcMain.handle('live:browse', (_e, on) => {
     lanBrowser?.stop();

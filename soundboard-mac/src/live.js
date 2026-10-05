@@ -74,6 +74,105 @@ function hashFile(file) {
   });
 }
 
+// Fetches files from the other side of a connection, a few chunks at a time,
+// most urgent first, checks their hash and caches them. Used by listeners (files
+// from the host) and by the host (players' own sounds). Emits 'arrived' (hash,
+// file) and 'failed' (hash).
+class FileFetcher extends EventEmitter {
+  constructor({ cacheDir, send }) {
+    super();
+    this.cacheDir = cacheDir;
+    this.send = send;
+    this.jobs = new Map(); // hash -> { ext, n, next, inFlight, received, chunks }
+    this.queue = []; // hashes waiting to be fetched, most urgent first
+  }
+
+  cachePath(hash, ext) { return path.join(this.cacheDir, `${hash}.${ext}`); }
+
+  cached(hash, ext) {
+    if (!HASH_RE.test(String(hash)) || !EXT_RE.test(String(ext))) return null;
+    const file = this.cachePath(hash, ext);
+    return fs.existsSync(file) ? file : null;
+  }
+
+  want(hash, ext, urgent) {
+    if (!HASH_RE.test(String(hash)) || !EXT_RE.test(String(ext))) return;
+    if (this.cached(hash, ext)) return;
+    if (!this.jobs.has(hash)) this.jobs.set(hash, { ext, n: null, next: 0, inFlight: 0, received: 0, chunks: [] });
+    const queued = this.queue.indexOf(hash);
+    if (queued >= 0 && !urgent) return;
+    if (queued >= 0) this.queue.splice(queued, 1);
+    if (urgent) this.queue.unshift(hash); else this.queue.push(hash);
+    this.pump();
+  }
+
+  // Keeps a few chunk requests in flight for the most urgent file.
+  pump() {
+    const hash = this.queue[0];
+    if (!hash) return;
+    const job = this.jobs.get(hash);
+    while (job.inFlight < CHUNKS_IN_FLIGHT && (job.n === null ? job.next === 0 : job.next < job.n)) {
+      this.send({ t: 'need', hash, i: job.next });
+      job.next++;
+      job.inFlight++;
+      if (job.n === null) break; // learn the chunk count first
+    }
+  }
+
+  onChunk({ hash, i, n, data }) {
+    const job = this.jobs.get(hash);
+    if (!job || !Number.isInteger(i) || !Number.isInteger(n) || n < 1 || i < 0 || i >= n || job.chunks[i]) return;
+    job.n = n;
+    job.inFlight = Math.max(0, job.inFlight - 1);
+    job.chunks[i] = Buffer.from(String(data || ''), 'base64');
+    job.received++;
+    if (job.received < n) { this.pump(); return; }
+    const bytes = Buffer.concat(job.chunks);
+    this.jobs.delete(hash);
+    this.queue = this.queue.filter((h) => h !== hash);
+    const actual = crypto.createHash('sha256').update(bytes).digest('hex');
+    if (actual === hash) {
+      const file = this.cachePath(hash, job.ext);
+      fs.mkdirSync(this.cacheDir, { recursive: true });
+      fs.writeFileSync(`${file}.tmp`, bytes);
+      fs.renameSync(`${file}.tmp`, file);
+      this.emit('arrived', hash, file);
+    } else {
+      this.emit('failed', hash);
+    }
+    this.pump();
+  }
+
+  onMissing(hash) {
+    this.jobs.delete(hash);
+    this.queue = this.queue.filter((h) => h !== hash);
+    this.emit('failed', hash);
+    this.pump();
+  }
+}
+
+// A chunk message for part of a file.
+async function chunkOf(file, hash, ext, index) {
+  let handle;
+  try {
+    handle = await fs.promises.open(file, 'r');
+    const { size } = await handle.stat();
+    const total = Math.max(1, Math.ceil(size / CHUNK_SIZE));
+    if (!Number.isInteger(index) || index < 0 || index >= total) return null;
+    const length = Math.min(CHUNK_SIZE, size - index * CHUNK_SIZE);
+    const buffer = Buffer.alloc(Math.max(0, length));
+    if (length > 0) await handle.read(buffer, 0, length, index * CHUNK_SIZE);
+    return { t: 'chunk', hash, i: index, n: total, ext, data: buffer.toString('base64') };
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+
+const PLAYER_SOUNDS = ['off', 'own', 'gm'];
+const PLAYER_SOUND_LIMIT = 5;
+
 // ---------------------------------------------------------------------------
 // Host transports. Both emit 'join' (peer), 'leave' (peer), 'message' (peer, msg)
 // and offer send(peer | null, msg) and close().
@@ -228,14 +327,19 @@ class RelayHostTransport extends EventEmitter {
 // The host: answers listeners, serves files and forwards what the board plays.
 
 class LiveHost extends EventEmitter {
-  // resolveSound(id) -> { file, ext } | null; resolveBuiltin(file) -> boolean
-  constructor({ name, transport, resolveSound, hasher = new FileHasher() }) {
+  // resolveSound(id) -> { file, ext } | null. cacheDir holds players' own sounds.
+  // Emits 'peers' and 'cue' (peer, playerName, cue), where cue is
+  // { kind: 'library', soundId } or { kind: 'file', hash, ext, name, file }.
+  constructor({ name, transport, resolveSound, cacheDir = null, hasher = new FileHasher() }) {
     super();
     this.name = name;
     this.transport = transport;
     this.resolveSound = resolveSound;
+    this.cacheDir = cacheDir;
     this.hasher = hasher;
-    this.peers = new Map(); // peer -> { name, device, allowed: Set<hash> }
+    this.playerSounds = 'off';
+    this.catalog = []; // [{ id, name, color }]: the GM's sounds players may choose
+    this.peers = new Map(); // peer -> { name, device, allowed: Set<hash>, cued, lastCue, offers, fetcher, waitingCues }
     this.files = new Map(); // hash -> { file, ext }
     this.active = new Map(); // pid -> { message, group, until }
     this.ambience = { t: 'ambience', layers: [] };
@@ -244,7 +348,10 @@ class LiveHost extends EventEmitter {
     // Keeps operations in order (a play waiting on its file hash, then a stop).
     this.tail = Promise.resolve();
 
-    transport.on('join', (peer) => this.peers.set(peer, { name: 'Listener', device: '', allowed: new Set(), ready: false }));
+    transport.on('join', (peer) => this.peers.set(peer, {
+      name: 'Listener', device: '', allowed: new Set(), ready: false,
+      cued: new Set(), lastCue: 0, offers: new Map(), fetcher: null, waitingCues: new Set(),
+    }));
     transport.on('leave', (peer) => { this.peers.delete(peer); this.emitPeers(); });
     transport.on('message', (peer, message) => this.enqueue(() => this.handle(peer, message)));
   }
@@ -269,6 +376,8 @@ class LiveHost extends EventEmitter {
       info.ready = true;
       this.transport.send(peer, { t: 'welcome', peer, host: this.name, v: VERSION });
       this.transport.send(peer, this.scene);
+      this.transport.send(peer, this.rulesMessage());
+      if (this.playerSounds === 'gm') this.transport.send(peer, this.catalogMessage());
       await this.sendTo(peer, this.ambience);
       const prefetch = await this.prefetchMessage();
       await this.sendTo(peer, prefetch);
@@ -279,7 +388,98 @@ class LiveHost extends EventEmitter {
       this.transport.send(peer, { t: 'pong', id: message.id, t0: message.t0, t1: Date.now() });
     } else if (message.t === 'need') {
       await this.sendChunk(peer, info, String(message.hash || ''), Number(message.i) || 0);
+    } else if (message.t === 'cue') {
+      this.handleCue(peer, info, message);
+    } else if (message.t === 'offer') {
+      this.handleOffer(peer, info, message);
+    } else if (message.t === 'chunk') {
+      info.fetcher?.onChunk(message);
+    } else if (message.t === 'missing') {
+      info.fetcher?.onMissing(String(message.hash || ''));
     }
+  }
+
+  // ---- Players' sounds ----
+
+  rulesMessage() { return { t: 'rules', playerSounds: this.playerSounds, limit: PLAYER_SOUND_LIMIT }; }
+
+  catalogMessage() { return { t: 'catalog', sounds: this.catalog }; }
+
+  setPlayerSounds(mode) {
+    return this.enqueue(() => {
+      this.playerSounds = PLAYER_SOUNDS.includes(mode) ? mode : 'off';
+      for (const info of this.peers.values()) {
+        info.cued.clear();
+        if (this.playerSounds !== 'own') info.offers.clear();
+      }
+      this.broadcast(this.rulesMessage());
+      if (this.playerSounds === 'gm') this.broadcast(this.catalogMessage());
+    });
+  }
+
+  // items: [{ id, name, color }]: every sound except GM-only ones.
+  setCatalog(items) {
+    return this.enqueue(() => {
+      this.catalog = (items || []).map((i) => ({ id: String(i.id), name: String(i.name || 'Sound').slice(0, 80), color: Number(i.color) || 0 }));
+      if (this.playerSounds === 'gm') this.broadcast(this.catalogMessage());
+    });
+  }
+
+  // Checks a player's request against the rules: the right mode, at most five
+  // different sounds per player, and not too fast.
+  handleCue(peer, info, message) {
+    if (this.playerSounds === 'off' || !info.ready) return;
+    const now = Date.now();
+    if (now - info.lastCue <= 300) return;
+    let key;
+    let cue = null;
+    if (this.playerSounds === 'gm') {
+      const id = String(message.id || '');
+      if (!this.catalog.some((c) => c.id === id)) return;
+      key = id;
+      cue = { kind: 'library', soundId: id };
+    } else {
+      const hash = String(message.hash || '');
+      const offer = info.offers.get(hash);
+      if (!offer) return;
+      key = hash;
+      const file = info.fetcher?.cached(hash, offer.ext);
+      if (file) cue = { kind: 'file', hash, ext: offer.ext, name: offer.name, file };
+      else {
+        // Play it once the file arrives from the player.
+        info.waitingCues.add(hash);
+        info.fetcher?.want(hash, offer.ext, true);
+      }
+    }
+    if (!info.cued.has(key) && info.cued.size >= PLAYER_SOUND_LIMIT) return;
+    info.cued.add(key);
+    info.lastCue = now;
+    if (cue) this.emit('cue', peer, info.name, cue);
+  }
+
+  // A player's own sounds (at most five). The host fetches them ahead of time.
+  handleOffer(peer, info, message) {
+    if (this.playerSounds !== 'own' || !info.ready || !this.cacheDir) return;
+    info.offers.clear();
+    for (const item of (Array.isArray(message.sounds) ? message.sounds : []).slice(0, PLAYER_SOUND_LIMIT)) {
+      const hash = String(item?.hash || '');
+      const ext = String(item?.ext || '');
+      if (!HASH_RE.test(hash) || !EXT_RE.test(ext)) continue;
+      info.offers.set(hash, { ext, name: String(item.name || 'Sound').slice(0, 60) });
+    }
+    if (!info.fetcher) {
+      const fetcher = new FileFetcher({ cacheDir: this.cacheDir, send: (m) => this.transport.send(peer, m) });
+      fetcher.on('arrived', (hash, file) => {
+        const current = this.peers.get(peer);
+        const offer = current?.offers.get(hash);
+        if (!offer || !current.waitingCues.has(hash)) return;
+        current.waitingCues.delete(hash);
+        this.emit('cue', peer, current.name, { kind: 'file', hash, ext: offer.ext, name: offer.name, file });
+      });
+      fetcher.on('failed', (hash) => this.peers.get(peer)?.waitingCues.delete(hash));
+      info.fetcher = fetcher;
+    }
+    for (const [hash, offer] of info.offers) info.fetcher.want(hash, offer.ext, false);
   }
 
   // Sends a message that refers to files, and lets this listener fetch them.
@@ -298,25 +498,8 @@ class LiveHost extends EventEmitter {
 
   async sendChunk(peer, info, hash, index) {
     const entry = this.files.get(hash);
-    if (!HASH_RE.test(hash) || !info.allowed.has(hash) || !entry) {
-      this.transport.send(peer, { t: 'missing', hash });
-      return;
-    }
-    let handle;
-    try {
-      handle = await fs.promises.open(entry.file, 'r');
-      const { size } = await handle.stat();
-      const total = Math.max(1, Math.ceil(size / CHUNK_SIZE));
-      if (index < 0 || index >= total) return;
-      const length = Math.min(CHUNK_SIZE, size - index * CHUNK_SIZE);
-      const buffer = Buffer.alloc(Math.max(0, length));
-      if (length > 0) await handle.read(buffer, 0, length, index * CHUNK_SIZE);
-      this.transport.send(peer, { t: 'chunk', hash, i: index, n: total, ext: entry.ext, data: buffer.toString('base64') });
-    } catch {
-      this.transport.send(peer, { t: 'missing', hash });
-    } finally {
-      await handle?.close();
-    }
+    const chunk = HASH_RE.test(hash) && info.allowed.has(hash) && entry ? await chunkOf(entry.file, hash, entry.ext, index) : null;
+    this.transport.send(peer, chunk || { t: 'missing', hash });
   }
 
   // { hash, ext } for a library sound, registering it to be served.
@@ -338,13 +521,21 @@ class LiveHost extends EventEmitter {
 
   // ---- Called by the board ----
 
-  // play: { pid, group, soundId, name, at, volume, cat, loop, gap, buzz, dur, to }
-  // `to` (a peer id or a list of them) makes it a whisper to those listeners.
+  // play: { pid, group, soundId | file: { hash, ext, file }, name, at, volume, cat, loop, gap, buzz, dur, to, by }
+  // `to` (a peer id or a list of them) makes it a whisper to those listeners;
+  // `by` names the player who played it.
   play(event) { return this.enqueue(() => this.doPlay(event)); }
 
   async doPlay(event) {
     let file;
-    try { file = await this.fileFor(event.soundId); } catch { return; }
+    if (event.file) {
+      const { hash, ext } = event.file;
+      if (!HASH_RE.test(String(hash)) || !EXT_RE.test(String(ext)) || !event.file.file) return;
+      this.files.set(hash, { file: event.file.file, ext });
+      file = { hash, ext };
+    } else {
+      try { file = await this.fileFor(event.soundId); } catch { return; }
+    }
     if (!file) return;
     const message = {
       t: 'play',
@@ -361,6 +552,7 @@ class LiveHost extends EventEmitter {
       whisper: Array.isArray(event.to) ? event.to.length > 0 : !!event.to,
     };
     if (Number(event.gap) > 0) message.gap = Number(event.gap);
+    if (event.by) message.by = String(event.by).slice(0, 40);
     const targets = Array.isArray(event.to) ? event.to : (event.to ? [event.to] : null);
     if (targets) {
       for (const peer of targets) if (this.peers.has(peer)) await this.sendTo(peer, message);
@@ -454,9 +646,10 @@ function clamp01(value) {
 // The listener: syncs its clock to the host, fetches and caches files and
 // turns host commands into local ones.
 //
-// Emits 'status' ({ state, host, scene, error }) and 'command' messages with
+// Emits 'status' ({ state, host, scene, error }), 'rules' (playerSounds),
+// 'catalog' ([{ id, name, color }]) and 'command' messages with
 // local times and file paths:
-//   { t: 'play', pid, group, file, name, at, volume, cat, loop, gap, buzz, whisper }
+//   { t: 'play', pid, group, file, name, at, volume, cat, loop, gap, buzz, whisper, by }
 //   { t: 'stop', group } · { t: 'volume', group, volume } · { t: 'stopAll' }
 //   { t: 'ambience', layers: [{ key, file | builtin, name, volume }] }
 
@@ -468,12 +661,14 @@ class LiveListener extends EventEmitter {
     this.device = device;
     this.offset = 0; // host clock − local clock (ms)
     this.samples = [];
-    this.fetching = new Map(); // hash -> { ext, n, next, received, chunks, waiters }
-    this.queue = []; // hashes waiting to be fetched, most urgent first
     this.pendingPlays = new Map(); // hash -> [play]
     this.ambienceLayers = [];
+    this.offered = new Map(); // this player's own sounds on offer: hash -> { file, ext }
     this.state = 'idle';
     fs.mkdirSync(cacheDir, { recursive: true });
+    this.fetcher = new FileFetcher({ cacheDir, send: (m) => sendJSON(this.socket, m) });
+    this.fetcher.on('arrived', (hash, file) => this.fileArrived(hash, file));
+    this.fetcher.on('failed', (hash) => this.pendingPlays.delete(hash));
   }
 
   connect(url) {
@@ -522,6 +717,14 @@ class LiveListener extends EventEmitter {
         this.scene = message.name ? String(message.name) : null;
         this.setState(this.state);
         break;
+      case 'rules':
+        this.emit('rules', PLAYER_SOUNDS.includes(message.playerSounds) ? message.playerSounds : 'off');
+        break;
+      case 'catalog':
+        this.emit('catalog', (Array.isArray(message.sounds) ? message.sounds : [])
+          .filter((i) => i && i.id)
+          .map((i) => ({ id: String(i.id), name: String(i.name || 'Sound'), color: Number(i.color) || 0 })));
+        break;
       case 'prefetch':
         for (const f of message.files || []) this.want(f.hash, f.ext, false);
         break;
@@ -534,8 +737,9 @@ class LiveListener extends EventEmitter {
         for (const layer of this.ambienceLayers) if (layer.hash) this.want(layer.hash, layer.ext, true);
         this.emitAmbience();
         break;
-      case 'chunk': this.onChunk(message); break;
-      case 'missing': this.onMissing(String(message.hash)); break;
+      case 'chunk': this.fetcher.onChunk(message); break;
+      case 'missing': this.fetcher.onMissing(String(message.hash)); break;
+      case 'need': this.serveOffered(String(message.hash || ''), Number(message.i) || 0); break;
       default: break;
     }
   }
@@ -566,66 +770,35 @@ class LiveListener extends EventEmitter {
 
   // ---- Files ----
 
-  cachePath(hash, ext) { return path.join(this.cacheDir, `${hash}.${ext}`); }
+  cached(hash, ext) { return this.fetcher.cached(hash, ext); }
 
-  cached(hash, ext) {
-    if (!HASH_RE.test(hash) || !EXT_RE.test(ext)) return null;
-    const file = this.cachePath(hash, ext);
-    return fs.existsSync(file) ? file : null;
+  want(hash, ext, urgent) { this.fetcher.want(hash, ext, urgent); }
+
+  // The host fetching one of this player's own sounds.
+  async serveOffered(hash, index) {
+    const entry = this.offered.get(hash);
+    const chunk = entry ? await chunkOf(entry.file, hash, entry.ext, index) : null;
+    sendJSON(this.socket, chunk || { t: 'missing', hash });
   }
 
-  want(hash, ext, urgent) {
-    if (!HASH_RE.test(String(hash)) || !EXT_RE.test(String(ext))) return;
-    if (this.cached(hash, ext)) return;
-    if (!this.fetching.has(hash)) this.fetching.set(hash, { ext, n: null, next: 0, inFlight: 0, received: 0, chunks: [] });
-    const queued = this.queue.indexOf(hash);
-    if (queued >= 0 && !urgent) return;
-    if (queued >= 0) this.queue.splice(queued, 1);
-    if (urgent) this.queue.unshift(hash); else this.queue.push(hash);
-    this.pump();
-  }
+  // ---- Players' sounds ----
 
-  // Keeps a few chunk requests in flight for the most urgent file.
-  pump() {
-    const hash = this.queue[0];
-    if (!hash) return;
-    const job = this.fetching.get(hash);
-    while (job.inFlight < CHUNKS_IN_FLIGHT && (job.n === null ? job.next === 0 : job.next < job.n)) {
-      sendJSON(this.socket, { t: 'need', hash, i: job.next });
-      job.next++;
-      job.inFlight++;
-      if (job.n === null) break; // learn the chunk count first
+  // Asks the host to play one of the GM's sounds for everyone.
+  cue(soundId) { sendJSON(this.socket, { t: 'cue', id: String(soundId) }); }
+
+  // Asks the host to play one of this player's own (offered) sounds for everyone.
+  cueHash(hash) { sendJSON(this.socket, { t: 'cue', hash: String(hash) }); }
+
+  // Offers this player's own sounds (at most five): [{ file, hash, ext, name }].
+  offer(sounds) {
+    this.offered.clear();
+    const list = [];
+    for (const sound of (sounds || []).slice(0, PLAYER_SOUND_LIMIT)) {
+      if (!HASH_RE.test(sound.hash) || !EXT_RE.test(sound.ext)) continue;
+      this.offered.set(sound.hash, { file: sound.file, ext: sound.ext });
+      list.push({ hash: sound.hash, ext: sound.ext, name: String(sound.name || 'Sound').slice(0, 60) });
     }
-  }
-
-  onChunk({ hash, i, n, data }) {
-    const job = this.fetching.get(hash);
-    if (!job || !Number.isInteger(i) || !Number.isInteger(n) || n < 1 || i >= n || job.chunks[i]) return;
-    job.n = n;
-    job.inFlight = Math.max(0, job.inFlight - 1);
-    job.chunks[i] = Buffer.from(String(data || ''), 'base64');
-    job.received++;
-    if (job.received < n) { this.pump(); return; }
-    const bytes = Buffer.concat(job.chunks);
-    this.fetching.delete(hash);
-    this.queue = this.queue.filter((h) => h !== hash);
-    const actual = crypto.createHash('sha256').update(bytes).digest('hex');
-    if (actual === hash) {
-      const file = this.cachePath(hash, job.ext);
-      fs.writeFileSync(`${file}.tmp`, bytes);
-      fs.renameSync(`${file}.tmp`, file);
-      this.fileArrived(hash, file);
-    } else {
-      this.onMissing(hash);
-    }
-    this.pump();
-  }
-
-  onMissing(hash) {
-    this.fetching.delete(hash);
-    this.queue = this.queue.filter((h) => h !== hash);
-    this.pendingPlays.delete(hash);
-    this.pump();
+    sendJSON(this.socket, { t: 'offer', sounds: list });
   }
 
   fileArrived(hash, file) {
@@ -670,6 +843,7 @@ class LiveListener extends EventEmitter {
       gap: Number(message.gap) > 0 ? Number(message.gap) : 0,
       buzz: !!message.buzz,
       whisper: !!message.whisper,
+      by: message.by ? String(message.by).slice(0, 40) : null,
     });
   }
 
@@ -741,6 +915,7 @@ function deviceName() {
 }
 
 module.exports = {
-  LiveHost, LiveListener, LanHostTransport, RelayHostTransport, LanBrowser, FileHasher,
+  LiveHost, LiveListener, LanHostTransport, RelayHostTransport, LanBrowser, FileHasher, FileFetcher,
+  PLAYER_SOUND_LIMIT,
   relayUrl, deviceName, hasBonjour: () => !!Bonjour, CHUNK_SIZE, VERSION,
 };

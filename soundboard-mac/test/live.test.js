@@ -148,6 +148,76 @@ test('late joiners pick up what is already playing', async () => {
   }
 });
 
+test("players' sounds: rules, the GM's catalog, limits and own sounds", async () => {
+  const library = makeLibrary();
+  const transport = new LanHostTransport({ name: 'Pads' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Pads', transport, resolveSound: library.resolveSound, cacheDir: tempDir('host-cache') });
+  host.setCatalog([{ id: 'roar', name: 'Roar', color: 2 }, { id: 'door', name: 'Door', color: 0 }]);
+  host.setPlayerSounds('gm');
+  const cues = [];
+  host.on('cue', (peer, name, cue) => cues.push({ peer, name, cue }));
+
+  const sam = new LiveListener({ cacheDir: tempDir('pads-sam'), name: 'Sam' });
+  const rules = waitFor(sam, 'rules', (mode) => mode === 'gm');
+  const catalog = waitFor(sam, 'catalog', (items) => items.length === 2);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    sam.connect(`ws://127.0.0.1:${transport.port}`);
+    await rules;
+    assert.deepEqual((await catalog).map((i) => i.id), ['roar', 'door']);
+
+    // A pick from the GM's board.
+    sam.cue('roar');
+    await wait(150);
+    assert.deepEqual(cues.map((c) => [c.name, c.cue.kind, c.cue.soundId]), [['Sam', 'library', 'roar']]);
+    // Too fast: ignored.
+    sam.cue('door');
+    await wait(100);
+    assert.equal(cues.length, 1);
+    // Not in the catalog (a GM-only sound): ignored.
+    await wait(300);
+    sam.cue('song');
+    await wait(150);
+    assert.equal(cues.length, 1);
+
+    // Their own sounds: the host fetches the file from the player, then plays it.
+    const ownDir = tempDir('own');
+    const own = path.join(ownDir, 'cry.wav');
+    const bytes = crypto.randomBytes(300 * 1024);
+    fs.writeFileSync(own, bytes);
+    const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+    const ownRules = waitFor(sam, 'rules', (mode) => mode === 'own');
+    host.setPlayerSounds('own');
+    await ownRules;
+    sam.offer([{ file: own, hash, ext: 'wav', name: 'Battle Cry' }]);
+    await wait(400);
+    sam.cueHash(hash);
+    for (let i = 0; i < 30 && cues.length < 2; i++) await wait(100);
+    const cue = cues[1];
+    assert.equal(cue.cue.kind, 'file');
+    assert.equal(cue.cue.name, 'Battle Cry');
+    assert.deepEqual(fs.readFileSync(cue.cue.file), bytes);
+
+    // The play goes out with the player's name.
+    const cmds = watch(sam);
+    await host.play({ pid: 'p1', group: 'p:x', file: { hash, ext: 'wav', file: cue.cue.file }, name: 'Battle Cry', at: Date.now(), volume: 1, cat: 'sfx', by: 'Sam' });
+    const play = await cmds.next('play');
+    assert.equal(play.by, 'Sam');
+    assert.equal(play.name, 'Battle Cry');
+
+    // Off: requests are ignored.
+    host.setPlayerSounds('off');
+    await wait(400);
+    sam.cueHash(hash);
+    await wait(200);
+    assert.equal(cues.length, 2);
+  } finally {
+    sam.leave();
+    transport.close();
+  }
+});
+
 let createRelay = null;
 try { ({ createRelay } = require('../../live-relay/server')); } catch { /* relay deps not installed */ }
 
