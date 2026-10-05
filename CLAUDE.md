@@ -31,6 +31,26 @@ Where the code lives, side by side:
 | Games: screens | `src/renderer/games.js`, `styles.css` | `Views/GamesView.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
 
+## Design for iPhone first
+
+Most people use Dungeon Radio on an iPhone, so every screen is designed for an
+iPhone in portrait first (about 390×844 points, down to an iPhone SE at
+375×667), then scaled up to iPad and the Mac.
+
+- Everything fits without sideways scrolling or hidden controls: rows wrap
+  rather than scroll out of sight, and long text (names, quiz answers, custom
+  dice faces) wraps or shrinks instead of being cut off.
+- Touch targets are at least 44×44 points; the main action on a screen is
+  big and within thumb reach, near the bottom.
+- Panels, cards and banners never cover the controls they sit next to, and
+  stay clear of the notch, the home indicator and the navigation bar.
+- Use `horizontalSizeClass == .compact` (SwiftUI) or a `max-width: 560px`
+  media query (Mac CSS) for the phone layout, so the Mac at a narrow window
+  matches what an iPhone shows.
+- Before calling UI work done, check it at phone size: run the Mac app at
+  390×844 and check for overflow, overlaps and cramped rows, as well as at
+  its usual size.
+
 ## Platform differences (allowed)
 
 - Mac only: global hotkeys, audio output device picker, the Mac's own window chrome. A Live buzz shakes the stage and shows a notification with a Dock bounce, since a Mac can't vibrate.
