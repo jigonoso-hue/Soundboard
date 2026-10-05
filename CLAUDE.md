@@ -63,3 +63,32 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 
 - Don't download or run external binaries automatically; don't loosen the Mac app's Content Security Policy.
 - Mac app data stays in `~/Library/Application Support/Soundboard`, and the iOS bundle ID stays the same, so existing libraries carry over.
+
+## Planned: Android (not started)
+
+When the Android app is made, the plan is:
+
+- **Capacitor around the Mac app's web code** (src/renderer): most screens,
+  the dice and the games carry over. Rebuild natively, as Capacitor plugins,
+  what Electron's main process does: the sound library and files, recording,
+  background audio (a foreground service, so a locked phone keeps playing),
+  the Live host and listener engines, local Wi-Fi discovery, YouTube capture.
+- **Possibly a web listener first**: tune in from a browser with a code (online
+  sessions only), served by the relay.
+- **Choose the permanent package ID up front and turn on Play App Signing**,
+  so a later native rewrite ships as an ordinary update.
+- **Keep the sound library as plain files with a simple index** (not inside
+  web storage), so a later native app can migrate it.
+- **Performance levels, picked automatically**: test the device at first
+  launch, watch the frame rate while running, and step down before it
+  stutters.
+  - **Full:** 3D dice everywhere.
+  - **Reduced:** simpler shadows; one other person's roll on screen at a time.
+  - **Lite:** your own roll is a flat animation with random numbers; other
+    people's rolls show no dice, just the result when they land; banner-only
+    nat 20/1; a still stage background.
+  - A manual "Dice effects" setting overrides it.
+  - Bring the same levels to the iPhone and Mac apps (older iPhones benefit),
+    keeping them 1:1.
+- Android joins the 1:1 rule like the others, iPhone-first layouts included.
+
