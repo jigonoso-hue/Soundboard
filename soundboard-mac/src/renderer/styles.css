@@ -1613,3 +1613,17 @@ body.game-locked { overflow: hidden; }
 .game-answer.dim:disabled, .game-answer.wrong:disabled { opacity: 0.35; }
 .game-answer.right:disabled { opacity: 1; }
 .game-answer.wrong.chosen { outline: 4px dashed rgba(255,255,255,0.8); outline-offset: 2px; }
+/* Phones: every tray button on show (two rows), and panels clear of the dice controls. */
+@media (max-width: 560px) {
+  .dice-top { flex-wrap: wrap; padding: 30px 10px 8px; gap: 8px; }
+  .dice-top .spacer { display: none; }
+  .dice-colors { margin-left: 0; }
+  .dice-top-pills { flex-wrap: wrap; overflow: visible; flex-basis: 100%; gap: 6px; }
+  .dice-top-pills .dice-pill { padding: 5px 11px; font-size: 13px; }
+  .dice-top-group { flex-basis: 100%; justify-content: space-between; }
+  .dice-top-group .dice-pill { flex: 1; }
+  .dice-log, .dice-log.wide { top: 150px; bottom: 236px; }
+  .dice-banner { top: 150px; }
+  .table-column { top: 150px; }
+  .dice-layer.tray ~ .table-turns { top: 2px; }
+}

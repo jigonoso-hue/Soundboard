@@ -1467,36 +1467,60 @@ struct DiceView: View {
         }
     }
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
     private var topBar: some View {
-        HStack(spacing: 10) {
-            Text("Dice").font(.title3.weight(.heavy)).foregroundStyle(Color.white).shadow(radius: 3)
-            colorButton
-            Spacer(minLength: 4)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    // The broadcaster's table tools (roll requests, initiative, who wins).
-                    if tray.hosting() {
-                        HStack(spacing: 6) {
-                            panelPill("Ask a roll", "ask")
-                            panelPill("Initiative", "initiative")
-                            panelPill("Who wins?", "contest")
-                        }
-                        .padding(3)
-                        .background(Color(hex: 0xFFD27A).opacity(0.12), in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color(hex: 0xFFD27A).opacity(0.35)))
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Table")
+        Group {
+            if sizeClass == .compact {
+                // iPhone: every button on show, in rows, rather than scrolling out of sight.
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        colorButton
+                        Spacer()
+                        pill("Close") { tray.close() }
                     }
-                    panelPill("Custom dice", "custom")
-                    panelPill("Stats", "stats")
-                    panelPill(tray.log.isEmpty ? "Log" : "Log · \(tray.log.count)", "log")
-                    pill("Close") { tray.close() }
+                    if tray.hosting() { tableTools.frame(maxWidth: .infinity) }
+                    HStack(spacing: 8) { everydayPills }
+                }
+            } else {
+                HStack(spacing: 10) {
+                    Text("Dice").font(.title3.weight(.heavy)).foregroundStyle(Color.white).shadow(radius: 3)
+                    colorButton
+                    Spacer(minLength: 4)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            if tray.hosting() { tableTools }
+                            everydayPills
+                            pill("Close") { tray.close() }
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(-1)
                 }
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .layoutPriority(-1)
         }
         .padding(.top, 6)
+    }
+
+    /// The broadcaster's table tools (roll requests, initiative, who wins), grouped.
+    private var tableTools: some View {
+        HStack(spacing: 6) {
+            panelPill("Ask a roll", "ask")
+            panelPill("Initiative", "initiative")
+            panelPill("Who wins?", "contest")
+        }
+        .padding(3)
+        .background(Color(hex: 0xFFD27A).opacity(0.12), in: Capsule())
+        .overlay(Capsule().strokeBorder(Color(hex: 0xFFD27A).opacity(0.35)))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Table")
+    }
+
+    @ViewBuilder
+    private var everydayPills: some View {
+        panelPill("Custom dice", "custom")
+        panelPill("Stats", "stats")
+        panelPill(tray.log.isEmpty ? "Log" : "Log · \(tray.log.count)", "log")
     }
 
     private func panelPill(_ title: String, _ name: String) -> some View {
@@ -1756,7 +1780,7 @@ struct DiceView: View {
             .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 16))
             .environment(\.colorScheme, .dark)
             .padding(.trailing, 12)
-            .padding(.top, 60)
+            .padding(.top, sizeClass == .compact ? 130 : 60)
             // Clear of the dice controls at the bottom.
             .padding(.bottom, 180)
             .frame(maxHeight: .infinity, alignment: .top)
