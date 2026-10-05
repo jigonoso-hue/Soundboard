@@ -1167,6 +1167,7 @@ struct DiceView: View {
     @State private var charging: Date?
     @State private var charge: Double = 0
     @State private var pulse = false
+    @State private var showColors = false
 
     var body: some View {
         ZStack {
@@ -1201,50 +1202,78 @@ struct DiceView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             Text("Dice").font(.title3.weight(.heavy)).foregroundStyle(Color.white).shadow(radius: 3)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(DiceTray.colors, id: \.1) { item in
-                        let owner = tray.takenBy(item.1)
-                        Button {
-                            tray.claim(item.1)
-                        } label: {
-                            Circle()
-                                .fill(Color(hexString: item.1) ?? .red)
-                                .frame(width: 22, height: 22)
-                                .overlay(Circle().strokeBorder(Color.white, lineWidth: tray.currentColor == item.1 ? 2.5 : 0.8))
-                                .overlay {
-                                    if owner != nil {
-                                        Image(systemName: "xmark").font(.caption2.weight(.heavy)).foregroundStyle(Color.white)
-                                    }
-                                }
-                                .opacity(owner == nil ? 1 : 0.4)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(owner != nil)
-                        .accessibilityLabel(owner.map { "\(item.0): \($0.name)'s dice" } ?? "\(item.0) dice")
-                    }
-                    if tray.sessionColors != nil && tray.currentColor == nil {
-                        Text("← Pick your dice colour")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Color(hex: 0xFFD27A))
-                    }
-                }
-            }
-            .frame(maxWidth: 320)
-            .scaleEffect(pulse ? 1.08 : 1)
-            .animation(.easeInOut(duration: 0.2).repeatCount(3, autoreverses: true), value: pulse)
-            .onChange(of: tray.needColor) { _, _ in
-                pulse = true
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 1_200_000_000)
-                    pulse = false
-                }
-            }
+            colorButton
             Spacer()
             pill(tray.log.isEmpty ? "Log" : "Log · \(tray.log.count)") { tray.showLog.toggle() }
             pill("Close") { tray.close() }
         }
         .padding(.top, 6)
+    }
+
+    /// One swatch with your colour; tap it to choose from all of them.
+    private var colorButton: some View {
+        let current = tray.currentColor
+        let name = DiceTray.colors.first { $0.1 == current }?.0
+        return Button {
+            showColors.toggle()
+        } label: {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(current.flatMap { Color(hexString: $0) } ?? Color.clear)
+                    .frame(width: 22, height: 22)
+                    .overlay(Circle().strokeBorder(Color.white, style: StrokeStyle(lineWidth: 2, dash: current == nil ? [3, 3] : [])))
+                Text(name ?? "Pick your dice colour").font(.callout.weight(.semibold))
+                Image(systemName: "chevron.down").font(.caption2.weight(.bold)).opacity(0.7)
+            }
+            .foregroundStyle(Color.white)
+            .padding(.leading, 6)
+            .padding(.trailing, 12)
+            .padding(.vertical, 5)
+            .background(Color.black.opacity(0.45), in: Capsule())
+            .overlay(Capsule().strokeBorder(pulse ? Color(hex: 0xFFD27A) : Color.white.opacity(0.2), lineWidth: pulse ? 2 : 1))
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(pulse ? 1.08 : 1)
+        .animation(.easeInOut(duration: 0.2).repeatCount(3, autoreverses: true), value: pulse)
+        .accessibilityLabel(name.map { "Your dice: \($0). Change colour" } ?? "Pick your dice colour")
+        .popover(isPresented: $showColors) {
+            colorPicker.presentationCompactAdaptation(.popover)
+        }
+        .onChange(of: tray.needColor) { _, _ in
+            showColors = true
+            pulse = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                pulse = false
+            }
+        }
+    }
+
+    private var colorPicker: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(30), spacing: 10), count: 8), spacing: 10) {
+            ForEach(DiceTray.colors, id: \.1) { item in
+                let owner = tray.takenBy(item.1)
+                Button {
+                    tray.claim(item.1)
+                    showColors = false
+                } label: {
+                    Circle()
+                        .fill(Color(hexString: item.1) ?? .red)
+                        .frame(width: 30, height: 30)
+                        .overlay(Circle().strokeBorder(Color.primary, lineWidth: tray.currentColor == item.1 ? 3 : 0))
+                        .overlay {
+                            if owner != nil {
+                                Image(systemName: "xmark").font(.caption.weight(.heavy)).foregroundStyle(Color.white)
+                            }
+                        }
+                        .opacity(owner == nil ? 1 : 0.35)
+                }
+                .buttonStyle(.plain)
+                .disabled(owner != nil)
+                .accessibilityLabel(owner.map { "\(item.0): \($0.name)'s dice" } ?? "\(item.0) dice")
+            }
+        }
+        .padding(16)
     }
 
     private func pill(_ title: String, action: @escaping () -> Void) -> some View {

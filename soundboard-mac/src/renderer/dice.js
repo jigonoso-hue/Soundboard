@@ -631,6 +631,8 @@ function roll(rollMode = 'normal', strength = 1) {
   if (!color) {
     // Everyone needs their own colour, so the table can tell whose dice are whose.
     if (mode !== 'tray') open();
+    // After this click has finished (a click elsewhere closes the picker).
+    setTimeout(() => { colorsOpen = true; renderUI(); }, 0);
     layer.classList.add('need-color');
     setTimeout(() => layer.classList.remove('need-color'), 1600);
     return;
@@ -819,23 +821,40 @@ function resetLog() {
 // ---- Controls ----
 
 let charge = null; // { started, timer }
+let colorsOpen = false; // the colour picker is showing
+document.addEventListener('click', () => { if (colorsOpen) { colorsOpen = false; renderUI(); } });
 
 function renderUI() {
   top.textContent = '';
   top.append(el('div', 'dice-title', 'Dice'));
+  // One swatch with your colour; click it to choose from all of them.
   const colors = el('div', 'dice-colors');
   const current = myColor();
-  for (const [name, hex] of DICE_COLORS) {
-    const owner = takenBy(hex);
-    const b = el('button', `dice-color${current === hex ? ' selected' : ''}${owner ? ' taken' : ''}`);
-    b.type = 'button';
-    b.title = owner ? `${name}: ${owner.name}'s dice` : `${name} dice`;
-    b.style.background = hex;
-    b.disabled = !!owner;
-    b.addEventListener('click', () => claim(hex));
-    colors.append(b);
+  const currentName = DICE_COLORS.find(([, hex]) => hex === current)?.[0];
+  const toggle = el('button', 'dice-color-current');
+  toggle.type = 'button';
+  toggle.title = current ? `Your dice: ${currentName}. Click to change.` : 'Pick your dice colour';
+  toggle.setAttribute('aria-expanded', String(colorsOpen));
+  const dot = el('span', 'dice-color-dot');
+  if (current) dot.style.background = current; else dot.classList.add('none');
+  toggle.append(dot, el('span', null, current ? currentName : 'Pick your dice colour'), el('span', 'dice-color-caret', colorsOpen ? '▴' : '▾'));
+  toggle.addEventListener('click', (e) => { e.stopPropagation(); colorsOpen = !colorsOpen; renderUI(); });
+  colors.append(toggle);
+  if (colorsOpen) {
+    const picker = el('div', 'dice-color-picker');
+    picker.addEventListener('click', (e) => e.stopPropagation());
+    for (const [name, hex] of DICE_COLORS) {
+      const owner = takenBy(hex);
+      const b = el('button', `dice-color${current === hex ? ' selected' : ''}${owner ? ' taken' : ''}`);
+      b.type = 'button';
+      b.title = owner ? `${name}: ${owner.name}'s dice` : `${name} dice`;
+      b.style.background = hex;
+      b.disabled = !!owner;
+      b.addEventListener('click', () => { colorsOpen = false; claim(hex); });
+      picker.append(b);
+    }
+    colors.append(picker);
   }
-  if (inSession() && !current) colors.append(el('span', 'dice-color-hint', '← Pick your dice colour'));
   const logButton = el('button', 'dice-pill', log.length ? `Log · ${log.length}` : 'Log');
   logButton.type = 'button';
   logButton.addEventListener('click', () => { logPanel.classList.toggle('hidden'); renderLog(); });

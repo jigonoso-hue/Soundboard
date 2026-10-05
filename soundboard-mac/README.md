@@ -203,7 +203,7 @@ Click **Dice** in the toolbar (or on the stage, while tuned in). The tray fills 
 - **Roll** throws them. Hold it down to throw harder (the button fills up over a second and a half).
 - **A** (green) rolls a d20 with advantage: two d20s, keep the higher. **DA** (red) is disadvantage: keep the lower. The die that doesn't count is dimmed.
 - A natural 1 on a d20 brings up a skull and crossbones over the die; a natural 20 sets off fireworks.
-- Pick your dice colour at the top. **Log** lists every roll: who rolled what.
+- Your dice colour is the swatch at the top: click it to choose another. **Log** lists every roll: who rolled what.
 
 In a Live Session everyone rolls in their own colour, and no two people can have the same one: pick a free colour before your first roll (colours others have are crossed out, with their name). Everyone's dice roll on their own, so dice thrown at the same time never knock into each other. Everyone sees every roll: the dice tumble across everyone's screen (over whatever they're looking at), with who rolled them and the result, and the roll log is shared. Late joiners get the rolls made before they arrived.
 
