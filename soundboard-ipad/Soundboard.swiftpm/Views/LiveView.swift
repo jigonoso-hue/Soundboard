@@ -155,11 +155,15 @@ struct LiveView: View {
         }
     }
 
+    /// The relay server is built in; a custom one can be set under Advanced.
     private var relayField: some View {
-        TextField("Relay server, e.g. relay.example.com", text: $live.relay)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .keyboardType(.URL)
+        DisclosureGroup("Advanced") {
+            TextField("Custom relay server (empty: built-in)", text: $live.relay)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+        }
+        .foregroundStyle(.secondary)
     }
 
     // MARK: Hosting

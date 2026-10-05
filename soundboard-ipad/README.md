@@ -102,7 +102,7 @@ A banner shows what's armed, with Cancel.
 
 **Tune In (a player).** Enter your name, then pick a nearby session or enter the GM's code. The app switches to a full-screen stage until you leave, drawn in your theme: a radio night by default, a candlelit parchment page in Tavern, deep space with an orbiting atom in Space Age, a radar sweep in Sci-Fi, a turning gold sigil in Dark Academia. Rings pulse while sounds play; it shows the GM's session and scene and what's playing (sounds, then full sounds, then ambience, with a player's name on sounds they added); whispers glow purple and buzzes shake the screen. **Volumes** has your sliders for overall volume, music, effects and ambience. When the GM allows players' sounds, your pads sit at the bottom (**Choose** picks up to 5). Sounds keep playing with the screen locked or while you use another app. Allow notifications when asked, so Buzz can vibrate a locked phone.
 
-The first time you broadcast or look for sessions, iOS asks to use the local network: tap **Allow**. Online sessions need the relay at a secure (`wss://` or `https://`) address.
+The first time you broadcast or look for sessions, iOS asks to use the local network: tap **Allow**. Online sessions go through Dungeon Radio's own relay server, built into the app, so there's nothing to set up. To use a different relay, open **Advanced** in the Live sheet (it needs a secure `wss://` or `https://` address).
 
 The GM's app sends commands, not audio: each listener fetches every sound file once, caches it, syncs its clock with the GM's and plays each sound itself, in time. A Mac and an iPhone or iPad can share a session.
 

@@ -4,8 +4,9 @@ Online Live Sessions need a small relay server. It routes messages between the
 GM's app and the players' apps; no audio passes through it, only the sound
 files each player fetches once and short "play this now" commands.
 
-You only need one relay for your group. Everyone types the same address into
-**Live → Relay server** in the app.
+The apps use Dungeon Radio's own relay (`soundboard-r1zt.onrender.com`, hosted
+on Render from this folder) unless someone sets a different one under
+**Live → Advanced**. Everyone in a session must use the same relay.
 
 ## Run it on your own computer (testing)
 

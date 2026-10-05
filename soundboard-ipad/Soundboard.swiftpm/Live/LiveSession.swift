@@ -55,7 +55,13 @@ final class LiveSession: ObservableObject {
     @Published var sessionName: String { didSet { save("live.sessionName", sessionName) } }
     @Published var yourName: String { didSet { save("live.yourName", yourName) } }
     @Published var mode: Mode { didSet { save("live.mode", mode.rawValue) } }
+    /// A custom relay server, or empty for the built-in one.
     @Published var relay: String { didSet { save("live.relay", relay) } }
+    /// The relay to use: the custom one if set, otherwise the app's own.
+    var relayAddress: String {
+        let custom = relay.trimmingCharacters(in: .whitespacesAndNewlines)
+        return custom.isEmpty ? LiveNet.defaultRelay : custom
+    }
     @Published var codeInput: String { didSet { save("live.code", codeInput) } }
     /// Listener levels: "master", "music", "sfx", "ambience".
     @Published var levels: [String: Double] {
@@ -170,8 +176,8 @@ final class LiveSession: ObservableObject {
             }
             beginHosting(name: name, transport: server, mode: .local)
         case .online:
-            guard let base = LiveNet.relayURL(relay) else {
-                error = "Set a relay server address first."
+            guard let base = LiveNet.relayURL(relayAddress) else {
+                error = "That relay server address isn't valid."
                 return
             }
             busy = true
@@ -466,8 +472,8 @@ final class LiveSession: ObservableObject {
     func tuneInOnline() {
         guard role == .idle, !busy else { return }
         error = nil
-        guard let base = LiveNet.relayURL(relay) else {
-            error = "Set a relay server address first."
+        guard let base = LiveNet.relayURL(relayAddress) else {
+            error = "That relay server address isn't valid."
             return
         }
         let clean = codeInput.uppercased().filter { $0.isLetter || $0.isNumber }

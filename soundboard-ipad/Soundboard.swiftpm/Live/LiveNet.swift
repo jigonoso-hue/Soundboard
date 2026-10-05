@@ -12,6 +12,8 @@ enum LiveNet {
     static let version = 1
     static let chunkSize = 256 * 1024
     static let maxMessage = 1024 * 1024
+    /// The relay built into the app, used unless someone sets their own under Advanced.
+    static let defaultRelay = "soundboard-r1zt.onrender.com"
 
     static func encode(_ message: LiveJSON) -> Data? {
         guard JSONSerialization.isValidJSONObject(message) else { return nil }
