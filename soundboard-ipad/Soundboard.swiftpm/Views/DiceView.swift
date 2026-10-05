@@ -52,7 +52,8 @@ struct ThrowSpec {
         // Coins flip end over end.
         let spin = kind == .coin
             ? [r(18, 26) * (Bool.random() ? -1 : 1), r(-3, 3), r(-4, 4)]
-            : [r(-1, 1) * 14, r(-1, 1) * 14, r(-1, 1) * 14]
+            // A good spin on every axis, never close to none.
+            : (0..<3).map { _ in r(10, 24) * (Bool.random() ? -1 : 1) }
         return ThrowSpec(
             p: [r(-0.7, 0.7), r(0.55, 0.85)],
             h: r(2, 4.5),

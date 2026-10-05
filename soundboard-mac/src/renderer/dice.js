@@ -801,7 +801,7 @@ function makeThrow(kinds, strength) {
   return kinds.map((kind) => {
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3)));
     // Coins flip end over end.
-    const spin = kind === 'coin' ? [rand(18, 26) * (Math.random() < 0.5 ? -1 : 1), rand(-3, 3), rand(-4, 4)] : [rand(-1, 1) * 14, rand(-1, 1) * 14, rand(-1, 1) * 14];
+    const spin = kind === 'coin' ? [rand(18, 26) * (Math.random() < 0.5 ? -1 : 1), rand(-3, 3), rand(-4, 4)] : [0, 1, 2].map(() => rand(10, 24) * (Math.random() < 0.5 ? -1 : 1));
     return {
       p: [rand(-0.7, 0.7), rand(0.55, 0.85)],
       h: rand(2, 4.5),
