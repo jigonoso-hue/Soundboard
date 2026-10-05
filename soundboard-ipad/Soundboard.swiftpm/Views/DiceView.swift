@@ -838,11 +838,106 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         }
     }
 
+    // MARK: Keeping dice in view
+
+    private struct Slide {
+        let node: SCNNode
+        let from: SIMD2<Float>
+        let to: SIMD2<Float>
+        let started: Date
+    }
+    private var slides: [Slide] = []
+    private var afterSlides: (() -> Void)?
+
+    /// Slides settled dice out from under things on screen (the result banner,
+    /// the controls), so none is hidden. Only where they sit changes, never how
+    /// they lie: the face on top, and so the roll, stays the same.
+    /// rects: boxes as fractions of the screen (0…1, top left first).
+    func clearOf(_ rects: [CGRect], then: @escaping () -> Void) {
+        let (hx, hz) = extents()
+        func screen(_ x: Float, _ z: Float) -> CGPoint {
+            CGPoint(x: CGFloat((x / hx + 1) / 2), y: CGFloat((z / hz + 1) / 2))
+        }
+        func hits(_ x: Float, _ z: Float, _ r: Float) -> Bool {
+            let p = screen(x, z)
+            let rx = CGFloat(r / (2 * hx))
+            let rz = CGFloat(r / (2 * hz))
+            return rects.contains { p.x + rx > $0.minX && p.x - rx < $0.maxX && p.y + rz > $0.minY && p.y - rz < $0.maxY }
+        }
+        let settled = rolls.filter(\.done).flatMap(\.dice)
+        func radius(_ d: Die) -> Float { Float(d.kind.radius) * 1.15 }
+        let covered = settled.filter { hits($0.node.presentation.position.x, $0.node.presentation.position.z, radius($0)) }
+        guard !covered.isEmpty else {
+            then()
+            return
+        }
+        var placed: [(x: Float, z: Float, r: Float)] = settled.filter { d in !covered.contains { $0 === d } }
+            .map { ($0.node.presentation.position.x, $0.node.presentation.position.z, radius($0)) }
+        slides = covered.map { d in
+            let r = radius(d)
+            let from = SIMD2(d.node.presentation.position.x, d.node.presentation.position.z)
+            let maxX = hx - 1 - r
+            let maxZ = hz - 1 - r
+            // The nearest free spot: in view, inside the walls, clear of the other dice.
+            var best: SIMD2<Float>?
+            var bestDist = Float.infinity
+            let step = r * 0.7
+            var x = -maxX
+            while x <= maxX {
+                var z = -maxZ
+                while z <= maxZ {
+                    let dist = simd_length(SIMD2(x, z) - from)
+                    if dist < bestDist && !hits(x, z, r) && !placed.contains(where: { hypot($0.x - x, $0.z - z) < $0.r + r }) {
+                        best = SIMD2(x, z)
+                        bestDist = dist
+                    }
+                    z += step
+                }
+                x += step
+            }
+            let to = best ?? from
+            placed.append((to.x, to.y, r))
+            // Held in place while it slides, so physics doesn't move or turn it.
+            d.node.physicsBody?.velocity = SCNVector3Zero
+            d.node.physicsBody?.angularVelocity = SCNVector4Zero
+            d.node.physicsBody?.isAffectedByGravity = false
+            return Slide(node: d.node, from: from, to: to, started: Date())
+        }
+        afterSlides = then
+    }
+
+    /// Moves sliding dice along (from tick()).
+    private func stepSlides() {
+        guard !slides.isEmpty else { return }
+        var finished = true
+        for slide in slides {
+            let t = Float(min(1, Date().timeIntervalSince(slide.started) / 0.38))
+            let e = 1 - pow(1 - t, 3) // ease out
+            let p = slide.from + (slide.to - slide.from) * e
+            let y = slide.node.presentation.position.y
+            let rotation = slide.node.presentation.orientation
+            slide.node.position = SCNVector3(p.x, y, p.y)
+            slide.node.orientation = rotation
+            slide.node.physicsBody?.velocity = SCNVector3Zero
+            slide.node.physicsBody?.angularVelocity = SCNVector4Zero
+            slide.node.physicsBody?.resetTransform()
+            if t < 1 { finished = false }
+        }
+        if finished {
+            for slide in slides { slide.node.physicsBody?.isAffectedByGravity = true }
+            slides = []
+            let then = afterSlides
+            afterSlides = nil
+            then?()
+        }
+    }
+
     // MARK: Every physics step
 
-    var isBusy: Bool { rolls.contains { !$0.done } }
+    var isBusy: Bool { rolls.contains { !$0.done } || !slides.isEmpty }
 
     func tick() {
+        stepSlides()
         if let g = motionGravity {
             scene.physicsWorld.gravity = SCNVector3(g.x, g.y, g.z)
         } else if scene.physicsWorld.gravity.y != -Self.gravity || scene.physicsWorld.gravity.x != 0 {
@@ -1146,14 +1241,40 @@ final class DiceTray: ObservableObject {
             let summary = start.summarize(values)
             let entry = RollEntry(id: id, start: start, values: values, summary: summary, mine: true)
             self.dimDropped(id: id, start: start, summary: summary)
-            self.celebrate(id: id, start: start, summary: summary)
             self.add(entry)
-            self.banner = entry
+            self.reveal(id: id, start: start, summary: summary, entry: entry)
             self.onResult?(id, values)
             self.finished(RollOutcome(id: id, start: start, values: values, summary: summary, entry: entry))
         }
         onStart?(start)
         return id
+    }
+
+    /// Where things sit on screen that dice shouldn't hide under (the banner, the
+    /// controls, the top bar, a side panel), and the dice stage, in global points.
+    var covers: [String: CGRect] = [:]
+    var stageFrame: CGRect = .zero
+
+    /// Shows a result: the banner, then any dice it (or the controls) would cover
+    /// slide into view, then the natural 20 / 1 effects over where they end up.
+    private func reveal(id: String, start: RollStart, summary: RollSummary, entry: RollEntry) {
+        banner = entry
+        Task { @MainActor [weak self] in
+            // Once the banner has been laid out and measured.
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard let self else { return }
+            let stage = self.stageFrame
+            guard stage.width > 0, stage.height > 0 else {
+                self.celebrate(id: id, start: start, summary: summary)
+                return
+            }
+            let keys = self.isOpen ? ["banner", "controls", "top", "panel"] : ["banner"]
+            let rects = keys.compactMap { self.covers[$0] }.map { r in
+                CGRect(x: (r.minX - stage.minX - 8) / stage.width, y: (r.minY - stage.minY - 8) / stage.height,
+                       width: (r.width + 16) / stage.width, height: (r.height + 16) / stage.height)
+            }
+            self.scene.clearOf(rects) { [weak self] in self?.celebrate(id: id, start: start, summary: summary) }
+        }
     }
 
     private func dimDropped(id: String, start: RollStart, summary: RollSummary) {
@@ -1236,9 +1357,8 @@ final class DiceTray: ObservableObject {
         let summary = start.summarize(values)
         let row = RollEntry(id: id, start: start, values: values, summary: summary, mine: false)
         dimDropped(id: id, start: start, summary: summary)
-        celebrate(id: id, start: start, summary: summary)
         add(row)
-        banner = row
+        reveal(id: id, start: start, summary: summary, entry: row)
         endWatch(after: 4.5)
         finished(RollOutcome(id: id, start: start, values: values, summary: summary, entry: row))
     }
@@ -1374,6 +1494,15 @@ private struct DiceStage: View {
                 .onChange(of: geo.size) { _, size in tray.scene.layout(aspect: Float(size.width / max(1, size.height))) }
         }
         .ignoresSafeArea()
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { tray.stageFrame = $0 }
+    }
+}
+
+extension View {
+    /// Tells the tray where this sits on screen, so landed dice slide out from under it.
+    func diceCover(_ tray: DiceTray, _ key: String) -> some View {
+        onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { tray.covers[key] = $0 }
+            .onDisappear { tray.covers[key] = nil }
     }
 }
 
@@ -1415,7 +1544,7 @@ struct DiceWatchOverlay: View {
             ZStack(alignment: .top) {
                 DiceStage(tray: tray)
                 if let banner = tray.banner {
-                    DiceBanner(entry: banner).padding(.top, 70)
+                    DiceBanner(entry: banner).diceCover(tray, "banner").padding(.top, 70)
                 }
             }
             .allowsHitTesting(false)
@@ -1438,14 +1567,14 @@ struct DiceView: View {
             backdrop
             DiceStage(tray: tray)
             VStack(spacing: 0) {
-                topBar
+                topBar.diceCover(tray, "top")
                 // The turn order, between the top bar and the result.
                 TurnStripSlot(table: tray.table)
                 if let banner = tray.banner {
-                    DiceBanner(entry: banner).padding(.top, 8)
+                    DiceBanner(entry: banner).diceCover(tray, "banner").padding(.top, 8)
                 }
                 Spacer()
-                controls
+                controls.diceCover(tray, "controls")
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
@@ -1778,6 +1907,8 @@ struct DiceView: View {
             .frame(maxHeight: 560)
             .fixedSize(horizontal: false, vertical: true)
             .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 16))
+            // Just the panel itself, not the space around it.
+            .diceCover(tray, "panel")
             .environment(\.colorScheme, .dark)
             .padding(.trailing, 12)
             .padding(.top, sizeClass == .compact ? 130 : 60)

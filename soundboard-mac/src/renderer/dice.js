@@ -509,6 +509,72 @@ class DiceScene {
     return { x: (v.x + 1) / 2 * this.host.clientWidth, y: (1 - v.y) / 2 * this.host.clientHeight };
   }
 
+  // Slides settled dice out from under things on screen (the result banner, the
+  // controls), so none is hidden. Only where they sit changes, never how they
+  // lie: the face on top, and so the roll, stays the same.
+  // rects: boxes in the layer's pixels; then: called once they're in view.
+  clearOf(rects, then) {
+    const w = this.host.clientWidth;
+    const h = this.host.clientHeight;
+    const { hx, hz } = this.extents();
+    const pxPerUnit = h / (2 * hz);
+    const toPx = (x, z) => ({ x: (x / hx + 1) / 2 * w, y: (z / hz + 1) / 2 * h });
+    const radius = (d) => G.KINDS[d.kind].radius * 1.15;
+    const hits = (x, z, r) => {
+      const p = toPx(x, z);
+      const rp = r * pxPerUnit;
+      return rects.some((b) => p.x + rp > b.left && p.x - rp < b.right && p.y + rp > b.top && p.y - rp < b.bottom);
+    };
+    const settled = this.rolls.filter((r) => r.done).flatMap((r) => r.dice);
+    const covered = settled.filter((d) => hits(d.body.position.x, d.body.position.z, radius(d)));
+    if (!covered.length) { then?.(); return; }
+    const placed = settled.filter((d) => !covered.includes(d)).map((d) => ({ x: d.body.position.x, z: d.body.position.z, r: radius(d) }));
+    const moves = covered.map((d) => {
+      const r = radius(d);
+      const from = { x: d.body.position.x, z: d.body.position.z };
+      const maxX = hx - 1 - r;
+      const maxZ = hz - 1 - r;
+      // The nearest free spot: in view, inside the walls, clear of the other dice.
+      let best = null;
+      let bestDist = Infinity;
+      const stepSize = r * 0.7;
+      for (let x = -maxX; x <= maxX; x += stepSize) {
+        for (let z = -maxZ; z <= maxZ; z += stepSize) {
+          const dist = Math.hypot(x - from.x, z - from.z);
+          if (dist >= bestDist || hits(x, z, r)) continue;
+          if (placed.some((p) => Math.hypot(p.x - x, p.z - z) < p.r + r)) continue;
+          best = { x, z };
+          bestDist = dist;
+        }
+      }
+      best = best || from;
+      placed.push({ ...best, r });
+      return { d, from, to: best };
+    });
+    // For anything that wants to know (and the tests): dice were moved into view.
+    this.host.dispatchEvent(new CustomEvent('dice-moved', { bubbles: true, detail: { count: moves.length } }));
+    const started = performance.now();
+    const ms = 380;
+    const step = (now) => {
+      const t = Math.min(1, (now - started) / ms);
+      const e = 1 - Math.pow(1 - t, 3); // ease out
+      for (const { d, from, to } of moves) {
+        d.body.position.x = from.x + (to.x - from.x) * e;
+        d.body.position.z = from.z + (to.z - from.z) * e;
+        d.body.velocity.set(0, 0, 0);
+        d.body.angularVelocity.set(0, 0, 0);
+        d.mesh.position.copy(d.body.position);
+      }
+      this.render();
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        for (const { d } of moves) d.body.sleep();
+        then?.();
+      }
+    };
+    requestAnimationFrame(step);
+  }
+
   // Dims the d20 that didn't count in an advantage or disadvantage roll.
   dim(id, index) {
     const roll = this.rolls.find((r) => r.id === id);
@@ -625,6 +691,37 @@ function showBanner(entry) {
   banner.classList.remove('pop');
   void banner.offsetWidth;
   banner.classList.add('pop');
+}
+
+// Where the result banner sits (in the layer's pixels), padded a little. Its
+// pop-in animation scales it, so this uses its laid-out size, not its transform.
+function bannerRect() {
+  const w = banner.offsetWidth;
+  const left = banner.offsetLeft - w / 2; // left: 50% with translateX(-50%)
+  return { left: left - 8, right: left + w + 8, top: banner.offsetTop - 8, bottom: banner.offsetTop + banner.offsetHeight + 12 };
+}
+
+// Everything on the tray that dice shouldn't hide under: the banner, and with
+// the tray open, its controls, top bar and side panel.
+function coverRects() {
+  const rects = [bannerRect()];
+  if (mode === 'tray') {
+    const base = layer.getBoundingClientRect();
+    for (const node of [ui, top, sidePanel]) {
+      if (node.classList.contains('hidden') || !node.offsetWidth) continue;
+      const r = node.getBoundingClientRect();
+      rects.push({ left: r.left - base.left - 6, right: r.right - base.left + 6, top: r.top - base.top - 6, bottom: r.bottom - base.top + 6 });
+    }
+  }
+  return rects;
+}
+
+// Shows a result: the banner, then any dice it would cover slide into view,
+// then the natural 20 / 1 effects over where the dice end up.
+function reveal(id, start, summary, entry) {
+  showBanner(entry);
+  if (!scene) { celebrate(id, start, summary); return; }
+  scene.clearOf(coverRects(), () => celebrate(id, start, summary));
 }
 
 // A finished roll, for the log: its numbers plus what the statistics need.
@@ -777,9 +874,8 @@ function roll(rollMode = 'normal', strength = 1, options = {}) {
       const summary = G.summarize(start, values);
       const entry = makeEntry(id, start, values, summary, true);
       if (summary.kept !== null) dimDropped(id, start, summary);
-      celebrate(id, start, summary);
       addLog(entry);
-      showBanner(entry);
+      reveal(id, start, summary, entry);
       if (typeof Live !== 'undefined') Live.rollResult({ id, values });
       finished(id, start, values, summary, entry);
     },
@@ -917,9 +1013,8 @@ function finishRemote(id, values) {
   const summary = G.summarize(start, values);
   const entry = makeEntry(id, start, values, summary, false);
   if (summary.kept !== null) dimDropped(id, start, summary);
-  celebrate(id, start, summary);
   addLog(entry);
-  showBanner(entry);
+  reveal(id, start, summary, entry);
   endWatch();
   finished(id, start, values, summary, entry);
 }
