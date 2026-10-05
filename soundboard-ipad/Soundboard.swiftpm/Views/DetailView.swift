@@ -185,35 +185,38 @@ struct DetailView: View {
             .popover(isPresented: $showSettings) {
                 SettingsPopover()
             }
-            Menu {
-                Section("Add Sounds") {
-                    Button {
-                        importingVideo = false
-                        showFileImporter = true
-                    } label: {
-                        Label("Audio from Files (MP3, M4A, WAV…)", systemImage: "music.note.list")
+            // No adding sounds mid-broadcast; it comes back when the session ends.
+            if live.role != .host {
+                Menu {
+                    Section("Add Sounds") {
+                        Button {
+                            importingVideo = false
+                            showFileImporter = true
+                        } label: {
+                            Label("Audio from Files (MP3, M4A, WAV…)", systemImage: "music.note.list")
+                        }
+                        Button {
+                            importingVideo = true
+                            showFileImporter = true
+                        } label: {
+                            Label("Video from Files…", systemImage: "film")
+                        }
+                        Button {
+                            showPhotoPicker = true
+                        } label: {
+                            Label("Video from Photos…", systemImage: "photo.on.rectangle")
+                        }
                     }
-                    Button {
-                        importingVideo = true
-                        showFileImporter = true
-                    } label: {
-                        Label("Video from Files…", systemImage: "film")
+                    Section {
+                        Button {
+                            showBrowser.toggle()
+                        } label: {
+                            Label(showBrowser ? "Hide Online" : "Online", systemImage: "globe")
+                        }
                     }
-                    Button {
-                        showPhotoPicker = true
-                    } label: {
-                        Label("Video from Photos…", systemImage: "photo.on.rectangle")
-                    }
+                } label: {
+                    Label("Add Sounds", systemImage: "plus")
                 }
-                Section {
-                    Button {
-                        showBrowser.toggle()
-                    } label: {
-                        Label(showBrowser ? "Hide Online" : "Online", systemImage: "globe")
-                    }
-                }
-            } label: {
-                Label("Add Sounds", systemImage: "plus")
             }
             Button {
                 player.stopAll()
