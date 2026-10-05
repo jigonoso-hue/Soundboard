@@ -26,10 +26,23 @@
     d10t: { sides: 10, radius: 0.92 },
     d12: { sides: 12, radius: 0.98 },
     d20: { sides: 20, radius: 1.02 },
+    // A coin: heads (1) on top, tails (2) underneath, and a ridged edge.
+    coin: { sides: 2, radius: 1.05 },
   };
+  const COIN_EDGES = 20;
 
   function cornerPoints(kind) {
     switch (kind) {
+      case 'coin': {
+        const p = [];
+        for (const y of [0.1, -0.1]) {
+          for (let i = 0; i < COIN_EDGES; i++) {
+            const a = (i * Math.PI * 2) / COIN_EDGES;
+            p.push([Math.cos(a), y, Math.sin(a)]);
+          }
+        }
+        return p;
+      }
       case 'd4': return [[1, 1, 1], [-1, -1, 1], [-1, 1, -1], [1, -1, -1]];
       case 'd6': {
         const p = [];
@@ -156,6 +169,7 @@
 
   function label(kind, value) {
     if (kind === 'd10t') return value === 0 ? '00' : String(value * 10);
+    if (kind === 'coin') return value === 1 ? 'Heads' : value === 2 ? 'Tails' : '';
     return String(value);
   }
 
@@ -173,9 +187,16 @@
     const r = Math.max(...raw.map(length));
     const points = raw.map((p) => scale(p, info.radius / r));
     const faces = hull(points);
-    if (faces.length !== (kind === 'd10t' ? 10 : info.sides)) throw new Error(`${kind} has ${faces.length} faces`);
+    const expected = kind === 'coin' ? COIN_EDGES + 2 : (kind === 'd10t' ? 10 : info.sides);
+    if (faces.length !== expected) throw new Error(`${kind} has ${faces.length} faces`);
     const die = { kind, sides: info.sides, points, faces };
-    if (kind === 'd4') {
+    if (kind === 'coin') {
+      // The flat faces are heads (up) and tails (down); the edge has no number.
+      for (const face of faces) {
+        face.value = face.normal[1] > 0.99 ? 1 : face.normal[1] < -0.99 ? 2 : 0;
+        face.label = label(kind, face.value);
+      }
+    } else if (kind === 'd4') {
       // Corner i is opposite face i's… just number the corners 1 to 4.
       die.cornerValues = points.map((_, i) => i + 1);
       for (const face of faces) {
@@ -227,6 +248,13 @@
   // { index, flat } where `flat` is false if it's cocked (leaning on something).
   function top(kind, q) {
     const die = build(kind);
+    if (kind === 'coin') {
+      // Heads or tails: whichever flat face is up. On its edge, it's cocked.
+      const heads = die.faces.findIndex((f) => f.value === 1);
+      const tails = die.faces.findIndex((f) => f.value === 2);
+      const y = rotate(q, die.faces[heads].normal)[1];
+      return { index: y >= 0 ? heads : tails, flat: Math.abs(y) > 0.9 };
+    }
     if (kind === 'd4') {
       const ys = die.points.map((p) => rotate(q, p)[1]);
       let index = 0;
@@ -260,6 +288,7 @@
   // The lowest and highest number on a die (a d10t's 0–9 mean 00–90).
   function range(kind) {
     if (kind === 'd10' || kind === 'd10t') return [0, 9];
+    if (kind === 'coin') return [1, 2];
     return [1, build(kind).sides];
   }
 
@@ -279,6 +308,7 @@
 
   // A roll's score: d10 shows 0 as 10; a d100 adds its tens and ones (00 + 0 = 100).
   function score(kind, value) {
+    if (kind === 'coin') return label(kind, value);
     if (kind === 'd10') return value === 0 ? 10 : value;
     if (kind === 'd10t') return value * 10;
     return value;
@@ -289,35 +319,114 @@
     return type === 'd100' ? ['d10t', 'd10'] : [type];
   }
 
-  const TYPES = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
-  const SIDES = { d4: 4, d6: 6, d8: 8, d10: 10, d12: 12, d20: 20, d100: 100 };
+  const TYPES = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100', 'coin'];
+  const SIDES = { d4: 4, d6: 6, d8: 8, d10: 10, d12: 12, d20: 20, d100: 100, coin: 2 };
+  // The shapes a custom die can have.
+  const CUSTOM_SIDES = [4, 6, 8, 10, 12, 20];
+
+  // ---- Custom dice: your own words on a die's faces ----
+
+  // def: { id, name, sides, faces: [text…] }. Its shape is the dN with that many
+  // sides; the face printed with number k shows faces[k − 1] (on a d10, faces[k]).
+  function customLabel(def, value) {
+    const index = def.sides === 10 ? value : value - 1;
+    return String(def.faces?.[index] ?? '');
+  }
+
+  // A face's number, if it reads as one: "+" is 1, "−" is −1, blank is 0, "3" is 3.
+  function faceNumber(text) {
+    const t = String(text).trim();
+    if (t === '' || t === '0' || t === 'blank') return 0;
+    if (t === '+') return 1;
+    if (t === '−' || t === '-') return -1;
+    const n = Number(t.replace('−', '-'));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Popular dice ready to use (shapes and words only).
+  const PRESETS = [
+    { id: 'preset-fate', name: 'Fate', sides: 6, faces: ['+', '+', '−', '−', '', ''] },
+    { id: 'preset-oracle', name: 'Oracle', sides: 6, faces: ['Yes', 'Yes, and…', 'Yes, but…', 'No, but…', 'No, and…', 'No'] },
+    { id: 'preset-direction', name: 'Direction', sides: 8, faces: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] },
+    { id: 'preset-weather', name: 'Weather', sides: 6, faces: ['Clear', 'Cloudy', 'Rain', 'Storm', 'Fog', 'Snow'] },
+    { id: 'preset-hit', name: 'Hit location', sides: 6, faces: ['Head', 'Chest', 'L arm', 'R arm', 'L leg', 'R leg'] },
+    { id: 'preset-boost', name: 'Boost', sides: 6, faces: ['', '', 'Success', 'Success + Adv', 'Adv + Adv', 'Advantage'] },
+    { id: 'preset-setback', name: 'Setback', sides: 6, faces: ['', '', 'Failure', 'Failure', 'Threat', 'Threat'] },
+    { id: 'preset-ability', name: 'Ability', sides: 8, faces: ['', 'Success', 'Success', 'Success ×2', 'Advantage', 'Advantage', 'Success + Adv', 'Advantage ×2'] },
+    { id: 'preset-difficulty', name: 'Difficulty', sides: 8, faces: ['', 'Failure', 'Failure ×2', 'Threat', 'Threat', 'Threat', 'Threat ×2', 'Failure + Threat'] },
+    { id: 'preset-proficiency', name: 'Proficiency', sides: 12, faces: ['', 'Success', 'Success', 'Success ×2', 'Success ×2', 'Advantage', 'Success + Adv', 'Success + Adv', 'Success + Adv', 'Advantage ×2', 'Advantage ×2', 'Triumph'] },
+    { id: 'preset-challenge', name: 'Challenge', sides: 12, faces: ['', 'Failure', 'Failure', 'Failure ×2', 'Failure ×2', 'Threat', 'Threat', 'Failure + Threat', 'Failure + Threat', 'Threat ×2', 'Threat ×2', 'Despair'] },
+    { id: 'preset-food', name: 'Dinner', sides: 6, faces: ['Pizza', 'Tacos', 'Sushi', 'Burgers', 'Pasta', 'Chef\'s choice'] },
+  ];
+
+  // A custom die, checked: a name, a shape and one short text per face.
+  function cleanCustom(def) {
+    if (!def || typeof def !== 'object') return null;
+    const id = String(def.id || '');
+    if (!/^[\w-]{1,60}$/.test(id)) return null;
+    const sides = Number(def.sides);
+    if (!CUSTOM_SIDES.includes(sides) || !Array.isArray(def.faces)) return null;
+    const faces = [];
+    for (let i = 0; i < sides; i++) faces.push(String(def.faces[i] ?? '').slice(0, 24));
+    return { id, name: String(def.name || 'Custom').slice(0, 30), sides, faces };
+  }
+
+  // The dice one choice puts on the table: d100 is a tens die and a d10; a
+  // custom die is the dN with its number of sides.
+  function diceFor(type, def) {
+    if (type === 'custom') return [`d${def.sides}`];
+    return type === 'd100' ? ['d10t', 'd10'] : [type];
+  }
 
   // The dice a roll puts on the table, in order, and which of them make up
-  // each choice. counts: { d20: 2, d6: 1 }. Advantage and disadvantage are 2d20.
-  function plan(counts, mode = 'normal') {
+  // each choice. counts: { d20: 2, d6: 1, 'custom:<id>': 1 }; customs: the
+  // custom dice it may use. Advantage and disadvantage are 2d20.
+  function plan(counts, mode = 'normal', customs = []) {
     const groups = [];
     const kinds = [];
     const pool = mode === 'adv' || mode === 'dis' ? { d20: 2 } : counts;
-    for (const type of TYPES) {
-      for (let i = 0; i < (pool[type] || 0); i++) {
-        const dice = diceFor(type).map((kind) => { kinds.push(kind); return kinds.length - 1; });
-        groups.push({ type, dice });
+    const used = [];
+    const addGroup = (type, def) => {
+      const dice = diceFor(type, def).map((kind) => { kinds.push(kind); return kinds.length - 1; });
+      groups.push(def ? { type, die: def.id, dice } : { type, dice });
+    };
+    for (const type of TYPES) for (let i = 0; i < (pool[type] || 0); i++) addGroup(type);
+    if (mode === 'normal') {
+      for (const def of customs) {
+        const n = pool[`custom:${def.id}`] || 0;
+        if (n > 0) used.push(def);
+        for (let i = 0; i < n; i++) addGroup('custom', def);
       }
     }
-    return { groups, kinds };
+    return { groups, kinds, custom: used };
   }
 
-  // A finished roll's numbers. roll: { mode, modifier, groups: [{ type, dice }] };
+  // A finished roll's numbers. roll: { mode, modifier, groups: [{ type, dice, die? }], custom? };
   // values: what each die shows, as printed (d10 0–9, d10t 0–9 for 00–90).
-  // Returns { scores, kept, total, title, detail }.
+  // Returns { scores, kept, total, title, detail }. `total` is null when the
+  // dice show words rather than numbers.
   function summarize(roll, values) {
     const modifier = Math.trunc(Number(roll.modifier) || 0);
-    const scores = roll.groups.map((g) => {
+    const customs = new Map((roll.custom || []).map((d) => [d.id, d]));
+    let numeric = true;
+    const labels = []; // what each group shows, for a roll of words
+    const scores = roll.groups.map((g, i) => {
       if (g.type === 'd100') {
         const n = values[g.dice[0]] * 10 + values[g.dice[1]];
         return n === 0 ? 100 : n;
       }
-      return score(g.type, values[g.dice[0]]);
+      if (g.type === 'custom') {
+        const def = customs.get(g.die);
+        const text = def ? customLabel(def, values[g.dice[0]]) : '?';
+        labels[i] = text || '—';
+        // A die of numbers (like Fate's + − and blank) adds up; a die of words doesn't.
+        if (def && def.faces.every((f) => faceNumber(f) !== null)) return faceNumber(text);
+        numeric = false;
+        return text || '—';
+      }
+      const s = score(g.type, values[g.dice[0]]);
+      if (typeof s === 'string') numeric = false;
+      return s;
     });
     const mod = modifier > 0 ? ` + ${modifier}` : modifier < 0 ? ` − ${-modifier}` : '';
     if (roll.mode === 'adv' || roll.mode === 'dis') {
@@ -331,23 +440,90 @@
       };
     }
     const counts = {};
-    for (const g of roll.groups) counts[g.type] = (counts[g.type] || 0) + 1;
+    for (const g of roll.groups) {
+      const key = g.type === 'custom' ? `custom:${g.die}` : g.type;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    const title = describe(counts, numeric ? modifier : 0, [...customs.values()]);
+    if (!numeric) {
+      // Words: list them; any numbers are shown as they are.
+      return { scores, kept: null, total: null, title, detail: scores.map((x, i) => labels[i] ?? String(x)).join(', ') };
+    }
     const sum = scores.reduce((x, y) => x + y, 0);
-    return { scores, kept: null, total: sum + modifier, title: describe(counts, modifier), detail: `${scores.join(' + ')}${mod} = ${sum + modifier}` };
+    const shown = scores.map((x) => (x < 0 ? `(−${-x})` : String(x)));
+    return { scores, kept: null, total: sum + modifier, title, detail: `${shown.join(' + ')}${mod} = ${sum + modifier}` };
   }
 
-  // "2d20 + 1d6 + 3"
-  function describe(counts, modifier = 0) {
-    const parts = TYPES.filter((t) => counts[t] > 0).map((t) => `${counts[t]}${t}`);
+  // "2d20 + 1d6 + 3", "Coin", "2 Oracle"
+  function describe(counts, modifier = 0, customs = []) {
+    const parts = TYPES.filter((t) => counts[t] > 0).map((t) => (t === 'coin' ? (counts[t] > 1 ? `${counts[t]} coins` : 'coin') : `${counts[t]}${t}`));
+    for (const def of customs) {
+      const n = counts[`custom:${def.id}`];
+      if (n > 0) parts.push(n > 1 ? `${n} ${def.name}` : def.name);
+    }
     let text = parts.join(' + ') || 'nothing';
     if (modifier > 0) text += ` + ${modifier}`;
     if (modifier < 0) text += ` − ${-modifier}`;
     return text;
   }
 
+  // ---- The table: who rolled best, statistics ----
+
+  // Every d20 a roll showed (both with advantage or disadvantage).
+  function d20s(roll, values) {
+    return roll.groups.filter((g) => g.type === 'd20').map((g) => values[g.dice[0]]);
+  }
+
+  // The d20s that count: all of them, or the kept one with advantage / disadvantage.
+  function countedD20s(roll, values) {
+    const faces = d20s(roll, values);
+    if (roll.mode === 'adv') return faces.length ? [Math.max(...faces)] : [];
+    if (roll.mode === 'dis') return faces.length ? [Math.min(...faces)] : [];
+    return faces;
+  }
+
+  // Per person: rolls, d20s rolled and their average, natural 20s and 1s, and
+  // the luckiest and unluckiest (highest and lowest d20 average, three d20s or more).
+  // entries: [{ by, d20s: [n…], nat20, nat1 }]
+  function stats(entries) {
+    const people = new Map();
+    for (const e of entries) {
+      const p = people.get(e.by) || { name: e.by, rolls: 0, d20: 0, sum: 0, nat20: 0, nat1: 0 };
+      p.rolls++;
+      for (const v of e.d20s || []) { p.d20++; p.sum += v; }
+      p.nat20 += e.nat20 || 0;
+      p.nat1 += e.nat1 || 0;
+      people.set(e.by, p);
+    }
+    const list = [...people.values()].map((p) => ({ ...p, average: p.d20 ? Math.round((p.sum / p.d20) * 10) / 10 : null }));
+    list.sort((a, b) => b.rolls - a.rolls || a.name.localeCompare(b.name));
+    const ranked = list.filter((p) => p.d20 >= 3).sort((a, b) => b.average - a.average);
+    return {
+      people: list,
+      luckiest: ranked.length > 1 ? ranked[0].name : null,
+      unluckiest: ranked.length > 1 ? ranked[ranked.length - 1].name : null,
+    };
+  }
+
+  // Who won a "highest (or lowest) roll wins": results [{ name, total }] →
+  // { ranking (best first), winners (more than one on a tie) }.
+  function rank(results, lowest = false) {
+    const ranking = [...results].filter((r) => typeof r.total === 'number')
+      .sort((a, b) => (lowest ? a.total - b.total : b.total - a.total) || a.name.localeCompare(b.name));
+    const best = ranking[0]?.total;
+    return { ranking, winners: ranking.filter((r) => r.total === best).map((r) => r.name) };
+  }
+
+  // Initiative order: highest total first; ties go to the higher modifier, then by name.
+  function initiativeOrder(entries) {
+    return [...entries].sort((a, b) => b.total - a.total || (b.modifier || 0) - (a.modifier || 0) || a.name.localeCompare(b.name));
+  }
+
   const api = {
     build, faceUVs, top, read, relabel, defaultValues, range, rotate, score, label,
     plan, summarize, describe, diceFor, hull, TYPES, SIDES, KINDS,
+    customLabel, faceNumber, cleanCustom, PRESETS, CUSTOM_SIDES,
+    d20s, countedD20s, stats, rank, initiativeOrder,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DiceGeometry = api;

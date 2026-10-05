@@ -77,6 +77,10 @@ On the local network the host assigns peer ids itself.
 | `roll {…}` / `rollResult {id, values}` | Someone's dice roll, for everyone to see (see Dice) |
 | `rolls {list: […]}` | Rolls made before this listener joined, for the roll log |
 | `diceColors {colors: [{peer, name, color}]}` | Who has which dice colour (`peer` `"host"` is the broadcaster) |
+| `customDice {list: [{id, name, sides, faces}]}` | The broadcaster's custom dice, for listeners to roll too (see The table) |
+| `ask {id, kind, label, counts, dc?, lowest?, to?}` | A roll request: a card to roll from (see The table) |
+| `askClosed {id}` / `askResult {id, kind, label, …}` | A request ended; its results for everyone |
+| `turns {phase, round, current, order}` | The initiative order (`phase` `"off"` clears it) |
 | `rules {playerSounds, limit}` | Whether listeners may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
 | `catalog {sounds: [{id, name, color}]}` | The broadcaster's sounds listeners may choose from (when `playerSounds` is `"gm"`) |
 | `need {hash, i}` | Request chunk `i` of a sound the listener offered |
@@ -151,15 +155,21 @@ result.
   "t": "roll",
   "id": "lq2x9a-1-k3f8",          // unique per roll
   "by": "Sam",                    // set by the host
-  "kinds": ["d20", "d20"],        // the dice on the table: d4 d6 d8 d10 d10t d12 d20
+  "peer": "p3",                   // set by the host: who rolled ("host" for the broadcaster)
+  "kinds": ["d20", "d20"],        // the dice on the table: d4 d6 d8 d10 d10t d12 d20 coin
   "groups": [{"type": "d20", "dice": [0]}, {"type": "d20", "dice": [1]}],
-                                  // what was chosen (d100 = a d10t and a d10)
+                                  // what was chosen (d100 = a d10t and a d10; a custom
+                                  // die is {"type": "custom", "die": id, "dice": [i]})
   "mode": "adv",                  // "normal", "adv" (keep the higher d20) or "dis" (the lower)
   "modifier": 2,
   "color": "#b3261e",
-  "dice": [{"p": [x, z], "h": 3, "v": [vx, vz], "w": [wx, wy, wz], "q": [x, y, z, w]}]
+  "dice": [{"p": [x, z], "h": 3, "v": [vx, vz], "w": [wx, wy, wz], "q": [x, y, z, w]}],
                                   // the throw: position and velocity as fractions of the
                                   // tray's half-size, height, spin, starting rotation
+  "custom": [{"id": "loot", "name": "Loot", "sides": 6, "faces": ["Gold", "Gem", …]}],
+                                  // optional: the custom dice in the roll, with their words
+  "ask": "ask-lq2x9b-3k1",        // optional: the request this roll answers
+  "hidden": true                  // optional, broadcaster only: a hidden roll
 }
 { "t": "rollResult", "id": "lq2x9a-1-k3f8", "values": [17, 4] }
                                   // what each die shows (d10 0–9, d10t 0–9 for 00–90)
@@ -181,7 +191,63 @@ made at the same time never knock into each other.
 
 **Natural 1 and 20.** When a d20 that counts (all of them, or the kept one with
 advantage or disadvantage) lands on 1, a skull and crossbones pops up over it;
-on 20, fireworks. Every device shows this for every roll.
+on 20, fireworks. Every device shows this for every roll. The broadcaster can
+pick a sound for each when starting the session; the broadcaster's app plays it
+(and so sends it to everyone like any sound).
+
+**Coins and custom dice.** A `coin` lands on 1 (heads) or 2 (tails). A custom
+die is the dN with its number of sides (4, 6, 8, 10, 12 or 20) and one word or
+number per face (at most 24 characters): the face printed with number k shows
+`faces[k − 1]` (on a d10, `faces[k]`). Faces that all read as numbers (`+` is 1,
+`−` is −1, blank is 0, like Fate dice) add up; otherwise the result is the
+words. The roll carries the custom dice it uses (at most 10).
+
+**Hidden rolls.** The broadcaster can mark a roll `hidden` (listeners' are
+refused that). Listeners see the dice tumble with blank faces; the host never
+sends its `rollResult`, and it isn't in anyone's log but the broadcaster's.
+
+## The table
+
+The broadcaster runs roll requests, initiative and "who goes first" from its
+own screen; the host sends the messages on and remembers the custom dice, the
+open requests sent to everyone, and the turn order for listeners who join later.
+
+```jsonc
+{ "t": "ask", "id": "ask-lq2x9b-3k1",
+  "kind": "check",                // "check" (a save or check), "initiative" or "contest"
+  "label": "Dexterity save",
+  "counts": {"d20": 1},           // what to roll
+  "dc": 14,                       // optional: only when the broadcaster shows the DC
+  "lowest": false,                // contest: the lowest roll wins
+  "to": ["p3", "p5"] }            // optional: only these listeners (sent only to them)
+```
+
+A listener answers with an ordinary `roll` carrying `ask`; the broadcaster
+counts each person's first roll only. When it closes a request it sends
+`askClosed {id}` (to the request's listeners), and for a check with a shown DC
+or a contest, `askResult`:
+
+```jsonc
+{ "t": "askResult", "id": "ask-…", "kind": "check", "label": "Dexterity save", "dc": 14,
+  "results": [{"name": "Sam", "total": 18, "pass": true}] }
+{ "t": "askResult", "id": "who-…", "kind": "contest", "label": "Who pays?", "lowest": true,
+  "ranking": [{"name": "Ana", "total": 4}, {"name": "Sam", "total": 12}], "winners": ["Ana"] }
+```
+
+Initiative is an `ask` of kind `"initiative"` (d20 plus each listener's own
+modifier); the broadcaster rolls for enemies itself. As results come in, and
+again when the fight starts and on each turn, it sends:
+
+```jsonc
+{ "t": "turns", "phase": "running",   // "rolling" (still collecting), "running" or "off"
+  "round": 2, "current": 1,           // whose turn: an index into order
+  "order": [{"name": "Sam", "peer": "p3", "total": 20, "modifier": 3, "enemy": false},
+            {"name": "Goblin 1", "peer": null, "total": 12, "modifier": 2, "enemy": true}] }
+```
+
+Each listener knows its own peer id (from `welcome`), so it knows when it's
+its turn: that device buzzes and shows "Your turn!"; the others show whose turn
+it is and who's next.
 
 ## Host-only features
 

@@ -26,6 +26,7 @@ Where the code lives, side by side:
 | Recording | `src/renderer/recorder.js` | `Views/RecorderView.swift` |
 | Dice tray | `src/renderer/dice.js` (three.js + cannon-es) | `Views/DiceView.swift` (SceneKit) |
 | Dice shapes and rules | `src/renderer/dice-geometry.js` | `Model/DiceGeometry.swift` (keep in step) |
+| Roll requests, initiative, who wins | `src/renderer/table.js` | `Views/TableView.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
 
 ## Platform differences (allowed)

@@ -46,14 +46,18 @@ struct ThrowSpec {
     }
 
     /// A random throw from the bottom of the screen towards the top, harder with strength (1–3).
-    static func random(strength: Double) -> ThrowSpec {
+    static func random(strength: Double, kind: DieKind = .d6) -> ThrowSpec {
         func r(_ a: Double, _ b: Double) -> Double { Double.random(in: a...b) }
         let q = simd_quatd(angle: r(0, .pi * 2), axis: simd_normalize(SIMD3(r(-1, 1), r(-1, 1), r(-1, 1)) + SIMD3(0, 0.001, 0)))
+        // Coins flip end over end.
+        let spin = kind == .coin
+            ? [r(18, 26) * (Bool.random() ? -1 : 1), r(-3, 3), r(-4, 4)]
+            : [r(-1, 1) * 14, r(-1, 1) * 14, r(-1, 1) * 14]
         return ThrowSpec(
             p: [r(-0.7, 0.7), r(0.55, 0.85)],
             h: r(2, 4.5),
             v: [r(-0.5, 0.5) * strength, -r(1.1, 1.7) * strength],
-            w: [r(-1, 1) * 14 * strength, r(-1, 1) * 14 * strength, r(-1, 1) * 14 * strength],
+            w: spin.map { $0 * strength },
             q: [q.imag.x, q.imag.y, q.imag.z, q.real]
         )
     }
@@ -68,13 +72,29 @@ struct RollStart {
     var kinds: [DieKind]
     var color: String
     var dice: [ThrowSpec]
+    /// The custom dice in the roll, so every device can draw their words.
+    var custom: [CustomDie] = []
+    /// The request it answers (a check, initiative, who goes first).
+    var ask: String?
+    /// The broadcaster's hidden roll: listeners see the dice, never the numbers.
+    var hidden = false
+    /// Who rolled, from the broadcaster ("host" for the broadcaster).
+    var peer: String?
 
     var json: LiveJSON {
-        [
+        var m: LiveJSON = [
             "t": "roll", "id": id, "by": by, "mode": mode.rawValue, "modifier": modifier,
-            "groups": groups.map { ["type": $0.type, "dice": $0.dice] as LiveJSON },
+            "groups": groups.map { g -> LiveJSON in
+                var group: LiveJSON = ["type": g.type, "dice": g.dice]
+                if let die = g.die { group["die"] = die }
+                return group
+            },
             "kinds": kinds.map(\.rawValue), "color": color, "dice": dice.map(\.json),
         ]
+        if !custom.isEmpty { m["custom"] = custom.map(\.json) }
+        if let ask { m["ask"] = ask }
+        if hidden { m["hidden"] = true }
+        return m
     }
 
     init(id: String, by: String, mode: RollMode, modifier: Int, groups: [RollGroup], kinds: [DieKind], color: String, dice: [ThrowSpec]) {
@@ -101,15 +121,47 @@ struct RollStart {
         self.kinds = kinds
         color = LiveNet.string(json["color"]) ?? "#2a5bd7"
         self.dice = dice
+        custom = RollStart.customs(json["custom"])
+        ask = LiveNet.string(json["ask"])
+        hidden = (json["hidden"] as? Bool) ?? false
+        peer = LiveNet.string(json["peer"])
     }
 
     static func groups(_ value: Any?) -> [RollGroup] {
         ((value as? [Any]) ?? []).compactMap { item in
             guard let g = item as? LiveJSON, let type = LiveNet.string(g["type"]) else { return nil }
             let dice = ((g["dice"] as? [Any]) ?? []).compactMap { LiveNet.number($0).map(Int.init) }
-            return dice.isEmpty ? nil : RollGroup(type: type, dice: dice)
+            return dice.isEmpty ? nil : RollGroup(type: type, dice: dice, die: LiveNet.string(g["die"]))
         }
     }
+
+    static func customs(_ value: Any?) -> [CustomDie] {
+        ((value as? [Any]) ?? []).compactMap(CustomDie.clean)
+    }
+
+    func summarize(_ values: [Int]) -> RollSummary {
+        DiceGeometry.summarize(mode: mode, modifier: modifier, groups: groups, values: values, customs: custom)
+    }
+}
+
+/// Changes to a roll from the tray's own settings: a roll request's dice, an
+/// enemy's initiative.
+struct RollOptions {
+    var counts: [String: Int]? = nil
+    var modifier: Int? = nil
+    var ask: String? = nil
+    var by: String? = nil
+    var owner: String? = nil
+    var hidden: Bool? = nil
+}
+
+/// A finished roll, for whoever is watching (roll requests, natural 20 sounds).
+struct RollOutcome {
+    let id: String
+    let start: RollStart
+    let values: [Int]
+    let summary: RollSummary
+    let entry: RollEntry
 }
 
 struct RollEntry: Identifiable, Equatable {
@@ -117,9 +169,38 @@ struct RollEntry: Identifiable, Equatable {
     let by: String
     let title: String
     let detail: String
-    let total: Int
-    let at: Date
+    /// nil when the dice show words.
+    let total: Int?
+    var at: Date
     let mine: Bool
+    var hidden = false
+    var ask: String?
+    /// For the statistics: every d20, and the natural 20s and 1s that counted.
+    var d20s: [Int] = []
+    var nat20 = 0
+    var nat1 = 0
+
+    init(id: String, start: RollStart, values: [Int], summary: RollSummary, mine: Bool) {
+        self.id = id
+        by = start.by
+        title = summary.title
+        detail = summary.detail
+        total = summary.total
+        at = Date()
+        self.mine = mine
+        hidden = start.hidden
+        ask = start.ask
+        d20s = DiceGeometry.d20s(groups: start.groups, values: values)
+        let counted = DiceGeometry.countedD20s(mode: start.mode, groups: start.groups, values: values)
+        nat20 = counted.filter { $0 == 20 }.count
+        nat1 = counted.filter { $0 == 1 }.count
+    }
+}
+
+/// How a die looks: a custom die's words, or (someone else's hidden roll) no numbers at all.
+struct DieLook {
+    var blank = false
+    var custom: CustomDie?
 }
 
 // MARK: - Face textures and dice geometry
@@ -202,12 +283,62 @@ enum DiceArt {
                 }
                 cg.restoreGState()
             }
-            if kind == .d4 {
+            // Writes text centred at a point, as large as fits in `width` (up to
+            // `px`), on one line or, if it has spaces, two.
+            func fit(_ text: String, at point: CGPoint, width: CGFloat, px: CGFloat, angle: CGFloat = 0) {
+                guard !text.isEmpty else { return }
+                func widthOf(_ line: String, _ size: CGFloat) -> CGFloat {
+                    NSAttributedString(string: line, attributes: [.font: font(size)]).size().width
+                }
+                var lines = [text]
+                if widthOf(text, px) > width && text.contains(" ") {
+                    let words = text.split(separator: " ").map(String.init)
+                    var best = [text]
+                    var bestWidth = CGFloat.infinity
+                    for i in 1..<words.count {
+                        let pair = [words[..<i].joined(separator: " "), words[i...].joined(separator: " ")]
+                        let w = pair.map { widthOf($0, px) }.max() ?? 0
+                        if w < bestWidth {
+                            bestWidth = w
+                            best = pair
+                        }
+                    }
+                    lines = best
+                }
+                var size = px
+                while size > 16 && (lines.map { widthOf($0, size) }.max() ?? 0) > width { size -= 2 }
+                let step = size * 1.05
+                for (i, line) in lines.enumerated() {
+                    let offset = (CGFloat(i) - CGFloat(lines.count - 1) / 2) * step
+                    let dx = -sin(angle) * offset
+                    let dy = cos(angle) * offset
+                    draw(line, at: CGPoint(x: point.x + dx, y: point.y + dy), px: size, angle: angle, underline: false)
+                }
+            }
+            let words = kind != .d4 && texts.contains { text in text.count > 3 || text.contains { !"0123456789+−-".contains($0) } }
+            if kind == .coin {
+                // A coin's flat faces: a raised ring and HEADS or TAILS; its edge is plain.
+                if face.value != 0 {
+                    let ring = UIBezierPath(arcCenter: center, radius: size * 0.4, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+                    shade(base, 0.22).setStroke()
+                    ring.lineWidth = 7
+                    ring.stroke()
+                    draw(face.value == 1 ? "★" : "⚜", at: CGPoint(x: center.x, y: center.y - 18), px: 96, angle: 0, underline: false)
+                    fit((texts.first ?? "").uppercased(), at: CGPoint(x: center.x, y: center.y + 62), width: size * 0.62, px: 40)
+                }
+            } else if words, let text = texts.first {
+                // Words (custom dice): as large as fits, on up to two lines.
+                let widths: [DieKind: CGFloat] = [.d6: 0.74, .d8: 0.5, .d10: 0.42, .d12: 0.6, .d20: 0.46]
+                let sizes: [DieKind: CGFloat] = [.d6: 86, .d8: 64, .d10: 56, .d12: 64, .d20: 56]
+                let y: CGFloat = (kind == .d8 || kind == .d20) ? center.y + 16 : (kind == .d10 ? center.y - 4 : center.y)
+                fit(text, at: CGPoint(x: center.x, y: y), width: size * (widths[kind] ?? 0.5), px: sizes[kind] ?? 56)
+            } else if kind == .d4 {
                 for (i, text) in texts.enumerated() where i < uvs.count {
                     let p = at(uvs[i])
                     let point = CGPoint(x: center.x + (p.x - center.x) * 0.56, y: center.y + (p.y - center.y) * 0.56)
                     let angle = atan2(p.x - center.x, center.y - p.y)
-                    draw(text, at: point, px: 58, angle: angle, underline: false)
+                    // Words (a custom d4) shrink to fit.
+                    fit(text, at: point, width: size * 0.3, px: 58, angle: angle)
                 }
             } else if let text = texts.first {
                 let px: CGFloat
@@ -227,18 +358,27 @@ enum DiceArt {
         return image
     }
 
-    /// The materials for a die with numbers `values` (per face, or per corner on a d4).
-    static func materials(_ kind: DieKind, values: [Int], color: String, dimmed: Bool = false) -> [SCNMaterial] {
+    /// The text on each face of a die showing numbers `values` (per face, or
+    /// per corner on a d4).
+    static func faceTexts(_ kind: DieKind, values: [Int], look: DieLook) -> [[String]] {
         let shape = DiceGeometry.build(kind)
         return shape.faces.enumerated().map { index, face in
-            let texts = kind == .d4
-                ? face.corners.map { String(values[$0]) }
-                : [DiceGeometry.label(kind, values[index])]
+            if look.blank { return kind == .d4 ? ["", "", ""] : [""] }
+            if kind == .d4 { return face.corners.map { look.custom?.label(values[$0]) ?? String(values[$0]) } }
+            if let custom = look.custom { return [custom.label(values[index])] }
+            return [DiceGeometry.label(kind, values[index])]
+        }
+    }
+
+    /// The materials for a die with numbers `values` (per face, or per corner on a d4).
+    static func materials(_ kind: DieKind, values: [Int], color: String, look: DieLook = DieLook(), dimmed: Bool = false) -> [SCNMaterial] {
+        faceTexts(kind, values: values, look: look).enumerated().map { index, texts in
             let material = SCNMaterial()
             material.diffuse.contents = texture(kind, face: index, texts: texts, color: color)
             material.lightingModel = .physicallyBased
-            material.roughness.contents = 0.38
-            material.metalness.contents = 0.08
+            // Coins are metal.
+            material.roughness.contents = kind == .coin ? 0.32 : 0.38
+            material.metalness.contents = kind == .coin ? 0.55 : 0.08
             material.transparency = dimmed ? 0.35 : 1
             return material
         }
@@ -358,12 +498,14 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         let node: SCNNode
         var values: [Int]
         let color: String
+        let look: DieLook
 
-        init(kind: DieKind, node: SCNNode, values: [Int], color: String) {
+        init(kind: DieKind, node: SCNNode, values: [Int], color: String, look: DieLook) {
             self.kind = kind
             self.node = node
             self.values = values
             self.color = color
+            self.look = look
         }
     }
 
@@ -488,7 +630,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
     /// Throws dice. A new roll by the same person clears their last one.
     @discardableResult
     func throwDice(id: String, owner: String, kinds: [DieKind], specs: [ThrowSpec], color: String, local: Bool,
-                   holdUntilStill: Bool = false, onDone: @escaping ([Int]?) -> Void) -> Roll {
+                   looks: [DieLook] = [], holdUntilStill: Bool = false, onDone: @escaping ([Int]?) -> Void) -> Roll {
         for roll in rolls where roll.owner == owner { remove(roll) }
         rolls.removeAll { $0.owner == owner }
         while rolls.reduce(0, { $0 + $1.dice.count }) + kinds.count > 40, !rolls.isEmpty {
@@ -501,8 +643,9 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         for (i, kind) in kinds.enumerated() {
             let spec = specs[i]
             let values = DiceGeometry.defaultValues(kind)
+            let look = i < looks.count ? looks[i] : DieLook()
             let geometry = DiceArt.geometry(kind).copy() as! SCNGeometry
-            geometry.materials = DiceArt.materials(kind, values: values, color: color)
+            geometry.materials = DiceArt.materials(kind, values: values, color: color, look: look)
             let node = SCNNode(geometry: geometry)
             node.castsShadow = true
             node.position = SCNVector3(Float(spec.p[0]) * (hx - 1.6), Float(spec.h), Float(spec.p[1]) * (hz - 1.6))
@@ -529,7 +672,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                 let axis = spin / speed
                 body.angularVelocity = SCNVector4(axis.x, axis.y, axis.z, speed)
             }
-            roll.dice.append(Die(kind: kind, node: node, values: values, color: color))
+            roll.dice.append(Die(kind: kind, node: node, values: values, color: color, look: look))
         }
         rolls.append(roll)
         return roll
@@ -671,7 +814,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
     func dim(id: String, die index: Int) {
         guard let roll = rolls.first(where: { $0.id == id }), index < roll.dice.count else { return }
         let die = roll.dice[index]
-        die.node.geometry?.materials = DiceArt.materials(die.kind, values: die.values, color: die.color, dimmed: true)
+        die.node.geometry?.materials = DiceArt.materials(die.kind, values: die.values, color: die.color, look: die.look, dimmed: true)
     }
 
     private func rotation(_ node: SCNNode) -> simd_quatd {
@@ -691,7 +834,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             let top = DiceGeometry.top(die.kind, rotation: rotation(die.node))
             if die.values[top.index] == target[i] { continue }
             die.values = DiceGeometry.relabel(die.kind, values: die.values, index: top.index, wanted: target[i])
-            die.node.geometry?.materials = DiceArt.materials(die.kind, values: die.values, color: die.color)
+            die.node.geometry?.materials = DiceArt.materials(die.kind, values: die.values, color: die.color, look: die.look)
         }
     }
 
@@ -802,6 +945,8 @@ final class DiceTray: ObservableObject {
         let was = sessionColors != nil
         guard let list else {
             sessionColors = nil
+            sharedCustom = []
+            hiddenArmed = false
             return
         }
         sessionColors = list.compactMap { item in
@@ -827,7 +972,25 @@ final class DiceTray: ObservableObject {
     @Published var watching = false { didSet { updateTicker() } }
     @Published private(set) var banner: RollEntry?
     @Published private(set) var log: [RollEntry] = []
-    @Published var showLog = false
+    /// Which side panel is open: "log", "stats", "custom", or the broadcaster's
+    /// "ask", "initiative" and "contest".
+    @Published var panel: String?
+    /// Your own custom dice (the broadcaster's are shared with listeners).
+    @Published var customDice: [CustomDie] { didSet { save() } }
+    /// The broadcaster's custom dice, in a session.
+    @Published private(set) var sharedCustom: [CustomDie] = []
+    @Published var initiativeModifier: Int { didSet { save() } }
+    /// Hidden: the broadcaster's next roll shows everyone the dice but not the numbers.
+    @Published var hiddenArmed = false
+    /// The end-of-session recap is showing.
+    @Published var showRecap = false
+    /// The broadcaster's table: roll requests, initiative, who goes first.
+    let table = DiceTable()
+    var hosting: () -> Bool = { false }
+    /// The broadcaster's custom dice changed: share them with listeners.
+    var onShareCustom: (([CustomDie]) -> Void)?
+    private var resultHooks: [(RollOutcome) -> Void] = []
+    private var naturalHooks: [(Int, RollStart) -> Void] = []
 
     let scene = DiceScene()
     /// In a Live Session: send a roll's start and result to everyone.
@@ -852,6 +1015,10 @@ final class DiceTray: ObservableObject {
         modifier = defaults.integer(forKey: "dice.modifier")
         color = defaults.string(forKey: "dice.color") ?? DiceTray.colors[0].1
         shakeToRoll = defaults.bool(forKey: "dice.shake")
+        customDice = (defaults.data(forKey: "dice.custom").flatMap { try? JSONDecoder().decode([CustomDie].self, from: $0) }) ?? []
+        initiativeModifier = defaults.integer(forKey: "dice.initiative")
+        table.tray = self
+        addResultHook { [weak self] outcome in self?.table.collect(outcome) }
     }
 
     private func save() {
@@ -860,6 +1027,58 @@ final class DiceTray: ObservableObject {
         defaults.set(modifier, forKey: "dice.modifier")
         defaults.set(color, forKey: "dice.color")
         defaults.set(shakeToRoll, forKey: "dice.shake")
+        if let data = try? JSONEncoder().encode(customDice) { defaults.set(data, forKey: "dice.custom") }
+        defaults.set(initiativeModifier, forKey: "dice.initiative")
+    }
+
+    // MARK: Custom dice
+
+    /// Your own custom dice, the broadcaster's (in a session), then the ready-made ones.
+    var allCustom: [CustomDie] {
+        var seen: Set<String> = []
+        return (customDice + sharedCustom + DiceGeometry.presets).filter { seen.insert($0.id).inserted }
+    }
+
+    func setSharedCustom(_ list: [Any]) {
+        sharedCustom = list.compactMap(CustomDie.clean)
+    }
+
+    func saveCustom(_ die: CustomDie) {
+        if let i = customDice.firstIndex(where: { $0.id == die.id }) { customDice[i] = die } else { customDice.append(die) }
+        shareCustom()
+    }
+
+    func deleteCustom(_ id: String) {
+        customDice.removeAll { $0.id == id }
+        counts["custom:\(id)"] = nil
+        shareCustom()
+    }
+
+    /// The broadcaster's custom dice go to listeners so they can roll them too.
+    func shareCustom() {
+        if hosting() { onShareCustom?(customDice) }
+    }
+
+    // MARK: Watching rolls
+
+    /// Every finished roll (yours and others').
+    func addResultHook(_ hook: @escaping (RollOutcome) -> Void) { resultHooks.append(hook) }
+    /// A natural 20 or 1 that counts.
+    func addNaturalHook(_ hook: @escaping (Int, RollStart) -> Void) { naturalHooks.append(hook) }
+
+    private func finished(_ outcome: RollOutcome) {
+        for hook in resultHooks { hook(outcome) }
+    }
+
+    /// Everyone's numbers: rolls, d20 average, natural 20s and 1s, luckiest and unluckiest.
+    /// Hidden rolls only count on the broadcaster's own device.
+    var stats: (people: [DiceGeometry.PersonStats], luckiest: String?, unluckiest: String?) {
+        DiceGeometry.stats(log.map { (by: $0.by, d20s: $0.d20s, nat20: $0.nat20, nat1: $0.nat1) })
+    }
+
+    /// The end-of-session recap, if anyone rolled.
+    func recap() {
+        if !log.isEmpty { showRecap = true }
     }
 
     func open() {
@@ -880,37 +1099,61 @@ final class DiceTray: ObservableObject {
 
     // MARK: Rolling
 
-    /// Rolls the chosen dice (or 2d20 for advantage / disadvantage), harder with strength (1–3).
-    func roll(_ mode: RollMode = .normal, strength: Double = 1, fromShake: Bool = false) {
-        let plan = DiceGeometry.plan(counts, mode: mode)
-        guard !plan.kinds.isEmpty else { return }
+    /// How each die of a roll looks: a custom die's words, or (someone else's
+    /// hidden roll) no numbers at all.
+    private func looks(_ start: RollStart, blank: Bool) -> [DieLook] {
+        var looks = start.kinds.map { _ in DieLook(blank: blank) }
+        if blank { return looks }
+        let defs = Dictionary(start.custom.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for g in start.groups where g.type == "custom" {
+            guard let def = g.die.flatMap({ defs[$0] }) else { continue }
+            for i in g.dice where i < looks.count { looks[i] = DieLook(custom: def) }
+        }
+        return looks
+    }
+
+    /// Rolls the chosen dice (or 2d20 for advantage / disadvantage), harder with
+    /// strength (1–3). `options` override the tray's own (a roll request, an enemy).
+    /// Returns the roll's id, or nil if nothing rolled.
+    @discardableResult
+    func roll(_ mode: RollMode = .normal, strength: Double = 1, fromShake: Bool = false, options: RollOptions = RollOptions()) -> String? {
+        let plan = DiceGeometry.plan(options.counts ?? counts, mode: mode, customs: allCustom)
+        guard !plan.kinds.isEmpty else { return nil }
         guard let color = currentColor else {
             // Everyone needs their own colour, so the table can tell whose dice are whose.
             if !isOpen { open() }
             needColor += 1
-            return
+            return nil
         }
+        // Like Whisper and Emphasis, hidden is for the next roll only.
+        let hidden = options.hidden ?? (hiddenArmed && hosting())
+        if options.hidden == nil { hiddenArmed = false }
         let id = newId()
         mine.insert(id)
-        let start = RollStart(id: id, by: myName(), mode: mode, modifier: modifier, groups: plan.groups, kinds: plan.kinds,
-                              color: color, dice: plan.kinds.map { _ in ThrowSpec.random(strength: strength) })
+        var start = RollStart(id: id, by: options.by ?? myName(), mode: mode, modifier: options.modifier ?? modifier, groups: plan.groups,
+                              kinds: plan.kinds, color: color, dice: plan.kinds.map { ThrowSpec.random(strength: strength, kind: $0) })
+        start.custom = plan.custom
+        start.ask = options.ask
+        start.hidden = hidden
         if !isOpen { open() }
         banner = nil
         scene.volume = volume()
         if fromShake { shakeRoll = id }
-        scene.throwDice(id: id, owner: "me", kinds: start.kinds, specs: start.dice, color: color, local: true,
-                        holdUntilStill: fromShake) { [weak self] values in
+        scene.throwDice(id: id, owner: options.owner ?? options.by ?? "me", kinds: start.kinds, specs: start.dice, color: color, local: true,
+                        looks: looks(start, blank: false), holdUntilStill: fromShake) { [weak self] values in
             guard let self, let values else { return }
             if self.shakeRoll == id { self.shakeRoll = nil }
-            let summary = DiceGeometry.summarize(mode: start.mode, modifier: start.modifier, groups: start.groups, values: values)
-            let entry = RollEntry(id: id, by: start.by, title: summary.title, detail: summary.detail, total: summary.total, at: Date(), mine: true)
+            let summary = start.summarize(values)
+            let entry = RollEntry(id: id, start: start, values: values, summary: summary, mine: true)
             self.dimDropped(id: id, start: start, summary: summary)
             self.celebrate(id: id, start: start, summary: summary)
             self.add(entry)
             self.banner = entry
             self.onResult?(id, values)
+            self.finished(RollOutcome(id: id, start: start, values: values, summary: summary, entry: entry))
         }
         onStart?(start)
+        return id
     }
 
     private func dimDropped(id: String, start: RollStart, summary: RollSummary) {
@@ -929,6 +1172,7 @@ final class DiceTray: ObservableObject {
             let score = summary.scores[i]
             if (score == 1 || score == 20), let die = group.dice.first {
                 scene.celebrate(id: id, die: die, natural: score)
+                if !start.hidden { for hook in naturalHooks { hook(score, start) } }
             }
         }
     }
@@ -950,9 +1194,29 @@ final class DiceTray: ObservableObject {
             watching = true
         }
         scene.volume = volume()
-        scene.throwDice(id: start.id, owner: start.by, kinds: start.kinds, specs: start.dice, color: start.color, local: false) { [weak self] values in
-            guard let self, let values else { return }
+        // The broadcaster's hidden roll: you see the dice, never the numbers.
+        scene.throwDice(id: start.id, owner: start.by, kinds: start.kinds, specs: start.dice, color: start.color, local: false,
+                        looks: looks(start, blank: start.hidden)) { [weak self] values in
+            guard let self else { return }
+            if start.hidden {
+                self.endWatch(after: 1.5)
+                return
+            }
+            guard let values else { return }
             self.finishRemote(start.id, values: values)
+        }
+    }
+
+    /// Someone else's roll over the screen fades away after a moment.
+    private func endWatch(after seconds: Double) {
+        guard watching else { return }
+        watchTask?.cancel()
+        watchTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.watching else { return }
+            self.watching = false
+            self.banner = nil
+            self.scene.clear()
         }
     }
 
@@ -969,22 +1233,14 @@ final class DiceTray: ObservableObject {
         guard let entry = remote[id], !entry.finished else { return }
         remote[id]?.finished = true
         let start = entry.start
-        let summary = DiceGeometry.summarize(mode: start.mode, modifier: start.modifier, groups: start.groups, values: values)
-        let row = RollEntry(id: id, by: start.by, title: summary.title, detail: summary.detail, total: summary.total, at: Date(), mine: false)
+        let summary = start.summarize(values)
+        let row = RollEntry(id: id, start: start, values: values, summary: summary, mine: false)
         dimDropped(id: id, start: start, summary: summary)
         celebrate(id: id, start: start, summary: summary)
         add(row)
         banner = row
-        if watching {
-            watchTask?.cancel()
-            watchTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 4_500_000_000)
-                guard let self, !Task.isCancelled, self.watching else { return }
-                self.watching = false
-                self.banner = nil
-                self.scene.clear()
-            }
-        }
+        endWatch(after: 4.5)
+        finished(RollOutcome(id: id, start: start, values: values, summary: summary, entry: row))
     }
 
     /// Rolls that happened before this device joined (no dice, just the log).
@@ -992,12 +1248,15 @@ final class DiceTray: ObservableObject {
         for item in list {
             guard let json = item as? LiveJSON, let id = LiveNet.string(json["id"]), !log.contains(where: { $0.id == id }) else { continue }
             let values = ((json["values"] as? [Any]) ?? []).compactMap { LiveNet.number($0).map(Int.init) }
-            let groups = RollStart.groups(json["groups"])
-            let mode = RollMode(rawValue: LiveNet.string(json["mode"]) ?? "") ?? .normal
-            let summary = DiceGeometry.summarize(mode: mode, modifier: Int(LiveNet.number(json["modifier"]) ?? 0), groups: groups, values: values)
-            let at = Date(timeIntervalSince1970: (LiveNet.number(json["at"]) ?? LiveNet.now) / 1000)
-            log.append(RollEntry(id: id, by: LiveNet.string(json["by"]) ?? "Someone", title: summary.title, detail: summary.detail,
-                                 total: summary.total, at: at, mine: false))
+            var start = RollStart(id: id, by: LiveNet.string(json["by"]) ?? "Someone",
+                                  mode: RollMode(rawValue: LiveNet.string(json["mode"]) ?? "") ?? .normal,
+                                  modifier: Int(LiveNet.number(json["modifier"]) ?? 0), groups: RollStart.groups(json["groups"]),
+                                  kinds: [], color: "", dice: [])
+            start.custom = RollStart.customs(json["custom"])
+            start.ask = LiveNet.string(json["ask"])
+            var entry = RollEntry(id: id, start: start, values: values, summary: start.summarize(values), mine: false)
+            entry.at = Date(timeIntervalSince1970: (LiveNet.number(json["at"]) ?? LiveNet.now) / 1000)
+            log.append(entry)
         }
         log.sort { $0.at > $1.at }
     }
@@ -1124,13 +1383,18 @@ struct DiceBanner: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Text("🎲 \(entry.by.uppercased())")
+            Text("🎲 \(entry.by.uppercased())\(entry.hidden ? " · HIDDEN" : "")")
                 .font(.caption.weight(.bold))
                 .tracking(1)
                 .opacity(0.8)
             Text(entry.title).font(.footnote).opacity(0.85)
-            Text("\(entry.total)").font(.system(size: 44, weight: .black, design: .rounded))
-            Text(entry.detail).font(.footnote.monospacedDigit()).opacity(0.85)
+            if let total = entry.total {
+                Text("\(total)").font(.system(size: 44, weight: .black, design: .rounded))
+                Text(entry.detail).font(.footnote.monospacedDigit()).opacity(0.85)
+            } else {
+                // Words (a coin, custom dice).
+                Text(entry.detail).font(.system(size: 26, weight: .black, design: .rounded)).multilineTextAlignment(.center).padding(.vertical, 4)
+            }
         }
         .foregroundStyle(Color.white)
         .padding(.horizontal, 22)
@@ -1183,7 +1447,9 @@ struct DiceView: View {
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
-            if tray.showLog { logPanel }
+            if tray.panel != nil { sidePanel }
+            TableOverlay(table: tray.table)
+            if tray.showRecap { DiceRecap(tray: tray) }
         }
         .animation(.easeOut(duration: 0.25), value: tray.banner)
         .statusBarHidden(false)
@@ -1203,11 +1469,31 @@ struct DiceView: View {
         HStack(spacing: 10) {
             Text("Dice").font(.title3.weight(.heavy)).foregroundStyle(Color.white).shadow(radius: 3)
             colorButton
-            Spacer()
-            pill(tray.log.isEmpty ? "Log" : "Log · \(tray.log.count)") { tray.showLog.toggle() }
-            pill("Close") { tray.close() }
+            Spacer(minLength: 4)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    // The broadcaster's table tools (roll requests, initiative, who wins).
+                    if tray.hosting() {
+                        panelPill("Ask a roll", "ask")
+                        panelPill("Initiative", "initiative")
+                        panelPill("Who wins?", "contest")
+                    }
+                    panelPill("Custom dice", "custom")
+                    panelPill("Stats", "stats")
+                    panelPill(tray.log.isEmpty ? "Log" : "Log · \(tray.log.count)", "log")
+                    pill("Close") { tray.close() }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(-1)
         }
         .padding(.top, 6)
+    }
+
+    private func panelPill(_ title: String, _ name: String) -> some View {
+        TablePill(title: title, on: tray.panel == name) {
+            withAnimation(.easeOut(duration: 0.2)) { tray.panel = tray.panel == name ? nil : name }
+        }
     }
 
     /// One swatch with your colour; tap it to choose from all of them.
@@ -1293,7 +1579,11 @@ struct DiceView: View {
         VStack(spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(DiceGeometry.types, id: \.self) { type in dieButton(type) }
+                    ForEach(DiceGeometry.types, id: \.self) { type in dieButton(type, label: type == "coin" ? "Coin" : type) }
+                    // Custom dice in the roll, with their counts.
+                    ForEach(tray.allCustom.filter { (tray.counts["custom:\($0.id)"] ?? 0) > 0 }) { def in
+                        dieButton("custom:\(def.id)", label: def.name)
+                    }
                     pill("Clear") { tray.counts = [:] }
                 }
                 .padding(.top, 8)
@@ -1323,6 +1613,20 @@ struct DiceView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Disadvantage: roll two d20s and keep the lower")
+                if tray.hosting() {
+                    // Like Whisper and Emphasis: for the next roll only.
+                    Button { tray.hiddenArmed.toggle() } label: {
+                        Text(tray.hiddenArmed ? "🙈 Hidden" : "🙈").font(.headline.weight(.heavy)).foregroundStyle(Color.white)
+                            .padding(.horizontal, 10)
+                            .frame(minWidth: 46, minHeight: 42)
+                            .background(tray.hiddenArmed ? Color(hex: 0x5B3FA0) : Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(tray.hiddenArmed ? Color(hex: 0xB9A2FF) : Color.white.opacity(0.25)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Hidden roll")
+                    .accessibilityHint("Listeners see your next roll's dice but not the numbers")
+                    .accessibilityAddTraits(tray.hiddenArmed ? .isSelected : [])
+                }
                 rollButton
             }
             if tray.canShake {
@@ -1339,12 +1643,12 @@ struct DiceView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    private func dieButton(_ type: String) -> some View {
+    private func dieButton(_ type: String, label: String) -> some View {
         let count = tray.counts[type] ?? 0
         return Button {
             tray.counts[type] = min(10, count + 1)
         } label: {
-            Text(type)
+            Text(label)
                 .font(.callout.weight(.bold))
                 .foregroundStyle(Color.white)
                 .frame(minWidth: 50)
@@ -1367,14 +1671,15 @@ struct DiceView: View {
             Button("Remove one") { tray.counts[type] = max(0, count - 1) }
             Button("Remove all") { tray.counts[type] = 0 }
         }
-        .accessibilityLabel("\(type), \(count) chosen")
+        .accessibilityLabel("\(label), \(count) chosen")
         .accessibilityHint("Tap to add one. Touch and hold to remove.")
     }
 
     /// Tap to roll; hold to throw harder (strength grows over a second and a half).
     private var rollButton: some View {
-        let empty = DiceGeometry.plan(tray.counts).kinds.isEmpty
-        return Text("Roll \(DiceGeometry.describe(tray.counts, modifier: tray.modifier))")
+        let empty = DiceGeometry.plan(tray.counts, customs: tray.allCustom).kinds.isEmpty
+        let what = DiceGeometry.describe(tray.counts, modifier: tray.modifier, customs: tray.allCustom)
+        return Text("Roll \(what)")
             .font(.headline.weight(.heavy))
             .foregroundStyle(Color.white)
             .lineLimit(1)
@@ -1412,52 +1717,232 @@ struct DiceView: View {
                     }
             )
             .accessibilityElement()
-            .accessibilityLabel("Roll \(DiceGeometry.describe(tray.counts, modifier: tray.modifier))")
+            .accessibilityLabel("Roll \(what)")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { tray.roll() }
     }
 
-    private var logPanel: some View {
+    /// The side panel: the roll log, statistics, custom dice, or the broadcaster's table.
+    private var sidePanel: some View {
         HStack {
             Spacer()
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Roll log").font(.headline)
-                    Spacer()
-                    Button("Done") { tray.showLog = false }
-                }
-                if tray.log.isEmpty {
-                    Text("No rolls yet.").foregroundStyle(Color.white.opacity(0.7))
-                }
-                ScrollView {
-                    VStack(spacing: 6) {
-                        ForEach(tray.log) { entry in
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text(entry.by).font(.subheadline.weight(.bold))
-                                    Spacer()
-                                    Text(entry.at, style: .time).font(.caption2).opacity(0.6)
-                                }
-                                Text(entry.title).font(.caption).opacity(0.8)
-                                Text(entry.detail).font(.subheadline.weight(.bold).monospacedDigit())
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(entry.mine ? Color.accentColor.opacity(0.3) : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    switch tray.panel ?? "log" {
+                    case "stats": DiceStatsView(tray: tray, title: "Statistics")
+                    case "custom": CustomDicePanel(tray: tray)
+                    case "ask": AskPanel(table: tray.table)
+                    case "initiative": InitiativePanel(table: tray.table)
+                    case "contest": ContestPanel(table: tray.table)
+                    default: logList
                     }
                 }
+                .padding(12)
             }
             .foregroundStyle(Color.white)
-            .padding(12)
-            .frame(width: 290)
-            .frame(maxHeight: 520)
+            .frame(width: tray.panel == "log" || tray.panel == "stats" ? 290 : 340)
+            .frame(maxHeight: 560)
+            .fixedSize(horizontal: false, vertical: true)
             .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 16))
+            .environment(\.colorScheme, .dark)
             .padding(.trailing, 12)
             .padding(.top, 60)
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .transition(.move(edge: .trailing).combined(with: .opacity))
+    }
+
+    @ViewBuilder
+    private var logList: some View {
+        Text("Roll log").font(.headline)
+        if tray.log.isEmpty {
+            Text("No rolls yet.").foregroundStyle(Color.white.opacity(0.7))
+        }
+        ForEach(tray.log) { entry in
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(entry.by + (entry.hidden ? " 🙈" : "")).font(.subheadline.weight(.bold))
+                    Spacer()
+                    Text(entry.at, style: .time).font(.caption2).opacity(0.6)
+                }
+                Text(entry.title).font(.caption).opacity(0.8)
+                Text(entry.detail).font(.subheadline.weight(.bold).monospacedDigit())
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(entry.mine ? Color.accentColor.opacity(0.3) : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+}
+
+/// Everyone's rolls: how many, the d20 average, natural 20s and 1s, and the
+/// luckiest and unluckiest of the night.
+struct DiceStatsView: View {
+    @ObservedObject var tray: DiceTray
+    var title: String?
+
+    var body: some View {
+        let stats = tray.stats
+        VStack(alignment: .leading, spacing: 8) {
+            if let title { Text(title).font(.headline) }
+            if stats.people.isEmpty {
+                Text("No rolls yet.").opacity(0.7)
+            } else {
+                if let luckiest = stats.luckiest, let unluckiest = stats.unluckiest {
+                    Text("🍀 Luckiest: \(luckiest)").font(.subheadline.weight(.bold)).padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(red: 0.18, green: 0.63, blue: 0.26).opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+                    Text("🌧 Unluckiest: \(unluckiest)").font(.subheadline.weight(.bold)).padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(red: 0.35, green: 0.43, blue: 0.63).opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+                }
+                Grid(alignment: .trailing, horizontalSpacing: 10, verticalSpacing: 6) {
+                    GridRow {
+                        Text("").gridColumnAlignment(.leading)
+                        Text("ROLLS")
+                        Text("D20 AVG")
+                        Text("20S")
+                        Text("1S")
+                    }
+                    .font(.caption2.weight(.bold))
+                    .opacity(0.7)
+                    ForEach(stats.people) { p in
+                        GridRow {
+                            Text(p.name).font(.subheadline.weight(.bold)).lineLimit(1)
+                            Text("\(p.rolls)")
+                            Text(p.average.map { String(format: "%g", $0) } ?? "—")
+                            Text("\(p.nat20)").foregroundStyle(Color(red: 0.62, green: 0.94, blue: 0.66))
+                            Text("\(p.nat1)").foregroundStyle(Color(red: 1, green: 0.62, blue: 0.62))
+                        }
+                        .font(.subheadline.monospacedDigit())
+                    }
+                }
+            }
+        }
+        .foregroundStyle(Color.white)
+    }
+}
+
+/// The end-of-session recap card.
+struct DiceRecap: View {
+    @ObservedObject var tray: DiceTray
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 12) {
+                Text("🎲 Session recap").font(.title2.weight(.black))
+                ScrollView { DiceStatsView(tray: tray) }.frame(maxHeight: 420).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Spacer()
+                    Button("Done") { tray.showRecap = false }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .foregroundStyle(Color.white)
+            .padding(20)
+            .frame(maxWidth: 440)
+            .background(LinearGradient(colors: [Color(hex: 0x1F5A3D), Color(hex: 0x0D2A1C)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.15)))
+            .shadow(color: .black.opacity(0.6), radius: 30, y: 12)
+            .padding(16)
+        }
+        .transition(.opacity)
+    }
+}
+
+/// Custom dice: yours (to edit), the broadcaster's and the ready-made ones.
+struct CustomDicePanel: View {
+    @ObservedObject var tray: DiceTray
+    @State private var editing: CustomDie?
+    @State private var isNew = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Custom dice").font(.headline)
+            if let binding = Binding($editing) {
+                editor(binding)
+            } else {
+                TablePill(title: "＋ New custom die") {
+                    editing = CustomDie(id: "c-\(String(Int(Date().timeIntervalSince1970 * 1000), radix: 36))", name: "", sides: 6, faces: Array(repeating: "", count: 6))
+                    isNew = true
+                }
+                section(tray.hosting() ? "Your dice (shared with listeners)" : "Your dice", tray.customDice, own: true)
+                section("The broadcaster's dice", tray.sharedCustom.filter { d in !tray.customDice.contains { $0.id == d.id } }, own: false)
+                section("Ready-made", DiceGeometry.presets, own: false)
+            }
+        }
+        .foregroundStyle(Color.white)
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, _ list: [CustomDie], own: Bool) -> some View {
+        if !list.isEmpty {
+            Text(title.uppercased()).font(.caption2.weight(.heavy)).tracking(0.6).opacity(0.7).padding(.top, 8)
+            ForEach(list) { def in
+                let count = tray.counts["custom:\(def.id)"] ?? 0
+                HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(def.name) · d\(def.sides)").font(.subheadline.weight(.bold))
+                        Text(def.faces.map { $0.isEmpty ? "—" : $0 }.joined(separator: " · ")).font(.caption2).opacity(0.7).lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    TablePill(title: count > 0 ? "＋ (\(count))" : "＋", small: true) { tray.counts["custom:\(def.id)"] = min(10, count + 1) }
+                        .accessibilityLabel("Add a \(def.name) die to your roll")
+                    if own {
+                        TablePill(title: "Edit", small: true) {
+                            editing = def
+                            isNew = false
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    private func editor(_ die: Binding<CustomDie>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("NAME").font(.caption2.weight(.bold)).opacity(0.75)
+            TextField("Name, e.g. Dinner", text: die.name).textFieldStyle(.roundedBorder)
+            Text("SHAPE").font(.caption2.weight(.bold)).opacity(0.75)
+            Picker("Shape", selection: Binding(get: { die.wrappedValue.sides }, set: { sides in
+                die.wrappedValue.faces = (0..<sides).map { $0 < die.wrappedValue.faces.count ? die.wrappedValue.faces[$0] : "" }
+                die.wrappedValue.sides = sides
+            })) {
+                ForEach(DiceGeometry.customSides, id: \.self) { Text("d\($0) (\($0) faces)").tag($0) }
+            }
+            .pickerStyle(.menu)
+            Text("FACES").font(.caption2.weight(.bold)).opacity(0.75)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                ForEach(die.wrappedValue.faces.indices, id: \.self) { i in
+                    TextField("Face \(i + 1)", text: Binding(get: { i < die.wrappedValue.faces.count ? die.wrappedValue.faces[i] : "" },
+                                                            set: { if i < die.wrappedValue.faces.count { die.wrappedValue.faces[i] = String($0.prefix(24)) } }))
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+            HStack(spacing: 8) {
+                Button("Save") {
+                    var def = die.wrappedValue
+                    def.name = String(def.name.trimmingCharacters(in: .whitespaces).prefix(30))
+                    if def.name.isEmpty { def.name = "Custom" }
+                    if let clean = CustomDie.clean(def.json) { tray.saveCustom(clean) }
+                    editing = nil
+                }
+                .buttonStyle(.borderedProminent)
+                TablePill(title: "Cancel") { editing = nil }
+                if !isNew {
+                    TablePill(title: "Delete", danger: true) {
+                        tray.deleteCustom(die.wrappedValue.id)
+                        editing = nil
+                    }
+                }
+            }
+            .padding(.top, 6)
+        }
     }
 }
 
@@ -1471,6 +1956,15 @@ struct DicePresenter: ViewModifier {
         content
             .overlay {
                 if active { DiceWatchOverlay(tray: tray) }
+            }
+            .overlay {
+                // Roll requests, results and the turn order; the session recap.
+                if active {
+                    ZStack {
+                        TableOverlay(table: tray.table)
+                        if tray.showRecap && !tray.isOpen { DiceRecap(tray: tray) }
+                    }
+                }
             }
             .fullScreenCover(isPresented: Binding(
                 get: { active && tray.isOpen },

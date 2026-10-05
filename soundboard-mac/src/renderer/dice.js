@@ -83,7 +83,25 @@ function faceTexture(kind, faceIndex, texts, color) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const font = (px) => `700 ${px}px "Iowan Old Style", Palatino, Georgia, serif`;
-  if (kind === 'd4') {
+  if (kind === 'coin') {
+    // A coin's flat faces: a raised ring and HEADS or TAILS; its edge is plain.
+    if (face.value) {
+      ctx.strokeStyle = shade(color, 0.22);
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(cx, cy, size * 0.4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = font(96);
+      ctx.fillText(face.value === 1 ? '★' : '⚜', cx, cy - 18);
+      fitText(ctx, texts[0].toUpperCase(), cx, cy + 62, size * 0.62, 40, font);
+    }
+  } else if (texts.some((t) => t.length > 3 || /[^0-9+−\-]/.test(t)) && kind !== 'd4') {
+    // Words (custom dice): as large as fits, on up to two lines.
+    const text = texts[0];
+    const width = { d6: 0.74, d8: 0.5, d10: 0.42, d12: 0.6, d20: 0.46 }[kind] || 0.5;
+    const y = kind === 'd8' || kind === 'd20' ? cy + 16 : (kind === 'd10' ? cy - 4 : cy);
+    fitText(ctx, text, cx, y, size * width, { d6: 86, d8: 64, d10: 56, d12: 64, d20: 56 }[kind] || 56, font);
+  } else if (kind === 'd4') {
     // A number near each corner, its top towards the corner.
     texts.forEach((text, i) => {
       const [x, y] = at(uvs[i]);
@@ -92,8 +110,8 @@ function faceTexture(kind, faceIndex, texts, color) {
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(Math.atan2(x - cx, cy - y));
-      ctx.font = font(58);
-      ctx.fillText(text, 0, 0);
+      // Words (a custom d4) shrink to fit.
+      fitText(ctx, text, 0, 0, size * 0.3, 58, font);
       ctx.restore();
     });
   } else {
@@ -114,26 +132,60 @@ function faceTexture(kind, faceIndex, texts, color) {
   return texture;
 }
 
+// Writes text centred at (x, y), as large as fits in `width` (up to `px`), on
+// one line or, if it has spaces, two.
+function fitText(ctx, text, x, y, width, px, font) {
+  if (!text) return;
+  let size = px;
+  ctx.font = font(size);
+  let lines = [text];
+  if (ctx.measureText(text).width > width && text.includes(' ')) {
+    const words = text.split(' ');
+    let best = [text];
+    let bestWidth = Infinity;
+    for (let i = 1; i < words.length; i++) {
+      const pair = [words.slice(0, i).join(' '), words.slice(i).join(' ')];
+      const w = Math.max(...pair.map((l) => ctx.measureText(l).width));
+      if (w < bestWidth) { bestWidth = w; best = pair; }
+    }
+    lines = best;
+  }
+  while (size > 16 && Math.max(...lines.map((l) => ctx.measureText(l).width)) > width) {
+    size -= 2;
+    ctx.font = font(size);
+  }
+  const step = size * 1.05;
+  lines.forEach((line, i) => ctx.fillText(line, x, y + (i - (lines.length - 1) / 2) * step));
+}
+
 const materialCache = new Map();
 function material(kind, faceIndex, texts, color) {
   const key = `${kind}|${faceIndex}|${texts.join(',')}|${color}`;
   if (!materialCache.has(key)) {
+    const coin = kind === 'coin';
     materialCache.set(key, new THREE.MeshStandardMaterial({
-      map: faceTexture(kind, faceIndex, texts, color), roughness: 0.38, metalness: 0.08, transparent: true,
+      map: faceTexture(kind, faceIndex, texts, color),
+      roughness: coin ? 0.32 : 0.38, metalness: coin ? 0.55 : 0.08, transparent: true,
     }));
   }
   return materialCache.get(key);
 }
 
-// The materials for a die with numbers `values` (per face, or per corner on a d4).
-function materialsFor(kind, values, color) {
+// The text on each face of a die showing numbers `values` (per face, or per
+// corner on a d4). look: { custom: a custom die's words, blank: no numbers
+// at all (someone else's hidden roll) }.
+function faceTexts(kind, values, look = {}) {
   const die = G.build(kind);
   return die.faces.map((face, i) => {
-    const texts = kind === 'd4'
-      ? face.corners.map((corner) => String(values[corner]))
-      : [G.label(kind, values[i])];
-    return material(kind, i, texts, color);
+    if (look.blank) return kind === 'd4' ? ['', '', ''] : [''];
+    if (kind === 'd4') return face.corners.map((corner) => (look.custom ? G.customLabel(look.custom, values[corner]) : String(values[corner])));
+    if (look.custom) return [G.customLabel(look.custom, values[i])];
+    return [G.label(kind, values[i])];
   });
+}
+
+function materialsFor(kind, values, color, look) {
+  return faceTexts(kind, values, look).map((texts, i) => material(kind, i, texts, color));
 }
 
 const geometryCache = new Map();
@@ -311,7 +363,8 @@ class DiceScene {
     spec.kinds.forEach((kind, i) => {
       const t = spec.dice[i];
       const values = G.defaultValues(kind);
-      const mesh = new THREE.Mesh(geometry(kind), materialsFor(kind, values, spec.color));
+      const look = spec.looks?.[i] || {};
+      const mesh = new THREE.Mesh(geometry(kind), materialsFor(kind, values, spec.color, look));
       mesh.castShadow = true;
       this.scene.add(mesh);
       const group = this.groupFor(owner);
@@ -330,7 +383,7 @@ class DiceScene {
         if (speed > 2.5) clack(speed);
       });
       this.world.addBody(body);
-      roll.dice.push({ kind, mesh, body, values, color: spec.color });
+      roll.dice.push({ kind, mesh, body, values, color: spec.color, look });
     });
     this.rolls.push(roll);
     this.start();
@@ -382,7 +435,7 @@ class DiceScene {
       const { index } = G.top(die.kind, [q.x, q.y, q.z, q.w]);
       if (die.values[index] === wanted) return;
       die.values = G.relabel(die.kind, die.values, index, wanted);
-      die.mesh.material = materialsFor(die.kind, die.values, die.color);
+      die.mesh.material = materialsFor(die.kind, die.values, die.color, die.look);
     });
   }
 
@@ -487,7 +540,7 @@ const el = (tag, className, text) => {
 
 const SETTINGS_KEY = 'dice';
 function loadSettings() {
-  const defaults = { counts: { d20: 1 }, modifier: 0, color: DICE_COLORS[0][1] };
+  const defaults = { counts: { d20: 1 }, modifier: 0, color: DICE_COLORS[0][1], customDice: [], initiativeModifier: 0 };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return defaults; }
 }
 const settings = loadSettings();
@@ -502,16 +555,22 @@ const banner = el('div', 'dice-banner hidden');
 banner.id = 'dice-banner';
 const ui = el('div', 'dice-ui');
 const top = el('header', 'dice-top');
-const logPanel = el('aside', 'dice-log hidden');
-logPanel.id = 'dice-log';
-layer.append(canvasHost, fxCanvas, banner, top, ui, logPanel);
+// The side panel: the roll log, statistics, custom dice, or the broadcaster's table.
+const sidePanel = el('aside', 'dice-log hidden');
+sidePanel.id = 'dice-log';
+layer.append(canvasHost, fxCanvas, banner, top, ui, sidePanel);
 document.body.append(layer);
 
 let scene = null;
 let mode = 'closed'; // closed | tray | watch
 let watchTimer = null;
-const log = []; // { id, by, title, detail, total, at, mine }
+// { id, by, title, detail, total, at, mine, hidden, ask, d20s, nat20, nat1 }
+const log = [];
 let nextId = 1;
+let panel = null; // which side panel is open: 'log' | 'stats' | 'custom' | a registered one
+const panels = new Map(); // extra panels (the broadcaster's table): name -> { label, render, visible }
+const resultHooks = new Set();
+const naturalHooks = new Set();
 
 function ensureScene() {
   if (!scene) scene = new DiceScene(canvasHost);
@@ -527,11 +586,12 @@ function setMode(next) {
   if (next === 'closed' && scene) scene.clear();
 }
 
-function open() {
+function open(withPanel) {
   clearTimeout(watchTimer);
   setMode('tray');
+  if (withPanel) panel = withPanel;
   renderUI();
-  renderLog();
+  renderPanel();
 }
 
 function close() {
@@ -554,43 +614,95 @@ function endWatch(delay = 4500) {
 
 function showBanner(entry) {
   banner.textContent = '';
-  banner.append(el('div', 'dice-banner-who', `🎲 ${entry.by}`), el('div', 'dice-banner-title', entry.title), el('div', 'dice-banner-total', String(entry.total)), el('div', 'dice-banner-detail', entry.detail));
+  const words = entry.total === null || entry.total === undefined;
+  banner.append(
+    el('div', 'dice-banner-who', `🎲 ${entry.by}${entry.hidden ? ' · hidden' : ''}`),
+    el('div', 'dice-banner-title', entry.title),
+    el('div', `dice-banner-total${words ? ' words' : ''}`, words ? entry.detail : String(entry.total)),
+  );
+  if (!words) banner.append(el('div', 'dice-banner-detail', entry.detail));
   banner.classList.remove('hidden');
   banner.classList.remove('pop');
   void banner.offsetWidth;
   banner.classList.add('pop');
 }
 
+// A finished roll, for the log: its numbers plus what the statistics need.
+function makeEntry(id, start, values, summary, mine) {
+  const counted = G.countedD20s(start, values);
+  return {
+    id, by: start.by || 'Someone', title: summary.title, detail: summary.detail, total: summary.total,
+    at: Date.now(), mine, hidden: !!start.hidden, ask: start.ask || null,
+    d20s: G.d20s(start, values), nat20: counted.filter((v) => v === 20).length, nat1: counted.filter((v) => v === 1).length,
+  };
+}
+
 function addLog(entry) {
   if (log.some((e) => e.id === entry.id)) return;
   log.unshift(entry);
-  if (log.length > 100) log.pop();
-  renderLog();
+  if (log.length > 200) log.pop();
+  if (panel === 'log' || panel === 'stats') renderPanel();
+  renderTopCounts();
 }
+
+function finished(id, start, values, summary, entry) {
+  for (const hook of resultHooks) {
+    try { hook({ id, start, values, summary, entry }); } catch (err) { console.error(err); }
+  }
+}
+
+// ---- Custom dice ----
+
+// Your own custom dice, the broadcaster's (in a session), then the ready-made ones.
+let sharedCustom = [];
+function allCustom() {
+  const seen = new Set();
+  const out = [];
+  for (const def of [...settings.customDice, ...sharedCustom, ...G.PRESETS]) {
+    if (!def || seen.has(def.id)) continue;
+    seen.add(def.id);
+    out.push(def);
+  }
+  return out;
+}
+function customById(id) { return allCustom().find((d) => d.id === id); }
 
 // ---- Throwing ----
 
 // A random throw from the bottom of the screen towards the top, harder with strength (1–3).
-function makeThrow(count, strength) {
+function makeThrow(kinds, strength) {
   const rand = (a, b) => a + Math.random() * (b - a);
-  const dice = [];
-  for (let i = 0; i < count; i++) {
+  return kinds.map((kind) => {
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3)));
-    dice.push({
+    // Coins flip end over end.
+    const spin = kind === 'coin' ? [rand(18, 26) * (Math.random() < 0.5 ? -1 : 1), rand(-3, 3), rand(-4, 4)] : [rand(-1, 1) * 14, rand(-1, 1) * 14, rand(-1, 1) * 14];
+    return {
       p: [rand(-0.7, 0.7), rand(0.55, 0.85)],
       h: rand(2, 4.5),
       v: [rand(-0.5, 0.5) * strength, -rand(1.1, 1.7) * strength],
-      w: [rand(-1, 1) * 14 * strength, rand(-1, 1) * 14 * strength, rand(-1, 1) * 14 * strength],
+      w: spin.map((x) => x * strength),
       q: [q.x, q.y, q.z, q.w],
-    });
+    };
+  });
+}
+
+// How each die of a roll looks: a custom die's words, or (someone else's
+// hidden roll) no numbers at all.
+function looksFor(start, blank) {
+  const looks = start.kinds.map(() => (blank ? { blank: true } : {}));
+  if (blank) return looks;
+  const defs = new Map((start.custom || []).map((d) => [d.id, d]));
+  for (const g of start.groups) {
+    if (g.type === 'custom' && defs.has(g.die)) for (const i of g.dice) looks[i] = { custom: defs.get(g.die) };
   }
-  return dice;
+  return looks;
 }
 
 function myName() {
   if (typeof Live !== 'undefined' && Live.myName) return Live.myName();
   return 'You';
 }
+const hosting = () => typeof Live !== 'undefined' && Live.hosting && Live.hosting();
 
 // In a Live Session: who has which colour ([{ peer, name, color }]) and which
 // entry is this device. null when not in a session.
@@ -612,6 +724,7 @@ function setSessionColors(list, you) {
   const was = inSession();
   sessionColors = Array.isArray(list) ? list : null;
   myPeer = you || null;
+  if (!inSession()) { sharedCustom = []; hiddenArmed = false; }
   if (inSession() && !myColor() && !was && !takenBy(settings.color)) claim(settings.color);
   if (mode === 'tray') renderUI();
 }
@@ -623,10 +736,17 @@ function claim(hex) {
   renderUI();
 }
 
+// Hidden: the broadcaster's next roll shows everyone the dice but not the numbers.
+let hiddenArmed = false;
+
 // Rolls the chosen dice (or 2d20 for advantage / disadvantage).
-function roll(rollMode = 'normal', strength = 1) {
-  const { groups, kinds } = G.plan(settings.counts, rollMode);
-  if (!kinds.length) return;
+// options: { counts, modifier, ask, by, owner, hidden } override the tray's own
+// (a roll request, an enemy's initiative).
+function roll(rollMode = 'normal', strength = 1, options = {}) {
+  const counts = options.counts || settings.counts;
+  const modifier = options.modifier ?? settings.modifier;
+  const { groups, kinds, custom } = G.plan(counts, rollMode, allCustom());
+  if (!kinds.length) return null;
   const color = myColor();
   if (!color) {
     // Everyone needs their own colour, so the table can tell whose dice are whose.
@@ -635,30 +755,38 @@ function roll(rollMode = 'normal', strength = 1) {
     setTimeout(() => { colorsOpen = true; renderUI(); }, 0);
     layer.classList.add('need-color');
     setTimeout(() => layer.classList.remove('need-color'), 1600);
-    return;
+    return null;
   }
+  const hidden = !!(options.hidden ?? (hiddenArmed && hosting()));
+  if (hiddenArmed && options.hidden === undefined) { hiddenArmed = false; }
   const id = `${Date.now().toString(36)}-${(nextId++).toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const start = {
-    id, by: myName(), mode: rollMode, modifier: settings.modifier, groups, kinds,
-    color, dice: makeThrow(kinds.length, strength),
+    id, by: options.by || myName(), mode: rollMode, modifier, groups, kinds,
+    color, dice: makeThrow(kinds, strength),
   };
+  if (custom.length) start.custom = custom;
+  if (options.ask) start.ask = options.ask;
+  if (hidden) start.hidden = true;
   mine.add(id);
   const s = ensureScene();
   if (mode === 'closed' || mode === 'watch') open();
   banner.classList.add('hidden');
   s.throw({
-    id, owner: 'me', kinds, dice: start.dice, color: start.color, local: true,
+    id, owner: options.owner || options.by || 'me', kinds, dice: start.dice, color, local: true, looks: looksFor(start, false),
     onDone: (values) => {
       const summary = G.summarize(start, values);
-      const entry = { id, by: start.by, title: summary.title, detail: summary.detail, total: summary.total, at: Date.now(), mine: true };
+      const entry = makeEntry(id, start, values, summary, true);
       if (summary.kept !== null) dimDropped(id, start, summary);
       celebrate(id, start, summary);
       addLog(entry);
       showBanner(entry);
       if (typeof Live !== 'undefined') Live.rollResult({ id, values });
+      finished(id, start, values, summary, entry);
     },
   });
   if (typeof Live !== 'undefined') Live.rollStart(start);
+  renderUI();
+  return id;
 }
 
 // ---- Natural 1s and 20s ----
@@ -679,8 +807,8 @@ function celebrate(id, start, summary) {
   for (const { index, score } of countedD20s(start, summary)) {
     if (score !== 1 && score !== 20) continue;
     const at = scene?.screenPosition(id, index);
-    if (!at) continue;
-    if (score === 1) skull(at); else fireworks(at);
+    if (at) { if (score === 1) skull(at); else fireworks(at); }
+    if (!start.hidden) for (const hook of naturalHooks) { try { hook(score, start); } catch (err) { console.error(err); } }
   }
 }
 
@@ -766,7 +894,12 @@ function remoteStart(msg) {
   watch();
   ensureScene().throw({
     id: msg.id, owner: msg.by || 'someone', kinds: msg.kinds, dice: msg.dice, color: msg.color || DICE_COLORS[1][1], local: false,
-    onDone: (values) => finishRemote(msg.id, values),
+    // The broadcaster's hidden roll: you see the dice, never the numbers.
+    looks: looksFor(msg, !!msg.hidden),
+    onDone: (values) => {
+      if (msg.hidden) { endWatch(1500); return; }
+      finishRemote(msg.id, values);
+    },
   });
 }
 
@@ -782,12 +915,13 @@ function finishRemote(id, values) {
   if (!start || !values || start.finished) return;
   start.finished = true;
   const summary = G.summarize(start, values);
-  const entry = { id, by: start.by || 'Someone', title: summary.title, detail: summary.detail, total: summary.total, at: Date.now(), mine: false };
+  const entry = makeEntry(id, start, values, summary, false);
   if (summary.kept !== null) dimDropped(id, start, summary);
   celebrate(id, start, summary);
   addLog(entry);
   showBanner(entry);
   endWatch();
+  finished(id, start, values, summary, entry);
 }
 
 // A result can arrive after the dice have stopped: land them then.
@@ -802,20 +936,199 @@ function remoteResultLate(msg) {
 function setHistory(list) {
   for (const item of list || []) {
     if (!item || !item.id || log.some((e) => e.id === item.id)) continue;
-    const start = { mode: item.mode, modifier: item.modifier, groups: item.groups };
+    const start = { mode: item.mode, modifier: item.modifier, groups: item.groups, custom: item.custom, by: item.by, ask: item.ask };
     try {
-      const summary = G.summarize(start, item.values);
-      log.push({ id: item.id, by: item.by, title: summary.title, detail: summary.detail, total: summary.total, at: item.at || Date.now(), mine: false });
+      const entry = makeEntry(item.id, start, item.values, G.summarize(start, item.values), false);
+      entry.at = item.at || Date.now();
+      log.push(entry);
     } catch { /* skip */ }
   }
   log.sort((a, b) => b.at - a.at);
-  renderLog();
+  renderPanel();
 }
 
 function resetLog() {
   log.length = 0;
   remote.clear();
-  renderLog();
+  renderPanel();
+}
+
+// ---- Statistics ----
+
+function statsView(title) {
+  const box = el('div', 'dice-stats');
+  if (title) box.append(el('div', 'dice-log-title', title));
+  // Hidden rolls only count on the broadcaster's own device.
+  const { people, luckiest, unluckiest } = G.stats(log);
+  if (!people.length) { box.append(el('p', 'dice-log-empty', 'No rolls yet.')); return box; }
+  if (luckiest) {
+    const badges = el('div', 'dice-stats-badges');
+    badges.append(el('div', 'dice-badge lucky', `🍀 Luckiest: ${luckiest}`), el('div', 'dice-badge unlucky', `🌧 Unluckiest: ${unluckiest}`));
+    box.append(badges);
+  }
+  const table = el('table', 'dice-stats-table');
+  const head = el('tr');
+  for (const h of ['', 'Rolls', 'd20 avg', '20s', '1s']) head.append(el('th', null, h));
+  table.append(head);
+  for (const p of people) {
+    const row = el('tr');
+    row.append(el('td', 'who', p.name), el('td', null, String(p.rolls)), el('td', null, p.average === null ? '—' : String(p.average)),
+      el('td', 'nat20', String(p.nat20)), el('td', 'nat1', String(p.nat1)));
+    table.append(row);
+  }
+  box.append(table);
+  return box;
+}
+
+// The end-of-session recap: everyone's numbers, the luckiest and unluckiest.
+function showRecap() {
+  if (!log.length) return;
+  const overlay = el('div', 'dice-recap');
+  const card = el('div', 'dice-recap-card');
+  card.append(el('div', 'dice-recap-title', '🎲 Session recap'), statsView(null));
+  const done = el('button', 'primary', 'Done');
+  done.type = 'button';
+  done.addEventListener('click', () => overlay.remove());
+  card.append(done);
+  overlay.append(card);
+  document.body.append(overlay);
+}
+
+// ---- Panels ----
+
+function togglePanel(name) {
+  panel = panel === name ? null : name;
+  renderUI();
+  renderPanel();
+}
+
+function renderPanel() {
+  sidePanel.classList.toggle('hidden', !panel || mode !== 'tray');
+  sidePanel.classList.toggle('wide', panel !== 'log' && panel !== 'stats');
+  sidePanel.textContent = '';
+  if (!panel) return;
+  if (panel === 'log') renderLog();
+  else if (panel === 'stats') sidePanel.append(statsView('Statistics'));
+  else if (panel === 'custom') renderCustom();
+  else if (panels.has(panel)) panels.get(panel).render(sidePanel);
+}
+
+function renderLog() {
+  sidePanel.append(el('div', 'dice-log-title', 'Roll log'));
+  if (!log.length) sidePanel.append(el('p', 'dice-log-empty', 'No rolls yet.'));
+  for (const entry of log) {
+    const row = el('div', `dice-log-row${entry.mine ? ' mine' : ''}`);
+    const head = el('div', 'dice-log-head');
+    head.append(el('b', null, entry.by + (entry.hidden ? ' 🙈' : '')), el('span', 'dice-log-time', new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
+    row.append(head, el('div', 'dice-log-what', entry.title), el('div', 'dice-log-detail', entry.detail));
+    sidePanel.append(row);
+  }
+}
+
+// Custom dice: yours (to edit), the broadcaster's and the ready-made ones.
+let editing = null; // the custom die being edited
+function renderCustom() {
+  sidePanel.append(el('div', 'dice-log-title', 'Custom dice'));
+  if (editing) { renderEditor(); return; }
+  const add = el('button', 'dice-pill', '＋ New custom die');
+  add.type = 'button';
+  add.addEventListener('click', () => { editing = { id: `c-${Date.now().toString(36)}`, name: '', sides: 6, faces: ['', '', '', '', '', ''], isNew: true }; renderPanel(); });
+  sidePanel.append(add);
+  const section = (title, list, own) => {
+    if (!list.length) return;
+    sidePanel.append(el('div', 'dice-custom-head', title));
+    for (const def of list) {
+      const row = el('div', 'dice-custom-row');
+      const info = el('div', 'dice-custom-info');
+      info.append(el('b', null, `${def.name} · d${def.sides}`), el('span', 'dice-custom-faces', def.faces.map((f) => f || '—').join(' · ')));
+      const count = settings.counts[`custom:${def.id}`] || 0;
+      const plus = el('button', 'dice-pill', count ? `＋ (${count})` : '＋');
+      plus.type = 'button';
+      plus.title = `Add a ${def.name} die to your roll`;
+      plus.addEventListener('click', () => { settings.counts[`custom:${def.id}`] = Math.min(10, count + 1); save(); renderUI(); renderPanel(); });
+      row.append(info, plus);
+      if (own) {
+        const edit = el('button', 'dice-pill', 'Edit');
+        edit.type = 'button';
+        edit.addEventListener('click', () => { editing = { ...def, faces: [...def.faces] }; renderPanel(); });
+        row.append(edit);
+      }
+      sidePanel.append(row);
+    }
+  };
+  section(hosting() ? 'Your dice (shared with listeners)' : 'Your dice', settings.customDice, true);
+  section("The broadcaster's dice", sharedCustom.filter((d) => !settings.customDice.some((m) => m.id === d.id)), false);
+  section('Ready-made', G.PRESETS, false);
+}
+
+function renderEditor() {
+  const form = el('div', 'dice-custom-editor');
+  const name = el('input');
+  name.placeholder = 'Name, e.g. Dinner';
+  name.maxLength = 30;
+  name.value = editing.name;
+  name.addEventListener('input', () => { editing.name = name.value; });
+  const sides = el('select');
+  for (const n of G.CUSTOM_SIDES) {
+    const o = el('option', null, `d${n} (${n} faces)`);
+    o.value = String(n);
+    sides.append(o);
+  }
+  sides.value = String(editing.sides);
+  sides.addEventListener('change', () => {
+    editing.sides = Number(sides.value);
+    editing.faces = Array.from({ length: editing.sides }, (_, i) => editing.faces[i] || '');
+    renderPanel();
+  });
+  form.append(el('label', 'dice-field', 'Name'), name, el('label', 'dice-field', 'Shape'), sides, el('label', 'dice-field', 'Faces'));
+  const faces = el('div', 'dice-custom-face-inputs');
+  editing.faces.forEach((text, i) => {
+    const input = el('input');
+    input.placeholder = `Face ${i + 1}`;
+    input.maxLength = 24;
+    input.value = text;
+    input.addEventListener('input', () => { editing.faces[i] = input.value; });
+    faces.append(input);
+  });
+  form.append(faces);
+  const actions = el('div', 'dice-custom-actions');
+  const saveButton = el('button', 'primary', 'Save');
+  saveButton.type = 'button';
+  saveButton.addEventListener('click', () => {
+    const def = G.cleanCustom({ ...editing, name: editing.name.trim() || 'Custom' });
+    if (!def) return;
+    const i = settings.customDice.findIndex((d) => d.id === def.id);
+    if (i >= 0) settings.customDice[i] = def; else settings.customDice.push(def);
+    save();
+    editing = null;
+    shareCustom();
+    renderPanel();
+  });
+  const cancel = el('button', 'dice-pill', 'Cancel');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => { editing = null; renderPanel(); });
+  actions.append(saveButton, cancel);
+  if (!editing.isNew) {
+    const del = el('button', 'dice-pill danger', 'Delete');
+    del.type = 'button';
+    del.addEventListener('click', () => {
+      settings.customDice = settings.customDice.filter((d) => d.id !== editing.id);
+      delete settings.counts[`custom:${editing.id}`];
+      save();
+      editing = null;
+      shareCustom();
+      renderUI();
+      renderPanel();
+    });
+    actions.append(del);
+  }
+  form.append(actions);
+  sidePanel.append(form);
+}
+
+// The broadcaster's custom dice go to listeners so they can roll them too.
+function shareCustom() {
+  if (hosting() && typeof Live !== 'undefined') Live.shareCustomDice(settings.customDice);
 }
 
 // ---- Controls ----
@@ -824,7 +1137,21 @@ let charge = null; // { started, timer }
 let colorsOpen = false; // the colour picker is showing
 document.addEventListener('click', () => { if (colorsOpen) { colorsOpen = false; renderUI(); } });
 
+function pill(text, title, onClick, extra = '') {
+  const b = el('button', `dice-pill${extra ? ` ${extra}` : ''}`, text);
+  b.type = 'button';
+  if (title) b.title = title;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function renderTopCounts() {
+  const button = top.querySelector('[data-panel="log"]');
+  if (button) button.textContent = log.length ? `Log · ${log.length}` : 'Log';
+}
+
 function renderUI() {
+  if (mode !== 'tray') return;
   top.textContent = '';
   top.append(el('div', 'dice-title', 'Dice'));
   // One swatch with your colour; click it to choose from all of them.
@@ -855,43 +1182,47 @@ function renderUI() {
     }
     colors.append(picker);
   }
-  const logButton = el('button', 'dice-pill', log.length ? `Log · ${log.length}` : 'Log');
-  logButton.type = 'button';
-  logButton.addEventListener('click', () => { logPanel.classList.toggle('hidden'); renderLog(); });
-  const closeButton = el('button', 'dice-pill', 'Close');
-  closeButton.type = 'button';
-  closeButton.title = 'Close the dice (Esc)';
-  closeButton.addEventListener('click', close);
-  top.append(colors, el('span', 'spacer'), logButton, closeButton);
+  top.append(colors, el('span', 'spacer'));
+  // The broadcaster's table tools (roll requests, initiative, who wins).
+  for (const [name, p] of panels) {
+    if (p.visible && !p.visible()) continue;
+    const b = pill(p.label, p.title, () => togglePanel(name), panel === name ? 'on' : '');
+    b.dataset.panel = name;
+    top.append(b);
+  }
+  for (const [name, label, title] of [['custom', 'Custom dice', 'Your own dice, the broadcaster\'s and ready-made ones'], ['stats', 'Stats', 'Everyone\'s rolls, averages and natural 20s and 1s'], ['log', log.length ? `Log · ${log.length}` : 'Log', 'Every roll: who rolled what']]) {
+    const b = pill(label, title, () => togglePanel(name), panel === name ? 'on' : '');
+    b.dataset.panel = name;
+    top.append(b);
+  }
+  top.append(pill('Close', 'Close the dice (Esc)', close));
 
   ui.textContent = '';
   const pool = el('div', 'dice-pool');
-  for (const type of G.TYPES) {
-    const count = settings.counts[type] || 0;
+  const typeButton = (key, label, title) => {
+    const count = settings.counts[key] || 0;
     const b = el('button', `dice-type${count ? ' on' : ''}`);
     b.type = 'button';
-    b.title = `Add a ${type} (right-click to remove one)`;
-    b.append(el('span', 'dice-type-name', type));
+    b.title = title;
+    b.append(el('span', 'dice-type-name', label));
     if (count) b.append(el('span', 'dice-count', String(count)));
-    b.addEventListener('click', () => { settings.counts[type] = Math.min(10, count + 1); save(); renderUI(); });
-    b.addEventListener('contextmenu', (e) => { e.preventDefault(); settings.counts[type] = Math.max(0, count - 1); save(); renderUI(); });
-    pool.append(b);
+    b.addEventListener('click', () => { settings.counts[key] = Math.min(10, count + 1); save(); renderUI(); });
+    b.addEventListener('contextmenu', (e) => { e.preventDefault(); settings.counts[key] = Math.max(0, count - 1); save(); renderUI(); });
+    return b;
+  };
+  for (const type of G.TYPES) {
+    pool.append(type === 'coin' ? typeButton(type, 'Coin', 'Add a coin (right-click to remove one)') : typeButton(type, type, `Add a ${type} (right-click to remove one)`));
   }
-  const clear = el('button', 'dice-pill', 'Clear');
-  clear.type = 'button';
-  clear.addEventListener('click', () => { settings.counts = {}; save(); renderUI(); });
-  pool.append(clear);
+  // Custom dice in the roll, with their counts.
+  for (const def of allCustom()) {
+    if ((settings.counts[`custom:${def.id}`] || 0) > 0) pool.append(typeButton(`custom:${def.id}`, def.name, `Add a ${def.name} die (right-click to remove one)`));
+  }
+  pool.append(pill('Clear', 'Take every die off the table', () => { settings.counts = {}; save(); renderUI(); }));
 
   const actions = el('div', 'dice-actions');
   const mod = el('div', 'dice-mod');
-  const minus = el('button', 'dice-pill', '−');
-  minus.type = 'button';
-  minus.title = 'Lower the modifier';
-  minus.addEventListener('click', () => { settings.modifier = Math.max(-30, settings.modifier - 1); save(); renderUI(); });
-  const plus = el('button', 'dice-pill', '+');
-  plus.type = 'button';
-  plus.title = 'Raise the modifier';
-  plus.addEventListener('click', () => { settings.modifier = Math.min(30, settings.modifier + 1); save(); renderUI(); });
+  const minus = pill('−', 'Lower the modifier', () => { settings.modifier = Math.max(-30, settings.modifier - 1); save(); renderUI(); });
+  const plus = pill('+', 'Raise the modifier', () => { settings.modifier = Math.min(30, settings.modifier + 1); save(); renderUI(); });
   const value = el('span', 'dice-mod-value', settings.modifier > 0 ? `+${settings.modifier}` : String(settings.modifier));
   value.title = 'Modifier';
   mod.append(minus, value, plus);
@@ -904,14 +1235,25 @@ function renderUI() {
   dis.type = 'button';
   dis.title = 'Disadvantage: roll two d20s and keep the lower';
   dis.addEventListener('click', () => roll('dis'));
+  actions.append(mod, adv, dis);
+  if (hosting()) {
+    // Like Whisper and Emphasis: for the next roll only.
+    const hide = el('button', `dice-hidden${hiddenArmed ? ' on' : ''}`, hiddenArmed ? '🙈 Hidden' : '🙈');
+    hide.type = 'button';
+    hide.title = 'Hidden: listeners see your next roll\'s dice but not the numbers';
+    hide.setAttribute('aria-pressed', String(hiddenArmed));
+    hide.addEventListener('click', () => { hiddenArmed = !hiddenArmed; renderUI(); });
+    actions.append(hide);
+  }
 
+  const counts = settings.counts;
   const go = el('button', 'dice-roll');
   go.type = 'button';
   go.id = 'dice-roll';
   go.title = 'Click to roll, or hold to throw harder';
   const ring = el('span', 'dice-charge');
-  go.append(ring, el('span', 'dice-roll-text', `Roll ${G.describe(settings.counts, settings.modifier)}`));
-  go.disabled = !G.plan(settings.counts).kinds.length;
+  go.append(ring, el('span', 'dice-roll-text', `Roll ${G.describe(counts, settings.modifier, allCustom())}`));
+  go.disabled = !G.plan(counts, 'normal', allCustom()).kinds.length;
   // Hold to throw harder: strength grows from 1 to 3 over a second and a half.
   const begin = (e) => {
     if (go.disabled || e.button > 0) return;
@@ -939,23 +1281,8 @@ function renderUI() {
   go.addEventListener('pointerleave', () => { if (charge) release(); });
   go.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); roll('normal', 1); } });
 
-  actions.append(mod, adv, dis, go);
+  actions.append(go);
   ui.append(pool, actions);
-}
-
-function renderLog() {
-  logPanel.textContent = '';
-  logPanel.append(el('div', 'dice-log-title', 'Roll log'));
-  if (!log.length) logPanel.append(el('p', 'dice-log-empty', 'No rolls yet.'));
-  for (const entry of log) {
-    const row = el('div', `dice-log-row${entry.mine ? ' mine' : ''}`);
-    const head = el('div', 'dice-log-head');
-    head.append(el('b', null, entry.by), el('span', 'dice-log-time', new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
-    row.append(head, el('div', 'dice-log-what', entry.title), el('div', 'dice-log-detail', entry.detail));
-    logPanel.append(row);
-  }
-  const button = top.querySelector('.dice-pill');
-  if (button && mode === 'tray') button.textContent = log.length ? `Log · ${log.length}` : 'Log';
 }
 
 document.addEventListener('keydown', (e) => {
@@ -966,6 +1293,21 @@ window.DiceTray = {
   open, close, roll, remoteStart, remoteResult: remoteResultLate, setHistory, resetLog, setSessionColors,
   preferredColor: () => settings.color,
   isOpen: () => mode === 'tray', log: () => log,
+  // Every finished roll (yours and others'): hook({ id, start, values, summary, entry }).
+  onResult: (hook) => resultHooks.add(hook),
+  // A natural 20 or 1 that counts: hook(20 | 1, start).
+  onNatural: (hook) => naturalHooks.add(hook),
+  // Extra side panels (the broadcaster's table): { label, title, render(el), visible() }.
+  addPanel: (name, p) => { panels.set(name, p); if (mode === 'tray') renderUI(); },
+  showPanel: (name) => { open(name); },
+  refreshPanel: () => { if (mode === 'tray') { renderUI(); renderPanel(); } },
+  // The broadcaster's custom dice, shared in the session.
+  setSharedCustom: (list) => { sharedCustom = Array.isArray(list) ? list : []; if (mode === 'tray') { renderUI(); renderPanel(); } },
+  myCustomDice: () => settings.customDice,
+  initiativeModifier: () => settings.initiativeModifier || 0,
+  setInitiativeModifier: (n) => { settings.initiativeModifier = n; save(); },
+  modifier: () => settings.modifier,
+  showRecap,
   // For trying the effects: DiceTray.effect(1 | 20).
   effect: (n) => { const at = { x: layer.clientWidth / 2, y: layer.clientHeight / 2 }; if (n === 1) skull(at); else fireworks(at); },
 };

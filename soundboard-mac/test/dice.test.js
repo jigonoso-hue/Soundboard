@@ -58,3 +58,51 @@ test('totals, advantage and disadvantage', () => {
   assert.equal(s.total, 5);
   assert.equal(s.title, 'd20 with disadvantage − 1');
 });
+
+test('coins, custom dice and ready-made ones', () => {
+  const coin = G.build('coin');
+  assert.deepEqual([...new Set(coin.faces.map((f) => f.value))].sort(), [0, 1, 2]);
+  assert.equal(G.label('coin', 1), 'Heads');
+  assert.equal(G.summarize({ groups: [{ type: 'coin', dice: [0] }] }, [2]).detail, 'Tails');
+  assert.equal(G.describe({ coin: 3 }), '3 coins');
+
+  const fate = G.PRESETS.find((d) => d.name === 'Fate');
+  const plan = G.plan({ 'custom:preset-fate': 4 }, 'normal', G.PRESETS);
+  assert.deepEqual(plan.custom.map((d) => d.id), ['preset-fate']);
+  // Fate dice add up: + + − blank.
+  const fateRoll = G.summarize({ ...plan, modifier: 1 }, [1, 2, 3, 5]);
+  assert.equal(fateRoll.total, 1 + 1 - 1 + 0 + 1);
+  assert.ok(fate.faces.every((f) => G.faceNumber(f) !== null));
+  // Words don't: the faces are listed.
+  const loot = G.cleanCustom({ id: 'loot', name: 'Loot', sides: 6, faces: ['Gold', 'Gem', 'Potion', 'Scroll', 'Nothing', 'Mimic!'] });
+  const mixed = G.plan({ 'custom:loot': 1, 'custom:preset-fate': 1 }, 'normal', [loot, fate]);
+  const words = G.summarize({ ...mixed, modifier: 0 }, mixed.groups[0].die === 'loot' ? [6, 3] : [3, 6]);
+  assert.equal(words.total, null);
+  assert.ok(words.detail.includes('Mimic!') && words.detail.includes('−'));
+  // Bad dice are refused.
+  assert.equal(G.cleanCustom({ id: 'x', name: 'X', sides: 7, faces: [] }), null);
+  assert.equal(G.cleanCustom({ id: 'bad id!', name: 'X', sides: 6, faces: ['1', '2', '3', '4', '5', '6'] }), null);
+});
+
+test('statistics, who wins and initiative order', () => {
+  const entry = (by, d20s) => ({ by, d20s, nat20: d20s.filter((v) => v === 20).length, nat1: d20s.filter((v) => v === 1).length });
+  const { people, luckiest, unluckiest } = G.stats([
+    entry('Sam', [20, 15, 18]), entry('Ana', [1, 4, 7]), entry('Jo', [10]),
+  ]);
+  assert.equal(people.find((p) => p.name === 'Sam').average, 17.7);
+  assert.equal(people.find((p) => p.name === 'Ana').nat1, 1);
+  assert.equal(luckiest, 'Sam');
+  assert.equal(unluckiest, 'Ana');
+  // Advantage counts only the kept d20.
+  const adv = { mode: 'adv', groups: [{ type: 'd20', dice: [0] }, { type: 'd20', dice: [1] }] };
+  assert.deepEqual(G.countedD20s(adv, [20, 3]), [20]);
+
+  assert.deepEqual(G.rank([{ name: 'A', total: 9 }, { name: 'B', total: 15 }]).winners, ['B']);
+  assert.deepEqual(G.rank([{ name: 'A', total: 9 }, { name: 'B', total: 15 }], true).winners, ['A']);
+  assert.deepEqual(G.rank([{ name: 'A', total: 15 }, { name: 'B', total: 15 }]).winners, ['A', 'B']);
+
+  const order = G.initiativeOrder([
+    { name: 'Goblin', total: 14, modifier: 2 }, { name: 'Sam', total: 14, modifier: 3 }, { name: 'Ana', total: 19, modifier: 0 },
+  ]);
+  assert.deepEqual(order.map((e) => e.name), ['Ana', 'Sam', 'Goblin']);
+});

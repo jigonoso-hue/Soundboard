@@ -58,6 +58,9 @@ final class LiveSession: ObservableObject {
     /// Online sessions go through Dungeon Radio's own relay server.
     private var relayAddress: String { LiveNet.defaultRelay }
     @Published var codeInput: String { didSet { save("live.code", codeInput) } }
+    /// Scene Kit sounds that play for everyone on a natural 20 or a natural 1 ("" for none).
+    @Published var nat20Sound: String { didSet { save("live.nat20Sound", nat20Sound) } }
+    @Published var nat1Sound: String { didSet { save("live.nat1Sound", nat1Sound) } }
     /// Listener levels: "master", "music", "sfx", "ambience".
     @Published var levels: [String: Double] {
         didSet {
@@ -116,6 +119,8 @@ final class LiveSession: ObservableObject {
         // Custom relay addresses from older versions are no longer used.
         defaults.removeObject(forKey: "live.relay")
         codeInput = defaults.string(forKey: "live.code") ?? ""
+        nat20Sound = defaults.string(forKey: "live.nat20Sound") ?? ""
+        nat1Sound = defaults.string(forKey: "live.nat1Sound") ?? ""
         playerSounds = PlayerSounds(rawValue: defaults.string(forKey: "live.playerSounds") ?? "") ?? .off
         let saved = (defaults.dictionary(forKey: "live.levels") as? [String: Double]) ?? [:]
         levels = ["master": 1, "music": 1, "sfx": 1, "ambience": 1].merging(saved) { _, new in new }
@@ -139,6 +144,16 @@ final class LiveSession: ObservableObject {
         dice.onResult = { [weak self] id, values in self?.sendRoll(["t": "rollResult", "id": id, "values": values]) }
         dice.volume = { [weak self] in self?.player?.masterVolume ?? 1 }
         dice.onClaim = { [weak self] color in self?.claimColor(color) }
+        dice.hosting = { [weak self] in self?.role == .host }
+        dice.onShareCustom = { [weak self] list in self?.host?.table(["t": "customDice", "list": list.map(\.json)]) }
+        // A natural 20 or 1 plays the broadcaster's chosen sound for everyone.
+        dice.addNaturalHook { [weak self] natural, _ in self?.playNatural(natural) }
+        // Roll requests and the turn order go from the broadcaster's screen to listeners.
+        dice.table.send = { [weak self] message in self?.host?.table(message) }
+        dice.table.peers = { [weak self] in self?.peers ?? [] }
+        dice.table.hosting = { [weak self] in self?.role == .host }
+        dice.table.myName = { [weak self] in self?.diceName ?? "You" }
+        dice.table.nudge = { [weak self] title, body in self?.nudge(title: title, body: body) }
         LiveFiles.pruneCache()
     }
 
@@ -167,7 +182,13 @@ final class LiveSession: ObservableObject {
     private func sendRoll(_ message: LiveJSON) {
         switch role {
         case .host:
-            if LiveNet.string(message["t"]) == "roll" { host?.roll(message, by: diceName) } else { host?.rollResult(message) }
+            // The broadcaster can roll for someone else (an enemy's initiative).
+            if LiveNet.string(message["t"]) == "roll" {
+                let by = (LiveNet.string(message["by"]) ?? "").trimmingCharacters(in: .whitespaces)
+                host?.roll(message, by: by.isEmpty ? diceName : by)
+            } else {
+                host?.rollResult(message)
+            }
         case .listener:
             listener?.sendRoll(message)
         case .idle:
@@ -182,8 +203,40 @@ final class LiveSession: ObservableObject {
         case "rollResult": dice.remoteResult(message)
         case "rolls": dice.setHistory((message["list"] as? [Any]) ?? [])
         case "diceColors": dice.setSessionColors((message["colors"] as? [Any]) ?? [], you: LiveNet.string(message["you"]) ?? "")
+        case "customDice": dice.setSharedCustom((message["list"] as? [Any]) ?? [])
+        // Roll requests, results and the turn order (TableView.swift).
+        case "ask", "askClosed", "askResult", "turns": dice.table.receive(message)
         default: break
         }
+    }
+
+    /// Sounds to choose from for natural 20s and 1s: the open Scene Kit's first.
+    var natSoundChoices: (kit: String?, inKit: [Sound], others: [Sound]) {
+        let all = store?.sounds ?? []
+        guard let id = currentKitId, let kit = kits?.kit(id) else { return (nil, [], all) }
+        let ids = Set(kit.allItems.filter { $0.type == .sound }.map(\.id))
+        return (kit.name, all.filter { ids.contains($0.id) }, all.filter { !ids.contains($0.id) })
+    }
+
+    private func playNatural(_ natural: Int) {
+        let id = natural == 20 ? nat20Sound : nat1Sound
+        guard role == .host, let uuid = UUID(uuidString: id), let store, let player, let sound = store.sound(uuid) else { return }
+        try? player.play(sound, url: store.url(for: sound))
+    }
+
+    /// A nudge (a roll request, your turn): a buzz now, or a notification if
+    /// the app is in the background.
+    private func nudge(title: String, body: String) {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        if UIApplication.shared.applicationState == .active {
+            haptics.impactOccurred(intensity: 1)
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "table-\(UUID().uuidString)", content: content, trigger: nil))
     }
 
     func attach(store: SoundStore, ambience: AmbienceMixer, kits: KitStore, bashes: BashStore, player: SoundPlayer) {
@@ -277,6 +330,7 @@ final class LiveSession: ObservableObject {
         host = engine
         engine.setPlayerSounds(playerSounds)
         engine.setHostColor(dice.color, name: yourName.trimmingCharacters(in: .whitespaces).isEmpty ? "Broadcaster" : yourName)
+        engine.table(["t": "customDice", "list": dice.customDice.map(\.json)])
         hostingName = name
         hostingMode = mode
         if mode == .local { code = nil }
@@ -295,8 +349,12 @@ final class LiveSession: ObservableObject {
     }
 
     func endHosting(error message: String? = nil) {
+        let was = host != nil
         host?.end()
         dice.setSessionColors(nil, you: "")
+        dice.table.reset()
+        // The end-of-session recap.
+        if was { dice.recap() }
         host = nil
         syncTimer?.invalidate()
         syncTimer = nil
@@ -625,8 +683,11 @@ final class LiveSession: ObservableObject {
     }
 
     private func finishListening() {
+        let was = listener != nil
         listener = nil
         dice.setSessionColors(nil, you: "")
+        dice.table.reset()
+        if was { dice.recap() }
         mirror.stopAll(ambienceToo: true)
         role = .idle
         connected = false

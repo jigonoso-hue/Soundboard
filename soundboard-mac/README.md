@@ -199,11 +199,23 @@ macOS asks for permission to use the local network the first time you broadcast 
 
 Click **Dice** in the toolbar (or on the stage, while tuned in). The tray fills the window: real 3D dice tumble with physics and bounce off its edges.
 
-- Click a die (d4, d6, d8, d10, d12, d20, d100) to add one; right-click to remove one. **−** / **+** set a modifier.
+- Click a die (d4, d6, d8, d10, d12, d20, d100, Coin) to add one; right-click to remove one. **−** / **+** set a modifier.
 - **Roll** throws them. Hold it down to throw harder (the button fills up over a second and a half).
 - **A** (green) rolls a d20 with advantage: two d20s, keep the higher. **DA** (red) is disadvantage: keep the lower. The die that doesn't count is dimmed.
 - A natural 1 on a d20 brings up a skull and crossbones over the die; a natural 20 sets off fireworks.
 - Your dice colour is the swatch at the top: click it to choose another. **Log** lists every roll: who rolled what.
+
+**Coins and custom dice.** **Coin** flips a 3D coin (heads or tails), shared like any roll. **Custom dice** (top of the tray) lists your own dice, the broadcaster's in a session, and ready-made ones from popular games: Fate (+ + − − blank blank, which add up), an Oracle (Yes / Yes, and… / No, but… …), Direction, Weather, Hit location, Dinner, and Genesys-style Boost, Setback, Ability, Difficulty, Proficiency and Challenge dice. **＋** adds one to your roll. **＋ New custom die** makes your own: a name, a shape (d4 to d20) and a word or number per face, such as "Pizza / Tacos / Sushi" or "Yes / No / Ask again". The broadcaster's own custom dice are shared with listeners so they can roll them too.
+
+**Stats.** Everyone's rolls in the session: how many, the d20 average, natural 20s and 1s, and the luckiest and unluckiest (highest and lowest d20 average, at least three d20s each). When the session ends, everyone gets a recap card with the same numbers.
+
+**For the broadcaster** (while broadcasting):
+
+- **🙈 Hidden** rolls your next roll in secret: listeners see the dice tumble with blank faces and no result, and it stays out of their log. Like Whisper and Emphasis, it turns itself off after one roll.
+- **Ask a roll** asks for a save or check: what to roll ("Dexterity save"), the dice, a DC (shown to listeners or not), and everyone or chosen listeners. Each listener gets a card to roll from, with their modifier and A / DA. Results come in beside the request with pass or fail; **Close and show results** shows everyone who passed.
+- **Initiative**: add the enemies (name and modifier) and press **Roll initiative**. Every listener gets a card to roll a d20 plus their initiative modifier (remembered for next time); you roll for the enemies. Only each person's first roll counts. The order builds on everyone's screen as rolls come in; **Start** begins the fight. Whoever's turn it is gets a "Your turn!" card and a buzz; everyone else sees whose turn it is and who's next. **Next turn** / **Back** move along (a new round after the last), **End initiative** clears it.
+- **Who wins?** — "Who goes first?", "Who pays?" or your own question: everyone rolls a d20 (you too, if you like) and the highest (or lowest) wins, shown with names on every screen. A tie offers a roll-off between the tied people.
+- **Natural 20 sound** and **Natural 1 sound** (in the Live dialog, when starting a session or while broadcasting): a sound from your Scene Kit that plays for everyone when anyone rolls a natural 20 or 1.
 
 In a Live Session everyone rolls in their own colour, and no two people can have the same one: pick a free colour before your first roll (colours others have are crossed out, with their name). Everyone's dice roll on their own, so dice thrown at the same time never knock into each other. Everyone sees every roll: the dice tumble across everyone's screen (over whatever they're looking at), with who rolled them and the result, and the roll log is shared. Late joiners get the rolls made before they arrived.
 
@@ -258,8 +270,9 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/live.js` | Live Session networking: local server, Bonjour, relay client, host and listener logic |
 | `src/renderer/live.js` | Live window, forwarding what the board plays, listeners' sounds, and the listener's player and stage |
 | `src/renderer/recorder.js` | Record a Sound: microphone recording, level meter, listen back and save as WAV |
-| `src/renderer/dice.js` | The dice tray: 3D dice (three.js) with physics (cannon-es), throwing, results, the roll log, showing others' rolls |
-| `src/renderer/dice-geometry.js` | The dice's shapes, numbering, reading a die, advantage and totals (shared with the tests; the iPad has a copy) |
+| `src/renderer/dice.js` | The dice tray: 3D dice and coins (three.js) with physics (cannon-es), throwing, results, the roll log, stats and the recap, custom dice, hidden rolls, showing others' rolls |
+| `src/renderer/table.js` | The broadcaster's table: roll requests, initiative and the turn order, who goes first; listeners' request cards |
+| `src/renderer/dice-geometry.js` | The dice's shapes, numbering, reading a die, advantage and totals, custom and ready-made dice, stats, who won, initiative order (shared with the tests; the iPad has a copy) |
 | `src/renderer/themes.js` | Themes and the Options window: colours, fonts, where backdrops and panels go, book-cover tiles and playing effects |
 | `src/renderer/theme-art.js` | The themes' drawings (parchment, wood, space, HUD, gilded frames, book covers, synth waves, magic, the stage) |
 | `src/renderer/kits.js` | Scene Kits sidebar, kit page (including ambience sections) and dialogs |

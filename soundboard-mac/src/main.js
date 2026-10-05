@@ -422,6 +422,13 @@ function registerLiveIpc() {
       case 'roll': host.roll(event, event.by); break;
       case 'rollResult': host.rollResult(event); break;
       case 'diceColor': host.setHostColor(event.color, event.name); break;
+      case 'customDice':
+      case 'ask':
+      case 'askClosed':
+      case 'askResult':
+      case 'turns':
+        host.table(event);
+        break;
       case 'catalog': host.setCatalog(event.items); break;
       case 'stop': host.stop(event.group); break;
       case 'volume': host.volume(event.group, event.volume); break;

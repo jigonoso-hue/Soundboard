@@ -201,9 +201,9 @@ final class FileFetcher {
 /// checking what listeners send.
 enum LiveRolls {
     static let ranges: [String: ClosedRange<Int>] = [
-        "d4": 1...4, "d6": 1...6, "d8": 1...8, "d10": 0...9, "d10t": 0...9, "d12": 1...12, "d20": 1...20,
+        "d4": 1...4, "d6": 1...6, "d8": 1...8, "d10": 0...9, "d10t": 0...9, "d12": 1...12, "d20": 1...20, "coin": 1...2,
     ]
-    static let types = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]
+    static let types = ["d4", "d6", "d8", "d10", "d12", "d20", "d100", "coin", "custom"]
     static let maxDice = 40
     /// The dice colours. In a session each person claims one, and no two people
     /// share a colour, so it's always clear whose dice are whose.
@@ -222,10 +222,16 @@ enum LiveRolls {
         return (0..<count).map { num($0 < list.count ? list[$0] : nil, low, high) }
     }
 
+    /// An id: 1–60 letters, digits, - and _.
+    static func isId(_ value: Any?) -> Bool {
+        guard let id = LiveNet.string(value) else { return false }
+        return (1...60).contains(id.count) && id.allSatisfy { ($0.isASCII && ($0.isLetter || $0.isNumber)) || $0 == "-" || $0 == "_" }
+    }
+
     /// A roll's start, checked: the dice and how they're thrown.
     static func cleanStart(_ m: LiveJSON) -> LiveJSON? {
         let id = LiveNet.string(m["id"]) ?? ""
-        guard (1...60).contains(id.count), id.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else { return nil }
+        guard isId(id) else { return nil }
         let kinds = ((m["kinds"] as? [Any]) ?? []).prefix(maxDice).compactMap { LiveNet.string($0) }
         guard !kinds.isEmpty, kinds.allSatisfy({ ranges[$0] != nil }) else { return nil }
         let rawDice = ((m["dice"] as? [Any]) ?? []).prefix(kinds.count).compactMap { $0 as? LiveJSON }
@@ -239,24 +245,37 @@ enum LiveRolls {
                 "q": nums(d["q"], count: 4, -1, 1),
             ]
         }
+        // Custom dice used in the roll, with their words, so every device can draw them.
+        let custom = ((m["custom"] as? [Any]) ?? []).prefix(10).compactMap(CustomDie.clean)
         var groups: [LiveJSON] = []
         for item in ((m["groups"] as? [Any]) ?? []).prefix(maxDice) {
             guard let g = item as? LiveJSON, let type = LiveNet.string(g["type"]), types.contains(type) else { return nil }
             let indices = ((g["dice"] as? [Any]) ?? []).prefix(2).map { Int(num($0, 0, Double(kinds.count - 1))) }
             guard !indices.isEmpty else { return nil }
-            groups.append(["type": type, "dice": indices])
+            var group: LiveJSON = ["type": type, "dice": indices]
+            if type == "custom" {
+                let die = LiveNet.string(g["die"]) ?? ""
+                guard custom.contains(where: { $0.id == die }) else { return nil }
+                group["die"] = die
+            }
+            groups.append(group)
         }
         guard !groups.isEmpty else { return nil }
         let mode = LiveNet.string(m["mode"]) ?? "normal"
         let color = LiveNet.string(m["color"]) ?? ""
         let validColor = color.count == 7 && color.hasPrefix("#") && color.dropFirst().allSatisfy(\.isHexDigit)
-        return [
+        var start: LiveJSON = [
             "t": "roll", "id": id, "kinds": Array(kinds), "dice": dice, "groups": groups,
             "mode": ["normal", "adv", "dis"].contains(mode) ? mode : "normal",
             "modifier": Int(num(m["modifier"], -99, 99)),
             "color": validColor ? color : "#2a5bd7",
             "by": String((LiveNet.string(m["by"]) ?? "").prefix(40)),
         ]
+        if !custom.isEmpty { start["custom"] = custom.map(\.json) }
+        // A roll asked for by the broadcaster (a check, initiative, who goes first).
+        if isId(m["ask"]) { start["ask"] = LiveNet.string(m["ask"]) }
+        if (m["hidden"] as? Bool) == true { start["hidden"] = true }
+        return start
     }
 
     /// What each die of a roll shows, checked against the dice.
@@ -329,6 +348,12 @@ final class LiveHostEngine {
     private var rollLog: [LiveJSON] = []
     /// Who has which dice colour: peer (or "host") → colour.
     private var diceColors: [String: String] = [:]
+    /// The broadcaster's table, for listeners who join later: shared custom dice,
+    /// open roll requests and the turn order.
+    private var tableDice: LiveJSON?
+    private var tableAsks: [String: LiveJSON] = [:]
+    private var tableAskOrder: [String] = []
+    private(set) var tableTurns: LiveJSON?
     private var hostDiceName = "Broadcaster"
     /// The colour list changed, for the host's own dice tray.
     var onColors: ((LiveJSON) -> Void)?
@@ -410,6 +435,9 @@ final class LiveHostEngine {
             if playerSounds == .gm { transport.send(catalogMessage, to: peer) }
             if !rollLog.isEmpty { transport.send(["t": "rolls", "list": Array(rollLog.suffix(30))], to: peer) }
             transport.send(colorsMessage, to: peer)
+            if let tableDice { transport.send(tableDice, to: peer) }
+            for id in tableAskOrder { if let ask = tableAsks[id], ask["to"] == nil { transport.send(ask, to: peer) } }
+            if let tableTurns { transport.send(tableTurns, to: peer) }
             send(ambience, to: peer)
             send(await prefetchMessage(), to: peer)
             let now = LiveNet.now
@@ -457,9 +485,13 @@ final class LiveHostEngine {
         guard var start = LiveRolls.cleanStart(message), let id = LiveNet.string(start["id"]), rollStarts[id] == nil else { return }
         let fallback = LiveNet.string(start["by"]) ?? ""
         start["by"] = String((name.isEmpty ? (fallback.isEmpty ? "Someone" : fallback) : name).prefix(40))
+        // Only the broadcaster can roll in secret.
+        if peer != nil { start["hidden"] = nil }
         // Everyone rolls in their own colour; no colour, no roll.
         guard let color = diceColors[peer ?? "host"] else { return }
         start["color"] = color
+        // Who rolled ("host" for the broadcaster): roll requests and initiative go by it.
+        start["peer"] = peer ?? "host"
         rollStarts[id] = (start, peer, false)
         rollOrder.append(id)
         if rollOrder.count > 60 { rollStarts[rollOrder.removeFirst()] = nil }
@@ -473,10 +505,12 @@ final class LiveHostEngine {
               let kinds = entry.start["kinds"] as? [String],
               let values = LiveRolls.cleanValues(message["values"], kinds: kinds) else { return }
         rollStarts[id]?.done = true
+        // A hidden roll's numbers stay with the broadcaster.
+        if (entry.start["hidden"] as? Bool) == true { return }
         let result: LiveJSON = ["t": "rollResult", "id": id, "values": values]
         transport.send(result, to: nil)
         var logged: LiveJSON = ["id": id, "values": values, "at": LiveNet.now]
-        for key in ["by", "mode", "modifier", "groups"] { logged[key] = entry.start[key] }
+        for key in ["by", "mode", "modifier", "groups", "custom", "ask"] { logged[key] = entry.start[key] }
         rollLog.append(logged)
         if rollLog.count > 100 { rollLog.removeFirst() }
         if peer != nil { onRoll?(result) }
@@ -524,6 +558,57 @@ final class LiveHostEngine {
 
     func rollResult(_ message: LiveJSON) {
         enqueue { [weak self] in self?.finishRoll(message, peer: nil) }
+    }
+
+    /// The broadcaster's table (from its own screen): shared custom dice, roll
+    /// requests and initiative, sent on to listeners and remembered for late joiners.
+    ///   customDice { list }             the broadcaster's custom dice, for listeners to roll
+    ///   ask { id, kind, label, …, to }  a roll request (to: listener ids, or everyone)
+    ///   askClosed { id } · askResult { id, … }
+    ///   turns { phase, round, order, current }
+    func table(_ message: LiveJSON) {
+        enqueue { [weak self] in
+            guard let self else { return }
+            guard let data = try? JSONSerialization.data(withJSONObject: message), data.count <= 64 * 1024 else { return }
+            switch LiveNet.string(message["t"]) {
+            case "customDice":
+                let list = ((message["list"] as? [Any]) ?? []).prefix(40).compactMap(CustomDie.clean)
+                let m: LiveJSON = ["t": "customDice", "list": list.map(\.json)]
+                self.tableDice = m
+                self.transport.send(m, to: nil)
+            case "ask":
+                guard LiveRolls.isId(message["id"]), let id = LiveNet.string(message["id"]) else { return }
+                var ask = message
+                if let raw = message["to"] as? [Any] {
+                    let to = raw.compactMap { LiveNet.string($0) }.filter { self.peers[$0] != nil }
+                    ask["to"] = to
+                    for peer in to { self.transport.send(ask, to: peer) }
+                } else {
+                    ask["to"] = nil
+                    self.transport.send(ask, to: nil)
+                }
+                if self.tableAsks[id] == nil { self.tableAskOrder.append(id) }
+                self.tableAsks[id] = ask
+            case "askClosed", "askResult":
+                let id = LiveNet.string(message["id"]) ?? ""
+                let ask = self.tableAsks[id]
+                let closing = LiveNet.string(message["t"]) == "askClosed"
+                if closing {
+                    self.tableAsks[id] = nil
+                    self.tableAskOrder.removeAll { $0 == id }
+                }
+                if closing, let to = ask?["to"] as? [String] {
+                    for peer in to { self.transport.send(message, to: peer) }
+                } else {
+                    self.transport.send(message, to: nil)
+                }
+            case "turns":
+                self.tableTurns = LiveNet.string(message["phase"]) == "off" ? nil : message
+                self.transport.send(message, to: nil)
+            default:
+                break
+            }
+        }
     }
 
     // MARK: Listeners' sounds
@@ -902,9 +987,9 @@ final class LiveListenerEngine {
             socket.close()
         case "pong": addClockSample(message)
         case "scene": onScene?(LiveNet.string(message["name"]))
-        case "roll", "rollResult", "rolls":
+        case "roll", "rollResult", "rolls", "customDice", "ask", "askClosed", "askResult":
             onRoll?(message)
-        case "diceColors":
+        case "diceColors", "turns":
             var tagged = message
             tagged["you"] = peerId ?? ""
             onRoll?(tagged)

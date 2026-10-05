@@ -310,6 +310,91 @@ test('dice rolls go to everyone, named by the host, and late joiners get the log
   }
 });
 
+test('hidden rolls, custom dice, roll requests and the turn order', async () => {
+  const transport = new LanHostTransport({ name: 'Table' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Table', transport, resolveSound: () => null });
+  const url = `ws://127.0.0.1:${transport.port}`;
+  const sam = new LiveListener({ cacheDir: tempDir('table-sam'), name: 'Sam' });
+  const ana = new LiveListener({ cacheDir: tempDir('table-ana'), name: 'Ana' });
+  const samGot = [];
+  const anaGot = [];
+  sam.on('roll', (m) => samGot.push(m));
+  ana.on('roll', (m) => anaGot.push(m));
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const throwOf = { p: [0, 0.5], h: 3, v: [0, -1], w: [1, 2, 3], q: [0, 0, 0, 1] };
+  try {
+    sam.connect(url);
+    ana.connect(url);
+    await waitFor(host, 'peers', (list) => list.length === 2);
+    const [samPeer, anaPeer] = ['Sam', 'Ana'].map((n) => [...host.peers].find(([, p]) => p.name === n)[0]);
+    host.setHostColor('#2a5bd7', 'Jo');
+    sam.sendRoll({ t: 'diceColor', color: '#b3261e' });
+    await wait(100);
+
+    // A hidden roll: listeners see the dice start, never the result, and it isn't logged.
+    host.roll({ id: 'h1', kinds: ['d20'], dice: [throwOf], groups: [{ type: 'd20', dice: [0] }], hidden: true }, 'Jo');
+    host.rollResult({ id: 'h1', values: [17] });
+    await wait(150);
+    const hidden = samGot.filter((m) => m.id === 'h1');
+    assert.deepEqual(hidden.map((m) => [m.t, m.hidden]), [['roll', true]]);
+    assert.equal(hidden[0].peer, 'host', 'starts say who rolled');
+    assert.equal(host.rollLog.length, 0);
+    // Only the broadcaster can hide a roll.
+    sam.sendRoll({ t: 'roll', id: 's1', hidden: true, ask: 'ask-1', kinds: ['d20'], dice: [throwOf], groups: [{ type: 'd20', dice: [0] }] });
+    await wait(150);
+    const samStart = anaGot.find((m) => m.id === 's1');
+    assert.equal(samStart.hidden, undefined);
+    assert.equal(samStart.ask, 'ask-1', 'a roll answering a request says which');
+    assert.equal(samStart.peer, samPeer);
+
+    // Custom dice: cleaned, and rolled by their faces.
+    const loot = { id: 'loot', name: 'Loot', sides: 6, faces: ['Gold', 'Gem', 'Potion', 'Scroll', 'Nothing', 'Mimic!'] };
+    host.table({ t: 'customDice', list: [loot, { id: 'bad', sides: 7, faces: [] }] });
+    await wait(100);
+    assert.deepEqual(anaGot.filter((m) => m.t === 'customDice').pop().list.map((d) => d.id), ['loot']);
+    host.roll({ id: 'h2', kinds: ['d6', 'coin'], dice: [throwOf, throwOf], groups: [{ type: 'custom', die: 'loot', dice: [0] }, { type: 'coin', dice: [1] }], custom: [loot] }, 'Jo');
+    host.rollResult({ id: 'h2', values: [6, 2] });
+    await wait(150);
+    assert.deepEqual(anaGot.find((m) => m.t === 'roll' && m.id === 'h2').custom, [loot]);
+    assert.deepEqual(anaGot.find((m) => m.t === 'rollResult' && m.id === 'h2').values, [6, 2]);
+
+    // A request to Ana only; an open one to everyone; the turn order.
+    host.table({ t: 'ask', id: 'ask-ana', kind: 'check', label: 'Wisdom save', counts: { d20: 1 }, dc: 12, to: [anaPeer, 'nobody'] });
+    host.table({ t: 'ask', id: 'ask-all', kind: 'initiative', label: 'Initiative', counts: { d20: 1 } });
+    host.table({ t: 'turns', phase: 'running', round: 1, current: 0, order: [{ name: 'Sam', peer: samPeer, total: 18 }, { name: 'Goblin', peer: null, total: 9 }] });
+    await wait(150);
+    assert.deepEqual(samGot.filter((m) => m.t === 'ask').map((m) => m.id), ['ask-all']);
+    assert.deepEqual(anaGot.filter((m) => m.t === 'ask').map((m) => m.id), ['ask-ana', 'ask-all']);
+    assert.deepEqual(anaGot.find((m) => m.id === 'ask-ana').to, [anaPeer]);
+    const turns = samGot.filter((m) => m.t === 'turns').pop();
+    assert.equal(turns.you, samPeer, 'the turn order says which entry is you');
+
+    // A late joiner gets the custom dice, open requests to everyone and the turn order.
+    const late = new LiveListener({ cacheDir: tempDir('table-late'), name: 'Late' });
+    const lateGot = [];
+    late.on('roll', (m) => lateGot.push(m));
+    late.connect(url);
+    await waitFor(late, 'roll', (m) => m.t === 'turns');
+    await wait(100);
+    assert.ok(lateGot.some((m) => m.t === 'customDice'));
+    assert.deepEqual(lateGot.filter((m) => m.t === 'ask').map((m) => m.id), ['ask-all']);
+    host.table({ t: 'askClosed', id: 'ask-all' });
+    host.table({ t: 'askResult', id: 'ask-ana', kind: 'check', label: 'Wisdom save', results: [{ name: 'Ana', total: 14, pass: true }] });
+    host.table({ t: 'turns', phase: 'off' });
+    await wait(150);
+    assert.ok(lateGot.some((m) => m.t === 'askClosed' && m.id === 'ask-all'));
+    assert.ok(samGot.some((m) => m.t === 'askResult'));
+    assert.equal(host.tableState.turns, null);
+    assert.equal(host.tableState.asks.has('ask-all'), false);
+    late.leave();
+  } finally {
+    sam.leave();
+    ana.leave();
+    transport.close();
+  }
+});
+
 let createRelay = null;
 try { ({ createRelay } = require('../../live-relay/server')); } catch { /* relay deps not installed */ }
 

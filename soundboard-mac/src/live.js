@@ -173,8 +173,11 @@ async function chunkOf(file, hash, ext, index) {
 // ---------------------------------------------------------------------------
 // Dice rolls, shared with everyone in the session (see PROTOCOL.md, Dice).
 
-const DIE_KINDS = { d4: [1, 4], d6: [1, 6], d8: [1, 8], d10: [0, 9], d10t: [0, 9], d12: [1, 12], d20: [1, 20] };
-const ROLL_TYPES = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
+const DiceRules = require('./renderer/dice-geometry');
+
+const DIE_KINDS = { d4: [1, 4], d6: [1, 6], d8: [1, 8], d10: [0, 9], d10t: [0, 9], d12: [1, 12], d20: [1, 20], coin: [1, 2] };
+const ROLL_TYPES = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100', 'coin', 'custom'];
+const ROLL_ID = /^[\w-]{1,60}$/;
 const MAX_ROLL_DICE = 40;
 const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : 0; };
 
@@ -192,18 +195,32 @@ function cleanRollStart(m) {
     q: [0, 1, 2, 3].map((i) => num(d?.q?.[i], -1, 1)),
   }));
   if (dice.length !== kinds.length) return null;
-  const groups = (Array.isArray(m.groups) ? m.groups : []).slice(0, MAX_ROLL_DICE).map((g) => ({
-    type: ROLL_TYPES.includes(g?.type) ? g.type : null,
-    dice: (Array.isArray(g?.dice) ? g.dice : []).slice(0, 2).map((i) => Math.trunc(num(i, 0, kinds.length - 1))),
-  }));
+  // Custom dice used in the roll, with their words, so every device can draw them.
+  const custom = (Array.isArray(m.custom) ? m.custom : []).slice(0, 10).map(DiceRules.cleanCustom).filter(Boolean);
+  const groups = (Array.isArray(m.groups) ? m.groups : []).slice(0, MAX_ROLL_DICE).map((g) => {
+    const group = {
+      type: ROLL_TYPES.includes(g?.type) ? g.type : null,
+      dice: (Array.isArray(g?.dice) ? g.dice : []).slice(0, 2).map((i) => Math.trunc(num(i, 0, kinds.length - 1))),
+    };
+    if (group.type === 'custom') {
+      group.die = String(g.die || '');
+      if (!custom.some((d) => d.id === group.die)) group.type = null;
+    }
+    return group;
+  });
   if (!groups.length || groups.some((g) => !g.type || !g.dice.length)) return null;
-  return {
+  const start = {
     t: 'roll', id, kinds, dice, groups,
     mode: ['normal', 'adv', 'dis'].includes(m.mode) ? m.mode : 'normal',
     modifier: Math.trunc(num(m.modifier, -99, 99)),
     color: /^#[0-9a-f]{6}$/i.test(String(m.color)) ? String(m.color) : '#2a5bd7',
     by: String(m.by || '').slice(0, 40),
   };
+  if (custom.length) start.custom = custom;
+  // A roll asked for by the broadcaster (a check, initiative, who goes first).
+  if (ROLL_ID.test(String(m.ask || ''))) start.ask = String(m.ask);
+  if (m.hidden === true) start.hidden = true;
+  return start;
 }
 
 // What each die of a roll shows, checked against the dice.
@@ -401,6 +418,8 @@ class LiveHost extends EventEmitter {
     this.rollStarts = new Map(); // roll id -> { start, peer } (recent rolls in progress)
     this.rollLog = []; // finished rolls, for listeners who join later
     this.diceColors = new Map(); // peer (or 'host') -> dice colour
+    // The broadcaster's table: shared custom dice, open roll requests, initiative.
+    this.tableState = { customDice: null, asks: new Map(), turns: null };
     this.peers = new Map(); // peer -> { name, device, allowed: Set<hash>, cued, lastCue, offers, fetcher, waitingCues }
     this.files = new Map(); // hash -> { file, ext }
     this.active = new Map(); // pid -> { message, group, until }
@@ -447,6 +466,10 @@ class LiveHost extends EventEmitter {
       if (this.playerSounds === 'gm') this.transport.send(peer, this.catalogMessage());
       if (this.rollLog.length) this.transport.send(peer, { t: 'rolls', list: this.rollLog.slice(-30) });
       this.transport.send(peer, this.colorsMessage());
+      // Catch up on the table: custom dice, requests still open for everyone, initiative.
+      if (this.tableState.customDice) this.transport.send(peer, this.tableState.customDice);
+      for (const ask of this.tableState.asks.values()) if (!ask.to) this.transport.send(peer, ask);
+      if (this.tableState.turns) this.transport.send(peer, this.tableState.turns);
       await this.sendTo(peer, this.ambience);
       const prefetch = await this.prefetchMessage();
       await this.sendTo(peer, prefetch);
@@ -482,10 +505,14 @@ class LiveHost extends EventEmitter {
     const start = cleanRollStart(message);
     if (!start || this.rollStarts.has(start.id)) return;
     start.by = String(name || start.by || 'Someone').slice(0, 40);
+    // Only the broadcaster can roll in secret.
+    if (peer) delete start.hidden;
     // Everyone rolls in their own colour; no colour, no roll.
     const color = this.diceColors.get(peer || 'host');
     if (!color) return;
     start.color = color;
+    // Who rolled ('host' for the broadcaster): roll requests and initiative go by it.
+    start.peer = peer || 'host';
     this.rollStarts.set(start.id, { start, peer });
     if (this.rollStarts.size > 60) this.rollStarts.delete(this.rollStarts.keys().next().value);
     this.transport.send(null, start);
@@ -500,11 +527,45 @@ class LiveHost extends EventEmitter {
     if (!values) return;
     entry.done = true;
     const result = { t: 'rollResult', id: entry.start.id, values };
+    // A hidden roll's numbers stay with the broadcaster.
+    if (entry.start.hidden) return;
     this.transport.send(null, result);
-    const { id, by, mode, modifier, groups } = entry.start;
-    this.rollLog.push({ id, by, mode, modifier, groups, values, at: Date.now() });
+    const { id, by, mode, modifier, groups, custom, ask } = entry.start;
+    this.rollLog.push({ id, by, mode, modifier, groups, custom, ask, values, at: Date.now() });
     if (this.rollLog.length > 100) this.rollLog.shift();
     if (peer) this.emit('roll', result);
+  }
+
+  // The broadcaster's table (from its own window): shared custom dice, roll
+  // requests and initiative, sent on to listeners and remembered for late joiners.
+  //   customDice { list }            the broadcaster's custom dice, for listeners to roll
+  //   ask { id, kind, label, … , to } a roll request (to: listener ids, or everyone)
+  //   askClosed { id } · askResult { id, … }
+  //   turns { phase, round, order, current }
+  table(message) {
+    return this.enqueue(() => {
+      const m = message && typeof message === 'object' ? message : {};
+      if (JSON.stringify(m).length > 64 * 1024) return;
+      if (m.t === 'customDice') {
+        const list = (Array.isArray(m.list) ? m.list : []).slice(0, 40).map(DiceRules.cleanCustom).filter(Boolean);
+        this.tableState.customDice = { t: 'customDice', list };
+        this.transport.send(null, this.tableState.customDice);
+      } else if (m.t === 'ask' && ROLL_ID.test(String(m.id || ''))) {
+        const to = Array.isArray(m.to) ? m.to.map(String).filter((p) => this.peers.has(p)) : null;
+        const ask = { ...m, to };
+        this.tableState.asks.set(ask.id, ask);
+        if (to) for (const peer of to) this.transport.send(peer, ask);
+        else this.transport.send(null, ask);
+      } else if (m.t === 'askClosed' || m.t === 'askResult') {
+        const ask = this.tableState.asks.get(String(m.id || ''));
+        if (m.t === 'askClosed') this.tableState.asks.delete(String(m.id || ''));
+        if (ask?.to && m.t === 'askClosed') for (const peer of ask.to) this.transport.send(peer, m);
+        else this.transport.send(null, m);
+      } else if (m.t === 'turns') {
+        this.tableState.turns = m.phase === 'off' ? null : m;
+        this.transport.send(null, m);
+      }
+    });
   }
 
   // Who has which dice colour: [{ peer, name, color }] ('host' is the broadcaster).
@@ -887,7 +948,14 @@ class LiveListener extends EventEmitter {
         this.emit('roll', message);
         break;
       case 'diceColors':
+      case 'turns':
         this.emit('roll', { ...message, you: this.peerId });
+        break;
+      case 'customDice':
+      case 'ask':
+      case 'askClosed':
+      case 'askResult':
+        this.emit('roll', message);
         break;
       case 'rules':
         this.emit('rules', PLAYER_SOUNDS.includes(message.playerSounds) ? message.playerSounds : 'off');

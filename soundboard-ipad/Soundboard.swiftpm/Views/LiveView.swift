@@ -95,6 +95,7 @@ struct LiveView: View {
                  : "Listeners anywhere join with a code.")
         }
         playerSoundsSection
+        natSoundsSection
         Section {
             Button {
                 live.startHosting()
@@ -173,6 +174,31 @@ struct LiveView: View {
         }
     }
 
+    /// The sounds that play for everyone on a natural 20 or a natural 1: the
+    /// open Scene Kit's sounds first.
+    private var natSoundsSection: some View {
+        let choices = live.natSoundChoices
+        return Section {
+            ForEach([("Natural 20 sound", $live.nat20Sound), ("Natural 1 sound", $live.nat1Sound)], id: \.0) { label, binding in
+                Picker(label, selection: binding) {
+                    Text("None").tag("")
+                    if let kit = choices.kit, !choices.inKit.isEmpty {
+                        Section(kit) {
+                            ForEach(choices.inKit) { Text($0.name).tag($0.id.uuidString) }
+                        }
+                    }
+                    Section(choices.kit == nil ? "Sounds" : "All sounds") {
+                        ForEach(choices.others) { Text($0.name).tag($0.id.uuidString) }
+                    }
+                }
+            }
+        } header: {
+            Text("Dice")
+        } footer: {
+            Text("Plays for everyone when anyone rolls a natural 20 or a natural 1.")
+        }
+    }
+
     // MARK: Hosting
 
     @ViewBuilder
@@ -241,8 +267,13 @@ struct LiveView: View {
             Text("Whisper sends the next sound you play to that listener only. Remove takes a listener out of the session. Mark sounds Broadcaster only or Buzz in each sound's Edit screen.")
         }
         playerSoundsSection
+        natSoundsSection
         Section {
-            Button("End Session", role: .destructive) { live.leave() }
+            Button("End Session", role: .destructive) {
+                live.leave()
+                // Out of the way of the session recap.
+                dismiss()
+            }
         }
     }
 

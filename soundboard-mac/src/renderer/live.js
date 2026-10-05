@@ -1,4 +1,4 @@
-/* global api, $, sounds, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS */
+/* global api, $, sounds, play, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS */
 // Live Session in the window: the Live dialog, forwarding what the board plays
 // to listeners (when hosting), and playing what the host sends (when tuned in)
 // on a full-window stage in the theme's style, with the player's own sound pads.
@@ -42,6 +42,8 @@ const Live = (() => {
       playerSounds: 'off',
       // A player's chosen sounds: the GM's (catalog ids) and their own (library ids).
       picksGM: [], picksOwn: [],
+      // Scene Kit sounds that play for everyone on a natural 20 or a natural 1 ('' for none).
+      nat20Sound: '', nat1Sound: '',
     };
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
@@ -844,7 +846,8 @@ const Live = (() => {
   }
 
   function rollStart(start) {
-    const message = { t: 'roll', ...start, by: myName() };
+    // The broadcaster can roll for someone else (an enemy's initiative).
+    const message = { t: 'roll', ...start, by: (hosting() && start.by) || myName() };
     if (hosting()) api.live.hostEvent(message);
     else if (listening()) api.live.roll(message);
   }
@@ -855,14 +858,70 @@ const Live = (() => {
     else if (listening()) api.live.roll(message);
   }
 
+  // This device's id in the session ('host' for the broadcaster).
+  let you = null;
   api.live.onRoll((message) => {
     const tray = window.DiceTray;
     if (!tray || !(hosting() || listening())) return;
+    if (message.you) you = message.you;
     if (message.t === 'roll') tray.remoteStart(message);
     else if (message.t === 'rollResult') tray.remoteResult(message);
     else if (message.t === 'rolls') tray.setHistory(message.list);
     else if (message.t === 'diceColors') tray.setSessionColors(message.colors || [], message.you);
+    else if (message.t === 'customDice') tray.setSharedCustom(message.list);
+    // Roll requests, results and the turn order (table.js).
+    else if (['ask', 'askClosed', 'askResult', 'turns'].includes(message.t)) window.Table?.receive(message);
   });
+
+  // The broadcaster's custom dice, for listeners to roll too.
+  function shareCustomDice(list) {
+    if (hosting()) api.live.hostEvent({ t: 'customDice', list: list || [] });
+  }
+
+  // Roll requests and the turn order go from the broadcaster's window to listeners.
+  function tableSend(message) {
+    if (hosting()) api.live.hostEvent(message);
+  }
+
+  // A natural 20 or 1 plays the broadcaster's chosen sound for everyone.
+  const hookNaturals = () => window.DiceTray.onNatural((n) => {
+    const id = n === 20 ? settings.nat20Sound : settings.nat1Sound;
+    if (!hosting() || !id || !sounds.some((s) => s.id === id)) return;
+    play(id);
+  });
+  // dice.js is a module, so it loads after this script.
+  if (window.DiceTray) hookNaturals(); else window.addEventListener('dice-ready', hookNaturals, { once: true });
+
+  // Choose the natural 20 and natural 1 sounds: the Scene Kit's first, then the rest.
+  function natSoundsField() {
+    const wrap = el('div', 'live-nat-sounds');
+    const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
+    const inKit = new Set(kit ? kit.sections.flatMap((sec) => sec.items).filter((i) => i.type === 'sound').map((i) => i.id) : []);
+    for (const [key, label] of [['nat20Sound', 'Natural 20 sound'], ['nat1Sound', 'Natural 1 sound']]) {
+      const select = el('select');
+      select.id = `live-${key}`;
+      const none = el('option', null, 'None');
+      none.value = '';
+      select.append(none);
+      const groups = kit ? [[kit.name || 'This Scene Kit', sounds.filter((x) => inKit.has(x.id))], ['All sounds', sounds.filter((x) => !inKit.has(x.id))]] : [['Sounds', sounds]];
+      for (const [title, list] of groups) {
+        if (!list.length) continue;
+        const group = el('optgroup');
+        group.label = title;
+        for (const sound of list) {
+          const option = el('option', null, sound.name);
+          option.value = sound.id;
+          group.append(option);
+        }
+        select.append(group);
+      }
+      select.value = sounds.some((x) => x.id === settings[key]) ? settings[key] : '';
+      select.addEventListener('change', () => { settings[key] = select.value; saveSettings(); });
+      wrap.append(field(label, select));
+    }
+    wrap.append(el('p', 'muted small', 'Plays for everyone when anyone rolls a natural 20 or a natural 1.'));
+    return wrap;
+  }
 
   $('#dice-btn').addEventListener('click', () => window.DiceTray?.open());
 
@@ -874,11 +933,23 @@ const Live = (() => {
     status = next || { role: null };
     if (next && next.error) error = next.error;
     if (was === 'listen' && status.role !== 'listen') { Mirror.stopAll(true); allowed = 'off'; catalog = []; }
-    // A new session starts a new roll log.
+    // A new session starts a new roll log; when it ends, the recap.
     if (status.role && !was) window.DiceTray?.resetLog();
+    if (!status.role && was) {
+      you = null;
+      window.Table?.reset();
+      // Ending your own broadcast: the dialog makes way for the recap.
+      if (was === 'host' && !status.error && $('#live-dialog').open) $('#live-dialog').close();
+      window.DiceTray?.showRecap();
+    }
     // Dice colours belong to the session: claim yours when it starts, forget them when it ends.
     if (!status.role && was) window.DiceTray?.setSessionColors(null);
-    if (status.role === 'host' && was !== 'host') claimColor(window.DiceTray?.preferredColor() || '#b3261e');
+    if (status.role === 'host' && was !== 'host') {
+      you = 'host';
+      claimColor(window.DiceTray?.preferredColor() || '#b3261e');
+      shareCustomDice(window.DiceTray?.myCustomDice());
+    }
+    window.Table?.statusChanged();
     // Tuning in: the dialog closes and the stage takes over the window until you leave.
     if (status.role === 'listen') { if ($('#live-dialog').open) $('#live-dialog').close(); Stage.show(); } else Stage.hide();
     // No need to add sounds while broadcasting.
@@ -1009,6 +1080,7 @@ const Live = (() => {
       body.append(modes);
       if (settings.mode === 'local' && !bonjour) body.append(el('p', 'live-error', 'Local sessions aren’t available in this build. Use Online instead.'));
       body.append(playerSoundsField());
+      body.append(natSoundsField());
       const start = el('button', 'primary', busy ? 'Starting…' : 'Start Broadcasting');
       start.type = 'button';
       start.disabled = busy;
@@ -1102,6 +1174,7 @@ const Live = (() => {
     body.append(list);
     body.append(el('p', 'muted small', 'Whisper sends the next sound you play to that listener only. Remove takes a listener out of the session. Mark sounds Broadcaster only (never sent) or Buzz (vibrates phones) in each sound’s Edit window.'));
     body.append(playerSoundsField());
+    body.append(natSoundsField());
     const end = el('button', 'danger', 'End Session');
     end.type = 'button';
     end.addEventListener('click', () => run(() => api.live.leave()));
@@ -1125,5 +1198,19 @@ const Live = (() => {
 
   api.live.status().then((current) => { bonjour = current.bonjour !== false; setStatus(current); });
 
-  return { soundPlayed, soundStopped, soundVolume, stoppedAll, hosting, listening, myName, rollStart, rollResult, claimColor };
+  return {
+    soundPlayed, soundStopped, soundVolume, stoppedAll, hosting, listening, myName, rollStart, rollResult, claimColor,
+    shareCustomDice, tableSend,
+    you: () => you,
+    peers: () => status.peers || [],
+    // A "your turn" nudge: the window shakes and flashes, and a notification if it's behind.
+    nudge: (title, body) => {
+      document.body.classList.remove('live-buzz');
+      void document.body.offsetWidth;
+      document.body.classList.add('live-buzz');
+      setTimeout(() => document.body.classList.remove('live-buzz'), 450);
+      if (listening()) Stage.flash();
+      api.live.notify({ title, body });
+    },
+  };
 })();
