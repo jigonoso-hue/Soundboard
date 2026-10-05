@@ -37,12 +37,12 @@ struct ContentView: View {
                             .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                 // On a full-width iPad the browser sits beside the board, like on the Mac.
                 if showBrowser && sizeClass == .regular {
                     Divider()
                     YouTubePanel(controller: youtube)
-                        .frame(maxWidth: .infinity)
+                        .frame(minWidth: 320, maxWidth: .infinity)
                 }
             }
         }

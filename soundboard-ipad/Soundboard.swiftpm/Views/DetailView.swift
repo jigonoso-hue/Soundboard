@@ -22,6 +22,8 @@ struct DetailView: View {
     @State private var trimming: TrimRequest?
     @State private var showSettings = false
     @State private var showLive = false
+    /// What the Files picker offers: audio (MP3, M4A, WAV…) or video.
+    @State private var importingVideo = false
 
     struct TrimRequest: Identifiable {
         let id = UUID()
@@ -52,6 +54,10 @@ struct DetailView: View {
                 LibraryView(destination: destination)
             }
         }
+        // Always fill the column, with the theme's backdrop behind, so nothing
+        // (like the Online panel opening beside it) can leave it a narrow strip.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .themedBackground(themes.theme, page: nil)
         .navigationTitle(kit?.name ?? title)
         .navigationBarTitleDisplayMode(.inline)
         // Scene kits show everything in them, so there's nothing to search there.
@@ -85,7 +91,7 @@ struct DetailView: View {
         }
         .fileImporter(
             isPresented: $showFileImporter,
-            allowedContentTypes: [.audio, .movie],
+            allowedContentTypes: importingVideo ? [.movie] : [.audio, .mp3, .mpeg4Audio, .wav, .aiff],
             allowsMultipleSelection: true,
             onCompletion: importFiles
         )
@@ -125,7 +131,7 @@ struct DetailView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         if destination == .options {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarLeading) {
                 LiveControls(showLive: $showLive)
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -139,8 +145,10 @@ struct DetailView: View {
             }
         } else if kit != nil {
             // In a scene kit: just the master volume, Live and Stop All.
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarLeading) {
                 LiveControls(showLive: $showLive)
+            }
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 HStack(spacing: 6) {
                     Image(systemName: "speaker.fill").font(.caption).foregroundStyle(.secondary)
                     Slider(value: $player.masterVolume, in: 0...1)
@@ -163,8 +171,12 @@ struct DetailView: View {
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
+        // Live (and Whisper/Emphasis while broadcasting) sit on the left, so the
+        // buttons on the right never get pushed out of the toolbar.
+        ToolbarItem(placement: .topBarLeading) {
             LiveControls(showLive: $showLive)
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
                 showSettings = true
             } label: {
@@ -176,9 +188,16 @@ struct DetailView: View {
             Menu {
                 Section("Add Sounds") {
                     Button {
+                        importingVideo = false
                         showFileImporter = true
                     } label: {
-                        Label("Audio or Video from Files…", systemImage: "folder")
+                        Label("Audio from Files (MP3, M4A, WAV…)", systemImage: "music.note.list")
+                    }
+                    Button {
+                        importingVideo = true
+                        showFileImporter = true
+                    } label: {
+                        Label("Video from Files…", systemImage: "film")
                     }
                     Button {
                         showPhotoPicker = true
