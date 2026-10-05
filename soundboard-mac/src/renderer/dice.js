@@ -1183,19 +1183,25 @@ function renderUI() {
     colors.append(picker);
   }
   top.append(colors, el('span', 'spacer'));
-  // The broadcaster's table tools (roll requests, initiative, who wins).
+  // The pills scroll sideways in a narrow window rather than squashing.
+  const pills = el('div', 'dice-top-pills');
+  // The broadcaster's table tools (roll requests, initiative, who wins), grouped.
+  const tools = el('div', 'dice-top-group');
+  tools.setAttribute('aria-label', 'Table');
   for (const [name, p] of panels) {
     if (p.visible && !p.visible()) continue;
     const b = pill(p.label, p.title, () => togglePanel(name), panel === name ? 'on' : '');
     b.dataset.panel = name;
-    top.append(b);
+    tools.append(b);
   }
+  if (tools.childNodes.length) pills.append(tools);
   for (const [name, label, title] of [['custom', 'Custom dice', 'Your own dice, the broadcaster\'s and ready-made ones'], ['stats', 'Stats', 'Everyone\'s rolls, averages and natural 20s and 1s'], ['log', log.length ? `Log · ${log.length}` : 'Log', 'Every roll: who rolled what']]) {
     const b = pill(label, title, () => togglePanel(name), panel === name ? 'on' : '');
     b.dataset.panel = name;
-    top.append(b);
+    pills.append(b);
   }
-  top.append(pill('Close', 'Close the dice (Esc)', close));
+  pills.append(pill('Close', 'Close the dice (Esc)', close));
+  top.append(pills);
 
   ui.textContent = '';
   const pool = el('div', 'dice-pool');
@@ -1238,7 +1244,7 @@ function renderUI() {
   actions.append(mod, adv, dis);
   if (hosting()) {
     // Like Whisper and Emphasis: for the next roll only.
-    const hide = el('button', `dice-hidden${hiddenArmed ? ' on' : ''}`, hiddenArmed ? '🙈 Hidden' : '🙈');
+    const hide = el('button', `dice-hidden${hiddenArmed ? ' on' : ''}`, hiddenArmed ? '🙈 Hidden' : '🙈 Hide');
     hide.type = 'button';
     hide.title = 'Hidden: listeners see your next roll\'s dice but not the numbers';
     hide.setAttribute('aria-pressed', String(hiddenArmed));

@@ -712,7 +712,7 @@ private struct ResultCardView: View {
 }
 
 /// The turn order at the top of the screen.
-private struct TurnStrip: View {
+struct TurnStrip: View {
     @ObservedObject var table: DiceTable
     let turns: DiceTable.Turns
 
@@ -766,10 +766,25 @@ private struct TurnStrip: View {
     }
 }
 
+/// The turn order in the dice tray, under its top bar (when there is one).
+struct TurnStripSlot: View {
+    @ObservedObject var table: DiceTable
+
+    var body: some View {
+        if let turns = table.turns {
+            TurnStrip(table: table, turns: turns)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+}
+
 /// Request cards and results down the left, the turn order along the top, and
 /// a big "Your turn!" when it's yours. Shown over the board, the stage and the tray.
 struct TableOverlay: View {
     @ObservedObject var table: DiceTable
+    /// The dice tray shows the turn order itself, under its top bar.
+    var showStrip = true
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -786,10 +801,11 @@ struct TableOverlay: View {
             .padding(.horizontal, 16)
             .padding(.top, 84)
 
-            if let turns = table.turns {
+            if showStrip, let turns = table.turns {
+                // Below the navigation bar, clear of the toolbar buttons.
                 TurnStrip(table: table, turns: turns)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 6)
+                    .padding(.top, 52)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             if table.yourTurn {

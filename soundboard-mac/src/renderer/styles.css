@@ -1301,7 +1301,7 @@ dialog label.picker-row input { width: auto; }
 .dice-color:hover:not(:disabled) { border-color: #fff; }
 .dice-pill { background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.18); color: #fff; border-radius: 999px; padding: 6px 14px; font-weight: 600; }
 .dice-pill:hover:not(:disabled) { background: rgba(0,0,0,0.6); border-color: rgba(255,255,255,0.35); }
-.dice-ui { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 18px; background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); max-width: calc(100vw - 32px); }
+.dice-ui { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); width: max-content; display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 18px; background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); max-width: calc(100vw - 32px); }
 .dice-pool, .dice-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .dice-type { position: relative; min-width: 54px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-weight: 700; }
 .dice-type.on { background: color-mix(in srgb, var(--accent) 45%, rgba(0,0,0,0.3)); border-color: var(--accent); }
@@ -1453,7 +1453,7 @@ dialog label.picker-row input { width: auto; }
 .table-winner { font-size: 24px; font-weight: 900; margin: 6px 0 10px; color: #ffd27a; }
 .table-result-card .table-result-list { margin-top: 8px; }
 
-.table-turns { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 56; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 180px); padding: 5px 8px 5px 14px; border-radius: 999px; color: #fff; font-size: 13px; background: rgba(14,14,22,0.88); backdrop-filter: blur(10px); border: 1px solid rgba(255,138,101,0.6); box-shadow: 0 8px 24px rgba(0,0,0,0.45); white-space: nowrap; overflow: hidden; -webkit-app-region: no-drag; }
+.table-turns { position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 56; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 180px); padding: 5px 8px 5px 14px; border-radius: 999px; color: #fff; font-size: 13px; background: rgba(14,14,22,0.88); backdrop-filter: blur(10px); border: 1px solid rgba(255,138,101,0.6); box-shadow: 0 8px 24px rgba(0,0,0,0.45); white-space: nowrap; overflow: hidden; -webkit-app-region: no-drag; }
 .table-turns-title { font-weight: 800; opacity: 0.8; }
 .table-turns-now { font-weight: 900; }
 .table-turns-next { opacity: 0.75; }
@@ -1470,3 +1470,11 @@ dialog label.picker-row input { width: auto; }
 @keyframes table-turn { 0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; } 12% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; } 20% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } }
 .live-nat-sounds { display: flex; flex-direction: column; }
 @media (prefers-reduced-motion: reduce) { .table-ask, .table-result-card, .table-your-turn, .table-turns.mine { animation: none; } }
+.dice-top-pills { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.dice-top-pills::-webkit-scrollbar { display: none; }
+.dice-top-pills > * { flex: none; }
+.dice-top-group { display: flex; gap: 6px; padding: 3px; border-radius: 999px; background: rgba(255,210,122,0.12); border: 1px solid rgba(255,210,122,0.35); }
+.dice-top-group .dice-pill { border-color: transparent; }
+.dice-top .spacer { flex: 1; }
+/* The turn order: under the window's toolbar; in the dice tray, above its own top bar. */
+.dice-layer.tray ~ .table-turns { top: 4px; }

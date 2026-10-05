@@ -1439,6 +1439,8 @@ struct DiceView: View {
             DiceStage(tray: tray)
             VStack(spacing: 0) {
                 topBar
+                // The turn order, between the top bar and the result.
+                TurnStripSlot(table: tray.table)
                 if let banner = tray.banner {
                     DiceBanner(entry: banner).padding(.top, 8)
                 }
@@ -1448,7 +1450,7 @@ struct DiceView: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
             if tray.panel != nil { sidePanel }
-            TableOverlay(table: tray.table)
+            TableOverlay(table: tray.table, showStrip: false)
             if tray.showRecap { DiceRecap(tray: tray) }
         }
         .animation(.easeOut(duration: 0.25), value: tray.banner)
@@ -1474,9 +1476,16 @@ struct DiceView: View {
                 HStack(spacing: 8) {
                     // The broadcaster's table tools (roll requests, initiative, who wins).
                     if tray.hosting() {
-                        panelPill("Ask a roll", "ask")
-                        panelPill("Initiative", "initiative")
-                        panelPill("Who wins?", "contest")
+                        HStack(spacing: 6) {
+                            panelPill("Ask a roll", "ask")
+                            panelPill("Initiative", "initiative")
+                            panelPill("Who wins?", "contest")
+                        }
+                        .padding(3)
+                        .background(Color(hex: 0xFFD27A).opacity(0.12), in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color(hex: 0xFFD27A).opacity(0.35)))
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Table")
                     }
                     panelPill("Custom dice", "custom")
                     panelPill("Stats", "stats")
@@ -1616,7 +1625,7 @@ struct DiceView: View {
                 if tray.hosting() {
                     // Like Whisper and Emphasis: for the next roll only.
                     Button { tray.hiddenArmed.toggle() } label: {
-                        Text(tray.hiddenArmed ? "🙈 Hidden" : "🙈").font(.headline.weight(.heavy)).foregroundStyle(Color.white)
+                        Text(tray.hiddenArmed ? "🙈 Hidden" : "🙈 Hide").font(.headline.weight(.heavy)).foregroundStyle(Color.white)
                             .padding(.horizontal, 10)
                             .frame(minWidth: 46, minHeight: 42)
                             .background(tray.hiddenArmed ? Color(hex: 0x5B3FA0) : Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
