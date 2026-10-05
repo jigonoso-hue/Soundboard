@@ -476,7 +476,7 @@ function showAsk(ask) {
   }
   const actions = el('div', 'table-ask-actions');
   const go = (rollMode) => {
-    const id = Tray.roll(rollMode, 1.4, { counts: ask.counts || { d20: 1 }, modifier, ask: ask.id });
+    const id = Tray.roll(rollMode, 1.4, { counts: ask.counts || { d20: 1 }, modifier, ask: ask.id, overlay: true });
     if (id) removeCard(ask.id);
   };
   const d20 = (ask.counts?.d20 || 0) === 1 && Object.keys(ask.counts).length === 1;

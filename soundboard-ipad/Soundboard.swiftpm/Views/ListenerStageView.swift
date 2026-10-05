@@ -80,7 +80,7 @@ struct ListenerStageView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            topBar
+            topBar.diceCover(live.dice, "stageTop")
             Spacer(minLength: 12)
             center
             Spacer(minLength: 12)
@@ -88,7 +88,7 @@ struct ListenerStageView: View {
                 PlayerPads(style: style, choose: { choosingSounds = true })
                     .padding(.bottom, 14)
             }
-            bottomBar
+            bottomBar.diceCover(live.dice, "stageBottom")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)

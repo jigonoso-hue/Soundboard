@@ -153,6 +153,8 @@ struct RollOptions {
     var by: String? = nil
     var owner: String? = nil
     var hidden: Bool? = nil
+    /// Tumble over whatever is on screen (like other people's rolls) instead of opening the tray.
+    var overlay = false
 }
 
 /// A finished roll, for whoever is watching (roll requests, natural 20 sounds).
@@ -485,6 +487,10 @@ final class DiceClack {
 /// own thread.
 final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable {
     static let cameraHeight: Float = 28
+    /// The table's narrower half-size, at least: on a tall, narrow phone screen
+    /// the camera pulls back so the dice aren't huge and have room to land.
+    static let minHalfExtent: Float = 6.4
+    private var cameraHeight: Float = DiceScene.cameraHeight
     static let fov: CGFloat = 30
     static let gravity: Float = 60
 
@@ -590,7 +596,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
 
     /// The floor's half-width and half-depth visible on screen.
     func extents() -> (hx: Float, hz: Float) {
-        let hz = Self.cameraHeight * tan(Float(Self.fov) / 2 * .pi / 180)
+        let hz = cameraHeight * tan(Float(Self.fov) / 2 * .pi / 180)
         return (hz * aspect, hz)
     }
 
@@ -598,6 +604,10 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
     func layout(aspect newAspect: Float) {
         if !walls.isEmpty && abs(aspect - max(0.2, newAspect)) < 0.001 { return }
         aspect = max(0.2, newAspect)
+        let tanHalf = tan(Float(Self.fov) / 2 * .pi / 180)
+        cameraHeight = max(Self.cameraHeight, Self.minHalfExtent / min(1, aspect) / tanHalf)
+        camera.position = SCNVector3(0, cameraHeight, 0)
+        camera.camera?.zFar = Double(cameraHeight + 40)
         walls.forEach { $0.removeFromParentNode() }
         let (hx, hz) = extents()
         let inset: Float = 1
@@ -1230,7 +1240,12 @@ final class DiceTray: ObservableObject {
         start.custom = plan.custom
         start.ask = options.ask
         start.hidden = hidden
-        if !isOpen { open() }
+        if options.overlay && !isOpen {
+            watchTask?.cancel()
+            watching = true
+        } else if !isOpen {
+            open()
+        }
         banner = nil
         scene.volume = volume()
         if fromShake { shakeRoll = id }
@@ -1245,6 +1260,7 @@ final class DiceTray: ObservableObject {
             self.reveal(id: id, start: start, summary: summary, entry: entry)
             self.onResult?(id, values)
             self.finished(RollOutcome(id: id, start: start, values: values, summary: summary, entry: entry))
+            self.endWatch(after: 4.5)
         }
         onStart?(start)
         return id
@@ -1268,7 +1284,11 @@ final class DiceTray: ObservableObject {
                 self.celebrate(id: id, start: start, summary: summary)
                 return
             }
-            let keys = self.isOpen ? ["banner", "controls", "top", "panel"] : ["banner"]
+            // In the tray: its banner, controls, top bar and panel. Over the screen
+            // (someone's roll, or yours from a request card): the banner, the
+            // stage's own buttons and the request and result cards.
+            let keys = self.isOpen ? ["banner", "controls", "top", "panel"]
+                : ["banner", "stageTop", "stageBottom"] + self.covers.keys.filter { $0.hasPrefix("card-") }
             let rects = keys.compactMap { self.covers[$0] }.map { r in
                 CGRect(x: (r.minX - stage.minX - 8) / stage.width, y: (r.minY - stage.minY - 8) / stage.height,
                        width: (r.width + 16) / stage.width, height: (r.height + 16) / stage.height)

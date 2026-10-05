@@ -461,7 +461,7 @@ final class DiceTable: ObservableObject {
 
     /// Rolls for a request card; the card goes away once the dice are thrown.
     func answer(_ ask: Ask, mode: RollMode, modifier: Int) {
-        guard tray?.roll(mode, strength: 1.4, options: RollOptions(counts: ask.counts, modifier: modifier, ask: ask.id)) != nil else { return }
+        guard tray?.roll(mode, strength: 1.4, options: RollOptions(counts: ask.counts, modifier: modifier, ask: ask.id, overlay: true)) != nil else { return }
         cards.removeAll { $0.id == ask.id }
     }
 
@@ -782,6 +782,16 @@ struct TurnStripSlot: View {
     }
 }
 
+/// Marks a card as somewhere landed dice slide away from.
+private struct CoverIfTray: ViewModifier {
+    let table: DiceTable
+    let key: String
+
+    func body(content: Content) -> some View {
+        if let tray = table.tray { content.diceCover(tray, key) } else { content }
+    }
+}
+
 /// Request cards and results down the left, the turn order along the top, and
 /// a big "Your turn!" when it's yours. Shown over the board, the stage and the tray.
 struct TableOverlay: View {
@@ -794,10 +804,12 @@ struct TableOverlay: View {
             // Only the cards themselves take touches; the space around them doesn't.
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(table.cards) { ask in
-                    AskCard(table: table, ask: ask).transition(.move(edge: .leading).combined(with: .opacity))
+                    AskCard(table: table, ask: ask).modifier(CoverIfTray(table: table, key: "card-\(ask.id)"))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
                 ForEach(table.results) { card in
-                    ResultCardView(table: table, card: card).transition(.move(edge: .leading).combined(with: .opacity))
+                    ResultCardView(table: table, card: card).modifier(CoverIfTray(table: table, key: "card-\(card.id)"))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
             }
             .frame(maxWidth: 320, alignment: .leading)

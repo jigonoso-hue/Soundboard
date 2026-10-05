@@ -14,6 +14,9 @@ import * as CANNON from '../../node_modules/cannon-es/dist/cannon-es.js';
 
 const G = DiceGeometry;
 const CAMERA_HEIGHT = 28;
+// The table's narrower half-size, at least: on a tall, narrow phone screen the
+// camera pulls back so the dice aren't huge and have room to land.
+const MIN_HALF_EXTENT = 6.4;
 const FOV = 30;
 const GRAVITY = 60;
 const SETTLE_FRAMES = 24;
@@ -274,6 +277,7 @@ class DiceScene {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 1, 100);
+    this.cameraHeight = CAMERA_HEIGHT;
     this.camera.position.set(0, CAMERA_HEIGHT, 0.001);
     this.camera.up.set(0, 0, -1);
     this.camera.lookAt(0, 0, 0);
@@ -316,7 +320,7 @@ class DiceScene {
 
   // The floor's half-width and half-depth visible on screen.
   extents() {
-    const halfZ = CAMERA_HEIGHT * Math.tan((FOV / 2) * (Math.PI / 180));
+    const halfZ = this.cameraHeight * Math.tan((FOV / 2) * (Math.PI / 180));
     return { hx: halfZ * this.camera.aspect, hz: halfZ };
   }
 
@@ -325,6 +329,11 @@ class DiceScene {
     const h = this.host.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
+    const tan = Math.tan((FOV / 2) * (Math.PI / 180));
+    this.cameraHeight = Math.max(CAMERA_HEIGHT, MIN_HALF_EXTENT / Math.min(1, this.camera.aspect) / tan);
+    this.camera.position.set(0, this.cameraHeight, 0.001);
+    this.camera.lookAt(0, 0, 0);
+    this.camera.far = this.cameraHeight + 40;
     this.camera.updateProjectionMatrix();
     for (const wall of this.walls) this.world.removeBody(wall);
     // Walls a little inside the screen's edges (dice are tall), and a lid.
@@ -705,14 +714,16 @@ function bannerRect() {
 // the tray open, its controls, top bar and side panel.
 function coverRects() {
   const rects = [bannerRect()];
-  if (mode === 'tray') {
-    const base = layer.getBoundingClientRect();
-    for (const node of [ui, top, sidePanel]) {
-      if (node.classList.contains('hidden') || !node.offsetWidth) continue;
-      const r = node.getBoundingClientRect();
-      rects.push({ left: r.left - base.left - 6, right: r.right - base.left + 6, top: r.top - base.top - 6, bottom: r.bottom - base.top + 6 });
-    }
-  }
+  const base = layer.getBoundingClientRect();
+  const add = (node) => {
+    if (!node || node.closest('.hidden') || !node.offsetWidth) return;
+    const r = node.getBoundingClientRect();
+    rects.push({ left: r.left - base.left - 6, right: r.right - base.left + 6, top: r.top - base.top - 6, bottom: r.bottom - base.top + 6 });
+  };
+  if (mode === 'tray') [ui, top, sidePanel].forEach(add);
+  // Over the screen (someone's roll, or yours from a request card): keep clear
+  // of the buttons and cards under the dice, such as the stage's.
+  else document.querySelectorAll('.stage-top, .stage-bottom, .titlebar, .table-turns, .table-ask, .table-result-card').forEach(add);
   return rects;
 }
 
@@ -837,7 +848,7 @@ function claim(hex) {
 let hiddenArmed = false;
 
 // Rolls the chosen dice (or 2d20 for advantage / disadvantage).
-// options: { counts, modifier, ask, by, owner, hidden } override the tray's own
+// options: { counts, modifier, ask, by, owner, hidden, overlay } override the tray's own
 // (a roll request, an enemy's initiative).
 function roll(rollMode = 'normal', strength = 1, options = {}) {
   const counts = options.counts || settings.counts;
@@ -866,7 +877,11 @@ function roll(rollMode = 'normal', strength = 1, options = {}) {
   if (hidden) start.hidden = true;
   mine.add(id);
   const s = ensureScene();
-  if (mode === 'closed' || mode === 'watch') open();
+  // A roll from a request card tumbles over whatever is on screen (like other
+  // people's rolls) instead of opening the tray.
+  const overlay = !!options.overlay && mode !== 'tray';
+  if (overlay) watch();
+  else if (mode === 'closed' || mode === 'watch') open();
   banner.classList.add('hidden');
   s.throw({
     id, owner: options.owner || options.by || 'me', kinds, dice: start.dice, color, local: true, looks: looksFor(start, false),
@@ -878,6 +893,7 @@ function roll(rollMode = 'normal', strength = 1, options = {}) {
       reveal(id, start, summary, entry);
       if (typeof Live !== 'undefined') Live.rollResult({ id, values });
       finished(id, start, values, summary, entry);
+      if (mode === 'watch') endWatch();
     },
   });
   if (typeof Live !== 'undefined') Live.rollStart(start);
