@@ -833,8 +833,14 @@ const Live = (() => {
   function myName() {
     const name = (settings.yourName || '').trim();
     if (hosting()) return name || 'Broadcaster';
-    if (listening()) return name || 'Listener';
+    if (listening()) return name || 'Someone';
     return 'You';
+  }
+
+  // Asks for a dice colour; the broadcaster's app makes sure no one else has it.
+  function claimColor(color) {
+    if (hosting()) api.live.hostEvent({ t: 'diceColor', color, name: myName() });
+    else if (listening()) api.live.roll({ t: 'diceColor', color });
   }
 
   function rollStart(start) {
@@ -855,6 +861,7 @@ const Live = (() => {
     if (message.t === 'roll') tray.remoteStart(message);
     else if (message.t === 'rollResult') tray.remoteResult(message);
     else if (message.t === 'rolls') tray.setHistory(message.list);
+    else if (message.t === 'diceColors') tray.setSessionColors(message.colors || [], message.you);
   });
 
   $('#dice-btn').addEventListener('click', () => window.DiceTray?.open());
@@ -869,6 +876,9 @@ const Live = (() => {
     if (was === 'listen' && status.role !== 'listen') { Mirror.stopAll(true); allowed = 'off'; catalog = []; }
     // A new session starts a new roll log.
     if (status.role && !was) window.DiceTray?.resetLog();
+    // Dice colours belong to the session: claim yours when it starts, forget them when it ends.
+    if (!status.role && was) window.DiceTray?.setSessionColors(null);
+    if (status.role === 'host' && was !== 'host') claimColor(window.DiceTray?.preferredColor() || '#b3261e');
     // Tuning in: the dialog closes and the stage takes over the window until you leave.
     if (status.role === 'listen') { if ($('#live-dialog').open) $('#live-dialog').close(); Stage.show(); } else Stage.hide();
     // No need to add sounds while broadcasting.
@@ -1010,17 +1020,24 @@ const Live = (() => {
       return;
     }
 
-    body.append(field('Your name (shown to the broadcaster)', textInput(settings.yourName, 'e.g. Sam', (v) => { settings.yourName = v; }, 40)));
+    // A name is needed to tune in: everyone sees it on your sounds and dice rolls.
+    const named = () => (settings.yourName || '').trim().length > 0;
+    const nameHint = el('p', 'muted small live-name-hint', 'Enter your name to tune in. Everyone sees it on your sounds and dice rolls.');
+    const syncNamed = () => {
+      nameHint.classList.toggle('live-error', !named());
+      body.querySelectorAll('.tune-in').forEach((b) => { b.disabled = busy || !named(); });
+    };
+    body.append(field('Your name (required)', textInput(settings.yourName, 'e.g. Sam', (v) => { settings.yourName = v; syncNamed(); }, 40)));
+    body.append(nameHint);
     body.append(el('div', 'live-subhead', 'Sessions on this Wi-Fi'));
     const list = el('div', 'live-list');
     if (!sessions.length) list.append(el('p', 'muted small', 'Looking for sessions on this network…'));
     for (const session of sessions) {
       const row = el('div', 'live-row-item');
       row.append(el('span', null, session.name));
-      const join = el('button', 'primary', 'Tune In');
+      const join = el('button', 'primary tune-in', 'Tune In');
       join.type = 'button';
-      join.disabled = busy;
-      join.addEventListener('click', () => run(() => api.live.listen({ url: session.url, name: settings.yourName })));
+      join.addEventListener('click', () => { if (named()) run(() => api.live.listen({ url: session.url, name: settings.yourName.trim() })); });
       row.append(join);
       list.append(row);
     }
@@ -1029,12 +1046,12 @@ const Live = (() => {
     const codeRow = el('div', 'live-code-row');
     const code = textInput(settings.code, 'Code, e.g. K7QX2', (v) => { settings.code = v.toUpperCase(); }, 8);
     code.classList.add('live-code-input');
-    const join = el('button', 'primary', 'Tune In');
+    const join = el('button', 'primary tune-in', 'Tune In');
     join.type = 'button';
-    join.disabled = busy;
-    join.addEventListener('click', () => run(() => api.live.listen({ code: settings.code, relay: relayAddress(), name: settings.yourName })));
+    join.addEventListener('click', () => { if (named()) run(() => api.live.listen({ code: settings.code, relay: relayAddress(), name: settings.yourName.trim() })); });
     codeRow.append(code, join);
     body.append(codeRow);
+    syncNamed();
   }
 
   function renderHosting(body) {
@@ -1108,5 +1125,5 @@ const Live = (() => {
 
   api.live.status().then((current) => { bonjour = current.bonjour !== false; setStatus(current); });
 
-  return { soundPlayed, soundStopped, soundVolume, stoppedAll, hosting, listening, myName, rollStart, rollResult };
+  return { soundPlayed, soundStopped, soundVolume, stoppedAll, hosting, listening, myName, rollStart, rollResult, claimColor };
 })();

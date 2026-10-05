@@ -138,6 +138,7 @@ final class LiveSession: ObservableObject {
         dice.onStart = { [weak self] start in self?.sendRoll(start.json) }
         dice.onResult = { [weak self] id, values in self?.sendRoll(["t": "rollResult", "id": id, "values": values]) }
         dice.volume = { [weak self] in self?.player?.masterVolume ?? 1 }
+        dice.onClaim = { [weak self] color in self?.claimColor(color) }
         LiveFiles.pruneCache()
     }
 
@@ -148,8 +149,17 @@ final class LiveSession: ObservableObject {
         let name = yourName.trimmingCharacters(in: .whitespaces)
         switch role {
         case .host: return name.isEmpty ? "Broadcaster" : name
-        case .listener: return name.isEmpty ? "Listener" : name
+        case .listener: return name.isEmpty ? "Someone" : name
         case .idle: return "You"
+        }
+    }
+
+    /// Asks for a dice colour; the broadcaster's app makes sure no one else has it.
+    private func claimColor(_ color: String) {
+        switch role {
+        case .host: host?.setHostColor(color, name: diceName)
+        case .listener: listener?.sendRoll(["t": "diceColor", "color": color])
+        case .idle: break
         }
     }
 
@@ -171,6 +181,7 @@ final class LiveSession: ObservableObject {
         case "roll": dice.remoteStart(message)
         case "rollResult": dice.remoteResult(message)
         case "rolls": dice.setHistory((message["list"] as? [Any]) ?? [])
+        case "diceColors": dice.setSessionColors((message["colors"] as? [Any]) ?? [], you: LiveNet.string(message["you"]) ?? "")
         default: break
         }
     }
@@ -259,9 +270,13 @@ final class LiveSession: ObservableObject {
         }
         engine.onCue = { [weak self] peer, name, cue in self?.playPlayerSound(from: peer, name: name, cue: cue) }
         engine.onRoll = { [weak self] message in self?.receiveRoll(message) }
+        engine.onColors = { [weak self] message in
+            self?.dice.setSessionColors((message["colors"] as? [Any]) ?? [], you: "host")
+        }
         dice.resetLog()
         host = engine
         engine.setPlayerSounds(playerSounds)
+        engine.setHostColor(dice.color, name: yourName.trimmingCharacters(in: .whitespaces).isEmpty ? "Broadcaster" : yourName)
         hostingName = name
         hostingMode = mode
         if mode == .local { code = nil }
@@ -281,6 +296,7 @@ final class LiveSession: ObservableObject {
 
     func endHosting(error message: String? = nil) {
         host?.end()
+        dice.setSessionColors(nil, you: "")
         host = nil
         syncTimer?.invalidate()
         syncTimer = nil
@@ -536,7 +552,11 @@ final class LiveSession: ObservableObject {
     }
 
     private func listen(socket: LiveSocket) {
-        let name = yourName.trimmingCharacters(in: .whitespaces).isEmpty ? UIDevice.current.name : yourName
+        let name = yourName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else {
+            error = "Enter your name to tune in."
+            return
+        }
         let engine = LiveListenerEngine(socket: socket, name: String(name.prefix(40)), device: deviceName)
         engine.builtinURL = { [weak self] file in self?.ambience?.builtins.first { $0.file == file }?.url }
         engine.onCommand = { [weak self] command in
@@ -606,6 +626,7 @@ final class LiveSession: ObservableObject {
 
     private func finishListening() {
         listener = nil
+        dice.setSessionColors(nil, you: "")
         mirror.stopAll(ambienceToo: true)
         role = .idle
         connected = false

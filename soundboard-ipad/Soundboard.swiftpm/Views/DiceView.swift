@@ -441,6 +441,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         ground.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: 200, height: 1, length: 200, chamferRadius: 0)))
         ground.physicsBody?.friction = 0.25
         ground.physicsBody?.restitution = 0.35
+        ground.physicsBody?.categoryBitMask = 1
         scene.rootNode.addChildNode(ground)
         layout(aspect: 0.6)
     }
@@ -464,6 +465,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             node.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: width, height: 14, length: length, chamferRadius: 0)))
             node.physicsBody?.friction = 0.25
             node.physicsBody?.restitution = 0.35
+            node.physicsBody?.categoryBitMask = 1
             scene.rootNode.addChildNode(node)
             return node
         }
@@ -478,6 +480,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         let lid = SCNNode()
         lid.position = SCNVector3(0, 13, 0)
         lid.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: w, height: 2, length: l, chamferRadius: 0)))
+        lid.physicsBody?.categoryBitMask = 1
         scene.rootNode.addChildNode(lid)
         walls.append(lid)
     }
@@ -512,8 +515,11 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             body.damping = 0.05
             body.angularDamping = 0.12
             body.allowsResting = true
-            body.contactTestBitMask = 1
-            body.categoryBitMask = 1
+            // Each person's dice only hit their own dice (and the tray), never someone else's.
+            let group = groupFor(owner)
+            body.categoryBitMask = group
+            body.collisionBitMask = 1 | group
+            body.contactTestBitMask = 1 | group
             node.physicsBody = body
             scene.rootNode.addChildNode(node)
             body.velocity = SCNVector3(Float(spec.v[0]) * hz, 0, Float(spec.v[1]) * hz)
@@ -527,6 +533,118 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         }
         rolls.append(roll)
         return roll
+    }
+
+    private var groups: [String: Int] = [:]
+
+    /// A collision group of its own for each person rolling (bit 1 is the tray).
+    private func groupFor(_ owner: String) -> Int {
+        if let bit = groups[owner] { return bit }
+        let used = Set(rolls.compactMap { groups[$0.owner] })
+        let bit = (1..<16).map { 1 << $0 }.first { !used.contains($0) } ?? 2
+        groups[owner] = bit
+        return bit
+    }
+
+    // MARK: Natural 1s and 20s
+
+    /// A skull and crossbones over a natural 1; fireworks over a natural 20.
+    func celebrate(id: String, die index: Int, natural: Int) {
+        guard let roll = rolls.first(where: { $0.id == id }), index < roll.dice.count else { return }
+        let at = roll.dice[index].node.presentation.position
+        if natural == 1 { skull(at: at) } else if natural == 20 { fireworks(at: at) }
+    }
+
+    private static func emojiImage(_ text: String, size: CGFloat) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: size, height: size)).image { _ in
+            let string = NSAttributedString(string: text, attributes: [.font: UIFont.systemFont(ofSize: size * 0.8)])
+            let bounds = string.size()
+            string.draw(at: CGPoint(x: (size - bounds.width) / 2, y: (size - bounds.height) / 2))
+        }
+    }
+
+    private static let sparkImage: UIImage = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32)).image { context in
+        let colors = [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+            context.cgContext.drawRadialGradient(gradient, startCenter: CGPoint(x: 16, y: 16), startRadius: 0,
+                                                 endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
+        }
+    }
+
+    /// The skull pops up beside the die (towards the top of the screen), bobs, then floats away.
+    private func skull(at p: SCNVector3) {
+        let plane = SCNPlane(width: 2.2, height: 2.2)
+        let material = SCNMaterial()
+        material.diffuse.contents = Self.emojiImage("☠️", size: 256)
+        material.lightingModel = .constant
+        material.isDoubleSided = true
+        plane.materials = [material]
+        let node = SCNNode(geometry: plane)
+        node.position = SCNVector3(p.x, 4, p.z - 0.6)
+        node.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
+        node.scale = SCNVector3(0.2, 0.2, 0.2)
+        node.opacity = 0
+        scene.rootNode.addChildNode(node)
+        let pop = SCNAction.group([
+            SCNAction.fadeIn(duration: 0.3),
+            SCNAction.scale(to: 1.25, duration: 0.35),
+            SCNAction.move(by: SCNVector3(0, 0, -1.6), duration: 0.35),
+        ])
+        let wobble = SCNAction.sequence([
+            SCNAction.rotateBy(x: 0, y: 0.25, z: 0, duration: 0.25),
+            SCNAction.rotateBy(x: 0, y: -0.5, z: 0, duration: 0.5),
+            SCNAction.rotateBy(x: 0, y: 0.25, z: 0, duration: 0.25),
+        ])
+        let away = SCNAction.group([SCNAction.fadeOut(duration: 0.5), SCNAction.move(by: SCNVector3(0, 0, -1.2), duration: 0.5)])
+        node.runAction(SCNAction.sequence([
+            pop, SCNAction.scale(to: 1, duration: 0.15), SCNAction.repeat(wobble, count: 2), away, SCNAction.removeFromParentNode(),
+        ]))
+    }
+
+    /// Light fireworks: three bursts of sparks at and around the die.
+    private func fireworks(at p: SCNVector3) {
+        let colors: [UIColor] = [
+            UIColor(red: 1, green: 0.96, blue: 0.78, alpha: 1), UIColor(red: 1, green: 0.82, blue: 0.48, alpha: 1),
+            .white, UIColor(red: 1, green: 0.7, blue: 0.28, alpha: 1), UIColor(red: 0.6, green: 0.9, blue: 1, alpha: 1),
+            UIColor(red: 1, green: 0.62, blue: 0.81, alpha: 1),
+        ]
+        for (dx, dz, delay) in [(Float(0), Float(-0.8), 0.0), (-1.6, -2.0, 0.26), (1.8, -1.4, 0.52)] {
+            let node = SCNNode()
+            node.position = SCNVector3(p.x + dx, 5, p.z + dz)
+            scene.rootNode.addChildNode(node)
+            let color = colors.randomElement() ?? .white
+            node.runAction(SCNAction.sequence([
+                SCNAction.wait(duration: delay),
+                SCNAction.run { node in
+                    let burst = SCNParticleSystem()
+                    burst.loops = false
+                    burst.emissionDuration = 0.05
+                    burst.birthRate = 840
+                    burst.particleLifeSpan = 1.1
+                    burst.particleLifeSpanVariation = 0.4
+                    burst.emittingDirection = SCNVector3(0, 1, 0)
+                    burst.spreadingAngle = 180
+                    burst.particleVelocity = 7
+                    burst.particleVelocityVariation = 3
+                    burst.acceleration = SCNVector3(0, 0, 4)
+                    burst.dampingFactor = 1.2
+                    burst.particleImage = DiceScene.sparkImage
+                    burst.particleSize = 0.16
+                    burst.particleSizeVariation = 0.06
+                    burst.particleColor = color
+                    burst.particleColorVariation = SCNVector4(0.08, 0.2, 0, 0)
+                    burst.blendMode = .additive
+                    burst.isLightingEnabled = false
+                    let fade = CAKeyframeAnimation()
+                    fade.values = [1, 1, 0]
+                    fade.keyTimes = [0, 0.6, 1]
+                    burst.propertyControllers = [.opacity: SCNParticlePropertyController(animation: fade)]
+                    node.addParticleSystem(burst)
+                },
+                SCNAction.wait(duration: 2.2),
+                SCNAction.removeFromParentNode(),
+            ]))
+        }
     }
 
     private func remove(_ roll: Roll) {
@@ -644,10 +762,60 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
 
 @MainActor
 final class DiceTray: ObservableObject {
+    /// The same sixteen colours as the Mac. In a Live Session no two people share one.
     static let colors: [(String, String)] = [
         ("Ruby", "#b3261e"), ("Sapphire", "#2a5bd7"), ("Jade", "#1f8a5b"), ("Amethyst", "#7b3fbf"),
         ("Amber", "#c47a12"), ("Onyx", "#1d1d24"), ("Ivory", "#e8e2d0"), ("Teal", "#0f8a8a"),
+        ("Rose", "#d6457a"), ("Lime", "#7cb518"), ("Tangerine", "#e3611c"), ("Sky", "#4fb3e8"),
+        ("Gold", "#d4a017"), ("Plum", "#5b2a6e"), ("Silver", "#9aa3ad"), ("Bronze", "#8a5a2b"),
     ]
+
+    struct ColorClaim: Equatable {
+        let peer: String
+        let name: String
+        let color: String
+    }
+
+    /// In a Live Session: who has which colour, and which entry is this device.
+    /// nil when not in a session.
+    @Published private(set) var sessionColors: [ColorClaim]?
+    private var myPeer = ""
+    /// Bumped when someone tries to roll without a colour, to point at the swatches.
+    @Published private(set) var needColor = 0
+    /// Asks the session for a colour.
+    var onClaim: ((String) -> Void)?
+
+    /// This device's dice colour: chosen freely alone, claimed in a session.
+    var currentColor: String? {
+        guard let claims = sessionColors else { return color }
+        return claims.first { $0.peer == myPeer }?.color
+    }
+
+    /// Whose colour this is, if someone else in the session has it.
+    func takenBy(_ hex: String) -> ColorClaim? {
+        sessionColors?.first { $0.color == hex && $0.peer != myPeer }
+    }
+
+    /// The colour list from the session (or nil when it ends). If you haven't a
+    /// colour yet, ask for the one you used last, if it's free.
+    func setSessionColors(_ list: [Any]?, you: String) {
+        let was = sessionColors != nil
+        guard let list else {
+            sessionColors = nil
+            return
+        }
+        sessionColors = list.compactMap { item in
+            guard let json = item as? LiveJSON, let peer = LiveNet.string(json["peer"]), let color = LiveNet.string(json["color"]) else { return nil }
+            return ColorClaim(peer: peer, name: LiveNet.string(json["name"]) ?? "Someone", color: color)
+        }
+        myPeer = you
+        if !was && currentColor == nil && takenBy(color) == nil { claim(color) }
+    }
+
+    func claim(_ hex: String) {
+        color = hex
+        if sessionColors != nil { onClaim?(hex) }
+    }
 
     @Published var counts: [String: Int] { didSet { save() } }
     @Published var modifier: Int { didSet { save() } }
@@ -716,6 +884,12 @@ final class DiceTray: ObservableObject {
     func roll(_ mode: RollMode = .normal, strength: Double = 1, fromShake: Bool = false) {
         let plan = DiceGeometry.plan(counts, mode: mode)
         guard !plan.kinds.isEmpty else { return }
+        guard let color = currentColor else {
+            // Everyone needs their own colour, so the table can tell whose dice are whose.
+            if !isOpen { open() }
+            needColor += 1
+            return
+        }
         let id = newId()
         mine.insert(id)
         let start = RollStart(id: id, by: myName(), mode: mode, modifier: modifier, groups: plan.groups, kinds: plan.kinds,
@@ -731,6 +905,7 @@ final class DiceTray: ObservableObject {
             let summary = DiceGeometry.summarize(mode: start.mode, modifier: start.modifier, groups: start.groups, values: values)
             let entry = RollEntry(id: id, by: start.by, title: summary.title, detail: summary.detail, total: summary.total, at: Date(), mine: true)
             self.dimDropped(id: id, start: start, summary: summary)
+            self.celebrate(id: id, start: start, summary: summary)
             self.add(entry)
             self.banner = entry
             self.onResult?(id, values)
@@ -742,6 +917,19 @@ final class DiceTray: ObservableObject {
         guard let kept = summary.kept, let keptIndex = summary.scores.firstIndex(of: kept) else { return }
         for (i, group) in start.groups.enumerated() where i != keptIndex {
             if let die = group.dice.first { scene.dim(id: id, die: die) }
+        }
+    }
+
+    /// A skull over a natural 1, fireworks over a natural 20: the d20s that count
+    /// (all of them, or the kept one with advantage or disadvantage).
+    private func celebrate(id: String, start: RollStart, summary: RollSummary) {
+        let keptIndex = summary.kept.flatMap { summary.scores.firstIndex(of: $0) }
+        for (i, group) in start.groups.enumerated() where group.type == "d20" {
+            if let keptIndex, keptIndex != i { continue }
+            let score = summary.scores[i]
+            if (score == 1 || score == 20), let die = group.dice.first {
+                scene.celebrate(id: id, die: die, natural: score)
+            }
         }
     }
 
@@ -784,6 +972,7 @@ final class DiceTray: ObservableObject {
         let summary = DiceGeometry.summarize(mode: start.mode, modifier: start.modifier, groups: start.groups, values: values)
         let row = RollEntry(id: id, by: start.by, title: summary.title, detail: summary.detail, total: summary.total, at: Date(), mine: false)
         dimDropped(id: id, start: start, summary: summary)
+        celebrate(id: id, start: start, summary: summary)
         add(row)
         banner = row
         if watching {
@@ -935,7 +1124,7 @@ struct DiceBanner: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Text("🎲 \(entry.mine ? "YOU" : entry.by.uppercased())")
+            Text("🎲 \(entry.by.uppercased())")
                 .font(.caption.weight(.bold))
                 .tracking(1)
                 .opacity(0.8)
@@ -977,6 +1166,7 @@ struct DiceView: View {
     @Environment(\.appTheme) private var theme
     @State private var charging: Date?
     @State private var charge: Double = 0
+    @State private var pulse = false
 
     var body: some View {
         ZStack {
@@ -1014,20 +1204,42 @@ struct DiceView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(DiceTray.colors, id: \.1) { item in
+                        let owner = tray.takenBy(item.1)
                         Button {
-                            tray.color = item.1
+                            tray.claim(item.1)
                         } label: {
                             Circle()
                                 .fill(Color(hexString: item.1) ?? .red)
                                 .frame(width: 22, height: 22)
-                                .overlay(Circle().strokeBorder(Color.white, lineWidth: tray.color == item.1 ? 2.5 : 0.8))
+                                .overlay(Circle().strokeBorder(Color.white, lineWidth: tray.currentColor == item.1 ? 2.5 : 0.8))
+                                .overlay {
+                                    if owner != nil {
+                                        Image(systemName: "xmark").font(.caption2.weight(.heavy)).foregroundStyle(Color.white)
+                                    }
+                                }
+                                .opacity(owner == nil ? 1 : 0.4)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(item.0) dice")
+                        .disabled(owner != nil)
+                        .accessibilityLabel(owner.map { "\(item.0): \($0.name)'s dice" } ?? "\(item.0) dice")
+                    }
+                    if tray.sessionColors != nil && tray.currentColor == nil {
+                        Text("← Pick your dice colour")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color(hex: 0xFFD27A))
                     }
                 }
             }
-            .frame(maxWidth: 230)
+            .frame(maxWidth: 320)
+            .scaleEffect(pulse ? 1.08 : 1)
+            .animation(.easeInOut(duration: 0.2).repeatCount(3, autoreverses: true), value: pulse)
+            .onChange(of: tray.needColor) { _, _ in
+                pulse = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    pulse = false
+                }
+            }
             Spacer()
             pill(tray.log.isEmpty ? "Log" : "Log · \(tray.log.count)") { tray.showLog.toggle() }
             pill("Close") { tray.close() }
@@ -1193,7 +1405,7 @@ struct DiceView: View {
                         ForEach(tray.log) { entry in
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack {
-                                    Text(entry.mine ? "You" : entry.by).font(.subheadline.weight(.bold))
+                                    Text(entry.by).font(.subheadline.weight(.bold))
                                     Spacer()
                                     Text(entry.at, style: .time).font(.caption2).opacity(0.6)
                                 }

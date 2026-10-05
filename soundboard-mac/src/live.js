@@ -213,6 +213,13 @@ function cleanRollValues(values, kinds) {
   return out.every((v, i) => Number.isInteger(v) && v >= DIE_KINDS[kinds[i]][0] && v <= DIE_KINDS[kinds[i]][1]) ? out : null;
 }
 
+// The dice colours. In a session each person claims one, and no two people
+// share a colour, so it's always clear whose dice are whose.
+const DICE_COLORS = [
+  '#b3261e', '#2a5bd7', '#1f8a5b', '#7b3fbf', '#c47a12', '#1d1d24', '#e8e2d0', '#0f8a8a',
+  '#d6457a', '#7cb518', '#e3611c', '#4fb3e8', '#d4a017', '#5b2a6e', '#9aa3ad', '#8a5a2b',
+];
+
 const PLAYER_SOUNDS = ['off', 'own', 'gm'];
 const PLAYER_SOUND_LIMIT = 5;
 
@@ -393,6 +400,7 @@ class LiveHost extends EventEmitter {
     this.catalog = []; // [{ id, name, color }]: the GM's sounds players may choose
     this.rollStarts = new Map(); // roll id -> { start, peer } (recent rolls in progress)
     this.rollLog = []; // finished rolls, for listeners who join later
+    this.diceColors = new Map(); // peer (or 'host') -> dice colour
     this.peers = new Map(); // peer -> { name, device, allowed: Set<hash>, cued, lastCue, offers, fetcher, waitingCues }
     this.files = new Map(); // hash -> { file, ext }
     this.active = new Map(); // pid -> { message, group, until }
@@ -406,7 +414,12 @@ class LiveHost extends EventEmitter {
       name: 'Listener', device: '', allowed: new Set(), ready: false,
       cued: new Set(), lastCue: 0, offers: new Map(), fetcher: null, waitingCues: new Set(),
     }));
-    transport.on('leave', (peer) => { this.peers.delete(peer); this.emitPeers(); });
+    transport.on('leave', (peer) => {
+      this.peers.delete(peer);
+      this.emitPeers();
+      // Their dice colour is free again.
+      if (this.diceColors.delete(peer)) this.broadcastColors();
+    });
     transport.on('message', (peer, message) => this.enqueue(() => this.handle(peer, message)));
   }
 
@@ -433,6 +446,7 @@ class LiveHost extends EventEmitter {
       this.transport.send(peer, this.rulesMessage());
       if (this.playerSounds === 'gm') this.transport.send(peer, this.catalogMessage());
       if (this.rollLog.length) this.transport.send(peer, { t: 'rolls', list: this.rollLog.slice(-30) });
+      this.transport.send(peer, this.colorsMessage());
       await this.sendTo(peer, this.ambience);
       const prefetch = await this.prefetchMessage();
       await this.sendTo(peer, prefetch);
@@ -447,6 +461,8 @@ class LiveHost extends EventEmitter {
       if (info.ready) this.startRoll(message, peer, info.name);
     } else if (message.t === 'rollResult') {
       if (info.ready) this.finishRoll(message, peer);
+    } else if (message.t === 'diceColor') {
+      if (info.ready) this.claimColor(peer, message.color);
     } else if (message.t === 'cue') {
       this.handleCue(peer, info, message);
     } else if (message.t === 'offer') {
@@ -466,6 +482,10 @@ class LiveHost extends EventEmitter {
     const start = cleanRollStart(message);
     if (!start || this.rollStarts.has(start.id)) return;
     start.by = String(name || start.by || 'Someone').slice(0, 40);
+    // Everyone rolls in their own colour; no colour, no roll.
+    const color = this.diceColors.get(peer || 'host');
+    if (!color) return;
+    start.color = color;
     this.rollStarts.set(start.id, { start, peer });
     if (this.rollStarts.size > 60) this.rollStarts.delete(this.rollStarts.keys().next().value);
     this.transport.send(null, start);
@@ -485,6 +505,40 @@ class LiveHost extends EventEmitter {
     this.rollLog.push({ id, by, mode, modifier, groups, values, at: Date.now() });
     if (this.rollLog.length > 100) this.rollLog.shift();
     if (peer) this.emit('roll', result);
+  }
+
+  // Who has which dice colour: [{ peer, name, color }] ('host' is the broadcaster).
+  colorsMessage() {
+    const colors = [...this.diceColors].map(([peer, color]) => ({
+      peer, color, name: peer === 'host' ? (this.hostDiceName || 'Broadcaster') : (this.peers.get(peer)?.name || 'Listener'),
+    }));
+    return { t: 'diceColors', colors };
+  }
+
+  broadcastColors() {
+    this.transport.send(null, this.colorsMessage());
+    this.emit('colors', this.colorsMessage());
+  }
+
+  // Someone asks for a dice colour: theirs if no one else has it.
+  claimColor(peer, color) {
+    const wanted = String(color || '').toLowerCase();
+    if (!DICE_COLORS.includes(wanted)) return false;
+    for (const [other, taken] of this.diceColors) if (other !== peer && taken === wanted) {
+      if (peer !== 'host') this.transport.send(peer, this.colorsMessage());
+      return false;
+    }
+    this.diceColors.set(peer, wanted);
+    this.broadcastColors();
+    return true;
+  }
+
+  // The broadcaster's own colour and name.
+  setHostColor(color, name) {
+    return this.enqueue(() => {
+      if (name) this.hostDiceName = String(name).slice(0, 40);
+      if (!this.claimColor('host', color)) this.emit('colors', this.colorsMessage());
+    });
   }
 
   // The host's own roll.
@@ -802,6 +856,7 @@ class LiveListener extends EventEmitter {
   handle(message) {
     switch (message.t) {
       case 'welcome':
+        this.peerId = String(message.peer || '');
         this.host = String(message.host || 'Game Master');
         this.setState('connected');
         this.startClockSync();
@@ -830,6 +885,9 @@ class LiveListener extends EventEmitter {
       case 'rollResult':
       case 'rolls':
         this.emit('roll', message);
+        break;
+      case 'diceColors':
+        this.emit('roll', { ...message, you: this.peerId });
         break;
       case 'rules':
         this.emit('rules', PLAYER_SOUNDS.includes(message.playerSounds) ? message.playerSounds : 'off');
@@ -899,7 +957,7 @@ class LiveListener extends EventEmitter {
 
   // A dice roll starting or finished on this device, for everyone to see.
   sendRoll(message) {
-    if (message && (message.t === 'roll' || message.t === 'rollResult')) sendJSON(this.socket, message);
+    if (message && (message.t === 'roll' || message.t === 'rollResult' || message.t === 'diceColor')) sendJSON(this.socket, message);
   }
 
   // Asks the host to play one of the GM's sounds for everyone.
@@ -1035,6 +1093,6 @@ function deviceName() {
 
 module.exports = {
   LiveHost, LiveListener, LanHostTransport, RelayHostTransport, LanBrowser, FileHasher, FileFetcher,
-  PLAYER_SOUND_LIMIT, cleanRollStart, cleanRollValues,
+  PLAYER_SOUND_LIMIT, cleanRollStart, cleanRollValues, DICE_COLORS,
   relayUrl, deviceName, hasBonjour: () => !!Bonjour, CHUNK_SIZE, VERSION,
 };

@@ -19,9 +19,12 @@ const GRAVITY = 60;
 const SETTLE_FRAMES = 24;
 const MAX_ROLL_MS = 9000;
 const MAX_DICE = 40;
+// The same sixteen colours as the iPad. In a Live Session no two people share one.
 const DICE_COLORS = [
   ['Ruby', '#b3261e'], ['Sapphire', '#2a5bd7'], ['Jade', '#1f8a5b'], ['Amethyst', '#7b3fbf'],
   ['Amber', '#c47a12'], ['Onyx', '#1d1d24'], ['Ivory', '#e8e2d0'], ['Teal', '#0f8a8a'],
+  ['Rose', '#d6457a'], ['Lime', '#7cb518'], ['Tangerine', '#e3611c'], ['Sky', '#4fb3e8'],
+  ['Gold', '#d4a017'], ['Plum', '#5b2a6e'], ['Silver', '#9aa3ad'], ['Bronze', '#8a5a2b'],
 ];
 
 // ---------------------------------------------------------------------------
@@ -252,6 +255,8 @@ class DiceScene {
     this.walls = [];
 
     this.rolls = []; // { id, dice: [die], done, target, local, started, onDone, quietFrames }
+    // Each person's dice only hit their own dice (and the tray), never someone else's.
+    this.groups = new Map(); // owner -> collision group bit
     this.running = false;
     this.resize();
     new ResizeObserver(() => this.resize()).observe(host);
@@ -309,7 +314,11 @@ class DiceScene {
       const mesh = new THREE.Mesh(geometry(kind), materialsFor(kind, values, spec.color));
       mesh.castShadow = true;
       this.scene.add(mesh);
-      const body = new CANNON.Body({ mass: 1, material: this.diceMaterial, shape: shape(kind), angularDamping: 0.12, linearDamping: 0.05 });
+      const group = this.groupFor(owner);
+      const body = new CANNON.Body({
+        mass: 1, material: this.diceMaterial, shape: shape(kind), angularDamping: 0.12, linearDamping: 0.05,
+        collisionFilterGroup: group, collisionFilterMask: 1 | group,
+      });
       body.sleepSpeedLimit = 0.15;
       body.sleepTimeLimit = 0.3;
       body.position.set(t.p[0] * (hx - 1.6), t.h, t.p[1] * (hz - 1.6));
@@ -326,6 +335,17 @@ class DiceScene {
     this.rolls.push(roll);
     this.start();
     return roll;
+  }
+
+  // A collision group of its own for each person rolling (bit 1 is the tray).
+  groupFor(owner) {
+    if (!this.groups.has(owner)) {
+      const used = new Set(this.rolls.map((r) => this.groups.get(r.owner)));
+      let bit = 2;
+      for (let i = 1; i < 16; i++) { if (!used.has(1 << i)) { bit = 1 << i; break; } }
+      this.groups.set(owner, bit);
+    }
+    return this.groups.get(owner);
   }
 
   remove(roll) {
@@ -428,6 +448,14 @@ class DiceScene {
     }
   }
 
+  // Where a die sits on screen, in the layer's pixels.
+  screenPosition(id, index) {
+    const die = this.rolls.find((r) => r.id === id)?.dice[index];
+    if (!die) return null;
+    const v = die.mesh.position.clone().project(this.camera);
+    return { x: (v.x + 1) / 2 * this.host.clientWidth, y: (1 - v.y) / 2 * this.host.clientHeight };
+  }
+
   // Dims the d20 that didn't count in an advantage or disadvantage roll.
   dim(id, index) {
     const roll = this.rolls.find((r) => r.id === id);
@@ -469,13 +497,14 @@ const layer = el('section', 'dice-layer hidden');
 layer.id = 'dice-layer';
 layer.setAttribute('aria-label', 'Dice');
 const canvasHost = el('div', 'dice-canvas');
+const fxCanvas = el('canvas', 'dice-fx');
 const banner = el('div', 'dice-banner hidden');
 banner.id = 'dice-banner';
 const ui = el('div', 'dice-ui');
 const top = el('header', 'dice-top');
 const logPanel = el('aside', 'dice-log hidden');
 logPanel.id = 'dice-log';
-layer.append(canvasHost, banner, top, ui, logPanel);
+layer.append(canvasHost, fxCanvas, banner, top, ui, logPanel);
 document.body.append(layer);
 
 let scene = null;
@@ -525,7 +554,7 @@ function endWatch(delay = 4500) {
 
 function showBanner(entry) {
   banner.textContent = '';
-  banner.append(el('div', 'dice-banner-who', `🎲 ${entry.mine ? 'You' : entry.by}`), el('div', 'dice-banner-title', entry.title), el('div', 'dice-banner-total', String(entry.total)), el('div', 'dice-banner-detail', entry.detail));
+  banner.append(el('div', 'dice-banner-who', `🎲 ${entry.by}`), el('div', 'dice-banner-title', entry.title), el('div', 'dice-banner-total', String(entry.total)), el('div', 'dice-banner-detail', entry.detail));
   banner.classList.remove('hidden');
   banner.classList.remove('pop');
   void banner.offsetWidth;
@@ -563,14 +592,53 @@ function myName() {
   return 'You';
 }
 
+// In a Live Session: who has which colour ([{ peer, name, color }]) and which
+// entry is this device. null when not in a session.
+let sessionColors = null;
+let myPeer = null;
+
+function inSession() { return sessionColors !== null; }
+function myColor() {
+  if (!inSession()) return settings.color;
+  return sessionColors.find((c) => c.peer === myPeer)?.color || null;
+}
+function takenBy(hex) {
+  return inSession() ? sessionColors.find((c) => c.color === hex && c.peer !== myPeer) : null;
+}
+
+// The colour list from the session (or null when it ends). If you haven't a
+// colour yet, ask for the one you used last, if it's free.
+function setSessionColors(list, you) {
+  const was = inSession();
+  sessionColors = Array.isArray(list) ? list : null;
+  myPeer = you || null;
+  if (inSession() && !myColor() && !was && !takenBy(settings.color)) claim(settings.color);
+  if (mode === 'tray') renderUI();
+}
+
+function claim(hex) {
+  if (inSession()) { if (typeof Live !== 'undefined') Live.claimColor(hex); }
+  settings.color = hex;
+  save();
+  renderUI();
+}
+
 // Rolls the chosen dice (or 2d20 for advantage / disadvantage).
 function roll(rollMode = 'normal', strength = 1) {
   const { groups, kinds } = G.plan(settings.counts, rollMode);
   if (!kinds.length) return;
+  const color = myColor();
+  if (!color) {
+    // Everyone needs their own colour, so the table can tell whose dice are whose.
+    if (mode !== 'tray') open();
+    layer.classList.add('need-color');
+    setTimeout(() => layer.classList.remove('need-color'), 1600);
+    return;
+  }
   const id = `${Date.now().toString(36)}-${(nextId++).toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const start = {
     id, by: myName(), mode: rollMode, modifier: settings.modifier, groups, kinds,
-    color: settings.color, dice: makeThrow(kinds.length, strength),
+    color, dice: makeThrow(kinds.length, strength),
   };
   mine.add(id);
   const s = ensureScene();
@@ -582,12 +650,101 @@ function roll(rollMode = 'normal', strength = 1) {
       const summary = G.summarize(start, values);
       const entry = { id, by: start.by, title: summary.title, detail: summary.detail, total: summary.total, at: Date.now(), mine: true };
       if (summary.kept !== null) dimDropped(id, start, summary);
+      celebrate(id, start, summary);
       addLog(entry);
       showBanner(entry);
       if (typeof Live !== 'undefined') Live.rollResult({ id, values });
     },
   });
   if (typeof Live !== 'undefined') Live.rollStart(start);
+}
+
+// ---- Natural 1s and 20s ----
+
+// The d20s that count: all of them, or the kept one with advantage / disadvantage.
+function countedD20s(start, summary) {
+  const dice = [];
+  start.groups.forEach((g, i) => {
+    if (g.type !== 'd20') return;
+    if (summary.kept !== null && summary.scores.indexOf(summary.kept) !== i) return;
+    dice.push({ index: g.dice[0], score: summary.scores[i] });
+  });
+  return dice;
+}
+
+// A skull and crossbones over a natural 1; fireworks over a natural 20.
+function celebrate(id, start, summary) {
+  for (const { index, score } of countedD20s(start, summary)) {
+    if (score !== 1 && score !== 20) continue;
+    const at = scene?.screenPosition(id, index);
+    if (!at) continue;
+    if (score === 1) skull(at); else fireworks(at);
+  }
+}
+
+function skull(at) {
+  const mark = el('div', 'dice-skull', '☠️');
+  mark.style.left = `${at.x}px`;
+  mark.style.top = `${at.y}px`;
+  mark.setAttribute('aria-label', 'Natural 1');
+  layer.append(mark);
+  setTimeout(() => mark.remove(), 3200);
+}
+
+const sparks = [];
+let fxFrame = 0;
+function fireworks(at) {
+  const colors = ['#fff6c8', '#ffd27a', '#ffffff', '#ffb347', '#9be7ff', '#ff9ecf'];
+  // Three bursts: one at the die, two just around it.
+  [[0, 0, 0], [-70, -50, 260], [80, -30, 520]].forEach(([dx, dy, delay]) => {
+    setTimeout(() => {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      for (let i = 0; i < 42; i++) {
+        const angle = (i / 42) * Math.PI * 2 + Math.random() * 0.2;
+        const speed = 90 + Math.random() * 120;
+        sparks.push({
+          x: at.x + dx, y: at.y + dy - 40, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 40,
+          life: 0, max: 1 + Math.random() * 0.5, color: Math.random() < 0.3 ? '#ffffff' : color, size: 1.5 + Math.random() * 1.8,
+        });
+      }
+      if (!fxFrame) { last = performance.now(); fxFrame = requestAnimationFrame(drawSparks); }
+    }, delay);
+  });
+}
+
+let last = 0;
+function drawSparks(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const w = layer.clientWidth;
+  const h = layer.clientHeight;
+  const scale = Math.min(2, window.devicePixelRatio || 1);
+  if (fxCanvas.width !== Math.round(w * scale)) { fxCanvas.width = Math.round(w * scale); fxCanvas.height = Math.round(h * scale); }
+  const ctx = fxCanvas.getContext('2d');
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const p = sparks[i];
+    p.life += dt;
+    if (p.life > p.max) { sparks.splice(i, 1); continue; }
+    p.vy += 140 * dt;
+    p.vx *= 0.985;
+    p.vy *= 0.985;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    const fade = 1 - p.life / p.max;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (0.6 + fade * 0.6), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  if (sparks.length) fxFrame = requestAnimationFrame(drawSparks);
+  else { fxFrame = 0; ctx.clearRect(0, 0, w, h); }
 }
 
 function dimDropped(id, start, summary) {
@@ -625,6 +782,7 @@ function finishRemote(id, values) {
   const summary = G.summarize(start, values);
   const entry = { id, by: start.by || 'Someone', title: summary.title, detail: summary.detail, total: summary.total, at: Date.now(), mine: false };
   if (summary.kept !== null) dimDropped(id, start, summary);
+  celebrate(id, start, summary);
   addLog(entry);
   showBanner(entry);
   endWatch();
@@ -666,14 +824,18 @@ function renderUI() {
   top.textContent = '';
   top.append(el('div', 'dice-title', 'Dice'));
   const colors = el('div', 'dice-colors');
+  const current = myColor();
   for (const [name, hex] of DICE_COLORS) {
-    const b = el('button', `dice-color${settings.color === hex ? ' selected' : ''}`);
+    const owner = takenBy(hex);
+    const b = el('button', `dice-color${current === hex ? ' selected' : ''}${owner ? ' taken' : ''}`);
     b.type = 'button';
-    b.title = `${name} dice`;
+    b.title = owner ? `${name}: ${owner.name}'s dice` : `${name} dice`;
     b.style.background = hex;
-    b.addEventListener('click', () => { settings.color = hex; save(); renderUI(); });
+    b.disabled = !!owner;
+    b.addEventListener('click', () => claim(hex));
     colors.append(b);
   }
+  if (inSession() && !current) colors.append(el('span', 'dice-color-hint', '← Pick your dice colour'));
   const logButton = el('button', 'dice-pill', log.length ? `Log · ${log.length}` : 'Log');
   logButton.type = 'button';
   logButton.addEventListener('click', () => { logPanel.classList.toggle('hidden'); renderLog(); });
@@ -769,7 +931,7 @@ function renderLog() {
   for (const entry of log) {
     const row = el('div', `dice-log-row${entry.mine ? ' mine' : ''}`);
     const head = el('div', 'dice-log-head');
-    head.append(el('b', null, entry.mine ? 'You' : entry.by), el('span', 'dice-log-time', new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
+    head.append(el('b', null, entry.by), el('span', 'dice-log-time', new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
     row.append(head, el('div', 'dice-log-what', entry.title), el('div', 'dice-log-detail', entry.detail));
     logPanel.append(row);
   }
@@ -782,8 +944,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.DiceTray = {
-  open, close, roll, remoteStart, remoteResult: remoteResultLate, setHistory, resetLog,
+  open, close, roll, remoteStart, remoteResult: remoteResultLate, setHistory, resetLog, setSessionColors,
+  preferredColor: () => settings.color,
   isOpen: () => mode === 'tray', log: () => log,
+  // For trying the effects: DiceTray.effect(1 | 20).
+  effect: (n) => { const at = { x: layer.clientWidth / 2, y: layer.clientHeight / 2 }; if (n === 1) skull(at); else fireworks(at); },
 };
 if (typeof Themes !== 'undefined') Themes.onChange(() => { /* the tray's backdrop is repainted by Themes */ });
 window.dispatchEvent(new Event('dice-ready'));

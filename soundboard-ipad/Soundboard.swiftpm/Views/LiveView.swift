@@ -6,6 +6,8 @@ struct LiveView: View {
     @EnvironmentObject private var live: LiveSession
     @Environment(\.dismiss) private var dismiss
     @State private var tab: Tab = .broadcast
+    /// A name is needed to tune in.
+    private var hasName: Bool { !live.yourName.trimmingCharacters(in: .whitespaces).isEmpty }
     /// The player waiting for "Remove from the session?" to be confirmed.
     @State private var kicking: LiveHostEngine.Peer?
 
@@ -113,8 +115,14 @@ struct LiveView: View {
 
     @ViewBuilder
     private var tuneInForm: some View {
-        Section("Your name (shown to the broadcaster)") {
+        Section {
             TextField("e.g. Sam", text: $live.yourName)
+                .textInputAutocapitalization(.words)
+        } header: {
+            Text("Your name (required)")
+        } footer: {
+            Text("Enter your name to tune in. Everyone sees it on your sounds and dice rolls.")
+                .foregroundStyle(hasName ? Color.secondary : Color.red)
         }
         Section("Sessions on this Wi-Fi") {
             if live.found.isEmpty {
@@ -133,7 +141,7 @@ struct LiveView: View {
                         Text("Tune In").foregroundStyle(Color.accentColor)
                     }
                 }
-                .disabled(live.busy)
+                .disabled(live.busy || !hasName)
             }
         }
         Section {
@@ -142,7 +150,7 @@ struct LiveView: View {
                 .autocorrectionDisabled()
                 .font(.body.monospaced())
             Button("Tune In Online") { live.tuneInOnline() }
-                .disabled(live.busy)
+                .disabled(live.busy || !hasName)
         } header: {
             Text("Online session")
         }

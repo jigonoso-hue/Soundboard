@@ -205,6 +205,12 @@ enum LiveRolls {
     ]
     static let types = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]
     static let maxDice = 40
+    /// The dice colours. In a session each person claims one, and no two people
+    /// share a colour, so it's always clear whose dice are whose.
+    static let colors = [
+        "#b3261e", "#2a5bd7", "#1f8a5b", "#7b3fbf", "#c47a12", "#1d1d24", "#e8e2d0", "#0f8a8a",
+        "#d6457a", "#7cb518", "#e3611c", "#4fb3e8", "#d4a017", "#5b2a6e", "#9aa3ad", "#8a5a2b",
+    ]
 
     private static func num(_ value: Any?, _ low: Double, _ high: Double) -> Double {
         guard let n = LiveNet.number(value), n.isFinite else { return 0 }
@@ -321,6 +327,11 @@ final class LiveHostEngine {
     private var rollOrder: [String] = []
     /// Finished rolls, for listeners who join later.
     private var rollLog: [LiveJSON] = []
+    /// Who has which dice colour: peer (or "host") → colour.
+    private var diceColors: [String: String] = [:]
+    private var hostDiceName = "Broadcaster"
+    /// The colour list changed, for the host's own dice tray.
+    var onColors: ((LiveJSON) -> Void)?
 
     private struct PeerInfo {
         var name = "Listener"
@@ -359,8 +370,11 @@ final class LiveHostEngine {
         hasher = FileHasher()
         transport.onJoin = { [weak self] peer in self?.peers[peer] = PeerInfo() }
         transport.onLeave = { [weak self] peer in
-            self?.peers[peer] = nil
-            self?.emitPeers()
+            guard let self else { return }
+            self.peers[peer] = nil
+            self.emitPeers()
+            // Their dice colour is free again.
+            if self.diceColors.removeValue(forKey: peer) != nil { self.broadcastColors() }
         }
         transport.onMessage = { [weak self] peer, message in
             self?.enqueue { [weak self] in await self?.handle(peer, message) }
@@ -395,6 +409,7 @@ final class LiveHostEngine {
             transport.send(rulesMessage, to: peer)
             if playerSounds == .gm { transport.send(catalogMessage, to: peer) }
             if !rollLog.isEmpty { transport.send(["t": "rolls", "list": Array(rollLog.suffix(30))], to: peer) }
+            transport.send(colorsMessage, to: peer)
             send(ambience, to: peer)
             send(await prefetchMessage(), to: peer)
             let now = LiveNet.now
@@ -419,6 +434,8 @@ final class LiveHostEngine {
             if let info = peers[peer], info.ready { startRoll(message, peer: peer, name: info.name) }
         case "rollResult":
             if peers[peer]?.ready == true { finishRoll(message, peer: peer) }
+        case "diceColor":
+            if peers[peer]?.ready == true { _ = claimColor(peer, LiveNet.string(message["color"]) ?? "") }
         case "cue":
             handleCue(from: peer, message)
         case "offer":
@@ -440,6 +457,9 @@ final class LiveHostEngine {
         guard var start = LiveRolls.cleanStart(message), let id = LiveNet.string(start["id"]), rollStarts[id] == nil else { return }
         let fallback = LiveNet.string(start["by"]) ?? ""
         start["by"] = String((name.isEmpty ? (fallback.isEmpty ? "Someone" : fallback) : name).prefix(40))
+        // Everyone rolls in their own colour; no colour, no roll.
+        guard let color = diceColors[peer ?? "host"] else { return }
+        start["color"] = color
         rollStarts[id] = (start, peer, false)
         rollOrder.append(id)
         if rollOrder.count > 60 { rollStarts[rollOrder.removeFirst()] = nil }
@@ -460,6 +480,41 @@ final class LiveHostEngine {
         rollLog.append(logged)
         if rollLog.count > 100 { rollLog.removeFirst() }
         if peer != nil { onRoll?(result) }
+    }
+
+    /// Who has which dice colour: [{ peer, name, color }] ("host" is the broadcaster).
+    private var colorsMessage: LiveJSON {
+        let list: [LiveJSON] = diceColors.map { peer, color in
+            ["peer": peer, "color": color, "name": peer == "host" ? hostDiceName : (peers[peer]?.name ?? "Listener")]
+        }
+        return ["t": "diceColors", "colors": list]
+    }
+
+    private func broadcastColors() {
+        transport.send(colorsMessage, to: nil)
+        onColors?(colorsMessage)
+    }
+
+    /// Someone asks for a dice colour: theirs if no one else has it.
+    private func claimColor(_ peer: String, _ color: String) -> Bool {
+        let wanted = color.lowercased()
+        guard LiveRolls.colors.contains(wanted) else { return false }
+        if diceColors.contains(where: { $0.key != peer && $0.value == wanted }) {
+            if peer != "host" { transport.send(colorsMessage, to: peer) }
+            return false
+        }
+        diceColors[peer] = wanted
+        broadcastColors()
+        return true
+    }
+
+    /// The broadcaster's own colour and name.
+    func setHostColor(_ color: String, name: String) {
+        enqueue { [weak self] in
+            guard let self else { return }
+            if !name.isEmpty { self.hostDiceName = String(name.prefix(40)) }
+            if !self.claimColor("host", color) { self.onColors?(self.colorsMessage) }
+        }
     }
 
     /// The host's own roll.
@@ -740,9 +795,11 @@ final class LiveListenerEngine {
     var onScene: ((String?) -> Void)?
     var onRules: ((PlayerSounds) -> Void)?
     var onCatalog: (([CatalogItem]) -> Void)?
-    /// Dice rolls in the session: `roll`, `rollResult` and `rolls` messages.
+    /// Dice rolls in the session: `roll`, `rollResult`, `rolls` and `diceColors` messages.
     var onRoll: ((LiveJSON) -> Void)?
     private(set) var hostName: String?
+    /// This listener's id in the session (from `welcome`).
+    private(set) var peerId: String?
     /// Resolves a built-in loop's file name to its URL.
     var builtinURL: (String) -> URL? = { _ in nil }
 
@@ -802,7 +859,7 @@ final class LiveListenerEngine {
 
     /// A dice roll starting or finished on this device, for everyone to see.
     func sendRoll(_ message: LiveJSON) {
-        guard let t = LiveNet.string(message["t"]), t == "roll" || t == "rollResult" else { return }
+        guard let t = LiveNet.string(message["t"]), ["roll", "rollResult", "diceColor"].contains(t) else { return }
         socket.send(message)
     }
 
@@ -830,6 +887,7 @@ final class LiveListenerEngine {
     private func handle(_ message: LiveJSON) {
         switch LiveNet.string(message["t"]) {
         case "welcome":
+            peerId = LiveNet.string(message["peer"])
             hostName = LiveNet.string(message["host"]) ?? "Game Master"
             onState?(.connected)
             startClockSync()
@@ -846,6 +904,10 @@ final class LiveListenerEngine {
         case "scene": onScene?(LiveNet.string(message["name"]))
         case "roll", "rollResult", "rolls":
             onRoll?(message)
+        case "diceColors":
+            var tagged = message
+            tagged["you"] = peerId ?? ""
+            onRoll?(tagged)
         case "rules":
             onRules?(PlayerSounds(rawValue: LiveNet.string(message["playerSounds"]) ?? "") ?? .off)
         case "catalog":

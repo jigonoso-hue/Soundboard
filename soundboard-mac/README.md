@@ -189,7 +189,7 @@ Everything you play is sent to listeners: sounds, full sounds, bashes, ambience 
 - **Remove:** in the Live window, **Remove** next to a listener takes them out of the session.
 - **Add Sounds** and **Record** hide while you broadcast.
 
-**Tune In (a listener).** Enter your name, then pick a session on this Wi-Fi or enter the broadcaster's code. The window turns into a full-window stage in your theme's style, until you click **Leave**: rings ripple out while sounds play, whispers glow purple, buzz sounds shake the stage (with a notification and a bouncing Dock icon if Dungeon Radio isn't in front), and what's playing is grouped into sounds, full sounds and, last, ambience. A sound a listener played shows their name. **Volumes** sets your own levels for music, effects and ambience. When the broadcaster allows listeners' sounds, your pads sit at the bottom: **Choose** up to 5, then click one to play it for everyone.
+**Tune In (a listener).** Enter your name (you can't tune in without one; it's shown on your sounds, rolls and everywhere else), then pick a session on this Wi-Fi or enter the broadcaster's code. The window turns into a full-window stage in your theme's style, until you click **Leave**: rings ripple out while sounds play, whispers glow purple, buzz sounds shake the stage (with a notification and a bouncing Dock icon if Dungeon Radio isn't in front), and what's playing is grouped into sounds, full sounds and, last, ambience. A sound a listener played shows their name. **Volumes** sets your own levels for music, effects and ambience. When the broadcaster allows listeners' sounds, your pads sit at the bottom: **Choose** up to 5, then click one to play it for everyone.
 
 How it works: the broadcaster's app sends commands, not audio. Each listener's app fetches every sound file once (cached by its SHA-256 hash, cleared after 30 days unused), syncs its clock with the broadcaster's and plays each sound itself, in time. The first time a sound plays it may start a moment late while the file arrives; sounds in the open scene kit (or your clips, when no kit is open) are fetched ahead of time.
 
@@ -202,9 +202,10 @@ Click **Dice** in the toolbar (or on the stage, while tuned in). The tray fills 
 - Click a die (d4, d6, d8, d10, d12, d20, d100) to add one; right-click to remove one. **−** / **+** set a modifier.
 - **Roll** throws them. Hold it down to throw harder (the button fills up over a second and a half).
 - **A** (green) rolls a d20 with advantage: two d20s, keep the higher. **DA** (red) is disadvantage: keep the lower. The die that doesn't count is dimmed.
+- A natural 1 on a d20 brings up a skull and crossbones over the die; a natural 20 sets off fireworks.
 - Pick your dice colour at the top. **Log** lists every roll: who rolled what.
 
-In a Live Session everyone sees every roll: the dice tumble across everyone's screen (over whatever they're looking at), with who rolled them and the result, and the roll log is shared. Late joiners get the rolls made before they arrived.
+In a Live Session everyone rolls in their own colour, and no two people can have the same one: pick a free colour before your first roll (colours others have are crossed out, with their name). Everyone's dice roll on their own, so dice thrown at the same time never knock into each other. Everyone sees every roll: the dice tumble across everyone's screen (over whatever they're looking at), with who rolled them and the result, and the roll log is shared. Late joiners get the rolls made before they arrived.
 
 ## Themes
 

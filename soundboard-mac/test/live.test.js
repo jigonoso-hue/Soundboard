@@ -247,13 +247,30 @@ test('dice rolls go to everyone, named by the host, and late joiners get the log
   const hostRolls = [];
   host.on('roll', (m) => hostRolls.push(m));
   const anaRolls = [];
-  ana.on('roll', (m) => anaRolls.push(m));
+  ana.on('roll', (m) => { if (m.t === 'roll' || m.t === 'rollResult') anaRolls.push(m); });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const throwOf = { p: [0, 0.5], h: 3, v: [0, -1], w: [1, 2, 3], q: [0, 0, 0, 1] };
   try {
     sam.connect(url);
     ana.connect(url);
     await waitFor(host, 'peers', (list) => list.length === 2);
+    // No colour yet: the roll is refused.
+    sam.sendRoll({ t: 'roll', id: 'r0', kinds: ['d6'], dice: [throwOf], groups: [{ type: 'd6', dice: [0] }] });
+    await wait(100);
+    assert.equal(anaRolls.length, 0);
+    // Colours: Sam takes ruby; Ana can't have it too.
+    const anaColors = [];
+    ana.on('roll', (m) => { if (m.t === 'diceColors') anaColors.push(m); });
+    sam.sendRoll({ t: 'diceColor', color: '#B3261E' });
+    await wait(100);
+    ana.sendRoll({ t: 'diceColor', color: '#b3261e' });
+    await wait(100);
+    ana.sendRoll({ t: 'diceColor', color: '#1f8a5b' });
+    await wait(150);
+    const last = anaColors[anaColors.length - 1];
+    assert.deepEqual(last.colors.map((c) => [c.name, c.color]).sort(), [['Ana', '#1f8a5b'], ['Sam', '#b3261e']]);
+    assert.ok(last.you, 'listeners learn which entry is theirs');
+    anaRolls.length = 0;
     // Sam pretends to be someone else: the host names the roller itself.
     sam.sendRoll({ t: 'roll', id: 'r1', by: 'The Broadcaster', kinds: ['d20', 'd20'], dice: [throwOf, throwOf], groups: [{ type: 'd20', dice: [0] }, { type: 'd20', dice: [1] }], mode: 'adv', modifier: 2, color: '#b3261e' });
     await wait(150);
@@ -264,17 +281,21 @@ test('dice rolls go to everyone, named by the host, and late joiners get the log
     await wait(150);
     assert.deepEqual(anaRolls.map((m) => m.t), ['roll', 'rollResult']);
     assert.equal(anaRolls[0].by, 'Sam');
+    assert.equal(anaRolls[0].color, '#b3261e', 'rolls use the roller\'s own colour');
     assert.equal(anaRolls[0].mode, 'adv');
     assert.deepEqual(anaRolls[1].values, [18, 3]);
     assert.deepEqual(hostRolls.map((m) => m.t), ['roll', 'rollResult']);
     // Ana can't finish Sam's roll.
     ana.sendRoll({ t: 'rollResult', id: 'r1', values: [1, 1] });
-    // The host's own roll.
+    // The host's own roll, in a colour no one else has.
+    host.setHostColor('#b3261e', 'Jo');
+    host.setHostColor('#2a5bd7', 'Jo');
     host.roll({ id: 'h1', kinds: ['d6'], dice: [throwOf], groups: [{ type: 'd6', dice: [0] }], mode: 'normal', modifier: 0 }, 'Jo');
     host.rollResult({ id: 'h1', values: [4] });
     await wait(150);
     assert.equal(anaRolls.filter((m) => m.t === 'rollResult').length, 2);
     assert.equal(anaRolls[2].by, 'Jo');
+    assert.equal(anaRolls[2].color, '#2a5bd7');
 
     const late = new LiveListener({ cacheDir: tempDir('dice-late'), name: 'Late' });
     const history = waitFor(late, 'roll', (m) => m.t === 'rolls');

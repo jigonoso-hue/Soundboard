@@ -55,6 +55,7 @@ On the local network the host assigns peer ids itself.
 | `offer {sounds: [{hash, ext, name}]}` | The listener's own chosen sounds, at most five |
 | `chunk {…}` / `missing {hash}` | Answers to the host's `need` for an offered sound |
 | `roll {…}` / `rollResult {id, values}` | A dice roll on this listener's device (see Dice) |
+| `diceColor {color}` | Asks for a dice colour (see Dice) |
 
 ### Host → listener
 
@@ -75,6 +76,7 @@ On the local network the host assigns peer ids itself.
 | `kicked {}` | The host removed this listener; it disconnects and doesn't reconnect |
 | `roll {…}` / `rollResult {id, values}` | Someone's dice roll, for everyone to see (see Dice) |
 | `rolls {list: […]}` | Rolls made before this listener joined, for the roll log |
+| `diceColors {colors: [{peer, name, color}]}` | Who has which dice colour (`peer` `"host"` is the broadcaster) |
 | `rules {playerSounds, limit}` | Whether listeners may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
 | `catalog {sounds: [{id, name, color}]}` | The broadcaster's sounds listeners may choose from (when `playerSounds` is `"gm"`) |
 | `need {hash, i}` | Request chunk `i` of a sound the listener offered |
@@ -165,6 +167,21 @@ result.
 
 At most 40 dice per roll. Only the device that started a roll can finish it,
 and values outside a die's range are refused.
+
+**Colours.** In a session everyone rolls in their own colour, one of sixteen
+(`#b3261e #2a5bd7 #1f8a5b #7b3fbf #c47a12 #1d1d24 #e8e2d0 #0f8a8a #d6457a
+#7cb518 #e3611c #4fb3e8 #d4a017 #5b2a6e #9aa3ad #8a5a2b`). A listener asks with
+`diceColor`; the host gives it to them unless someone else has it, and sends
+everyone the new `diceColors` list (a refused listener just gets the list). A
+colour is freed when its owner leaves. The host refuses rolls from anyone
+without a colour and sets each roll's `color` to the roller's.
+
+Each person's dice collide only with their own dice and the tray, so rolls
+made at the same time never knock into each other.
+
+**Natural 1 and 20.** When a d20 that counts (all of them, or the kept one with
+advantage or disadvantage) lands on 1, a skull and crossbones pops up over it;
+on 20, fireworks. Every device shows this for every roll.
 
 ## Host-only features
 
