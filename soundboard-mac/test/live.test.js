@@ -237,6 +237,58 @@ test('the host can remove a listener', async () => {
   }
 });
 
+test('dice rolls go to everyone, named by the host, and late joiners get the log', async () => {
+  const transport = new LanHostTransport({ name: 'Dice' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Dice', transport, resolveSound: () => null });
+  const url = `ws://127.0.0.1:${transport.port}`;
+  const sam = new LiveListener({ cacheDir: tempDir('dice-sam'), name: 'Sam' });
+  const ana = new LiveListener({ cacheDir: tempDir('dice-ana'), name: 'Ana' });
+  const hostRolls = [];
+  host.on('roll', (m) => hostRolls.push(m));
+  const anaRolls = [];
+  ana.on('roll', (m) => anaRolls.push(m));
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const throwOf = { p: [0, 0.5], h: 3, v: [0, -1], w: [1, 2, 3], q: [0, 0, 0, 1] };
+  try {
+    sam.connect(url);
+    ana.connect(url);
+    await waitFor(host, 'peers', (list) => list.length === 2);
+    // Sam pretends to be someone else: the host names the roller itself.
+    sam.sendRoll({ t: 'roll', id: 'r1', by: 'The Broadcaster', kinds: ['d20', 'd20'], dice: [throwOf, throwOf], groups: [{ type: 'd20', dice: [0] }, { type: 'd20', dice: [1] }], mode: 'adv', modifier: 2, color: '#b3261e' });
+    await wait(150);
+    // A number a d20 can't show is refused.
+    sam.sendRoll({ t: 'rollResult', id: 'r1', values: [25, 3] });
+    await wait(100);
+    sam.sendRoll({ t: 'rollResult', id: 'r1', values: [18, 3] });
+    await wait(150);
+    assert.deepEqual(anaRolls.map((m) => m.t), ['roll', 'rollResult']);
+    assert.equal(anaRolls[0].by, 'Sam');
+    assert.equal(anaRolls[0].mode, 'adv');
+    assert.deepEqual(anaRolls[1].values, [18, 3]);
+    assert.deepEqual(hostRolls.map((m) => m.t), ['roll', 'rollResult']);
+    // Ana can't finish Sam's roll.
+    ana.sendRoll({ t: 'rollResult', id: 'r1', values: [1, 1] });
+    // The host's own roll.
+    host.roll({ id: 'h1', kinds: ['d6'], dice: [throwOf], groups: [{ type: 'd6', dice: [0] }], mode: 'normal', modifier: 0 }, 'Jo');
+    host.rollResult({ id: 'h1', values: [4] });
+    await wait(150);
+    assert.equal(anaRolls.filter((m) => m.t === 'rollResult').length, 2);
+    assert.equal(anaRolls[2].by, 'Jo');
+
+    const late = new LiveListener({ cacheDir: tempDir('dice-late'), name: 'Late' });
+    const history = waitFor(late, 'roll', (m) => m.t === 'rolls');
+    late.connect(url);
+    const { list } = await history;
+    assert.deepEqual(list.map((r) => [r.by, r.values]), [['Sam', [18, 3]], ['Jo', [4]]]);
+    late.leave();
+  } finally {
+    sam.leave();
+    ana.leave();
+    transport.close();
+  }
+});
+
 let createRelay = null;
 try { ({ createRelay } = require('../../live-relay/server')); } catch { /* relay deps not installed */ }
 

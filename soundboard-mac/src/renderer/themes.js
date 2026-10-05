@@ -19,7 +19,7 @@ const Themes = (() => {
     ['Moss', '#4caf50'], ['Sea', '#1fa2d6'], ['Rose', '#ff5d9e'], ['Rust', '#9c3d12']];
 
   // Where the art goes: the window's backdrop, pages and panels.
-  const BACKDROPS = [['#board', null], ['#sidebar', 'sidebar'], ['#browser', 'online'], ['#live-stage', 'stage']];
+  const BACKDROPS = [['#board', null], ['#sidebar', 'sidebar'], ['#browser', 'online'], ['#live-stage', 'stage'], ['#dice-layer', null]];
   const PANELS = ['#ambience', '.kit-header', '.kit-section', '.stage-pads', '#options-dialog .options-panel'];
 
   function read(key) { try { return localStorage.getItem(key); } catch { return null; } }

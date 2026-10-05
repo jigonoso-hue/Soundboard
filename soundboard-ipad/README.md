@@ -4,6 +4,7 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
 
 - **Sidebar.** Scene Kits at the top. Under them, the library views (**All**, **Clips**, **Full Sounds**, **Bashes**) with counts, and collapsible **Tags** filters.
 - **Record.** **Add Sounds → Record…** records a sound with the microphone (up to 10 minutes). Listen back, name it, and save it to your library.
+- **Dice.** Tap **Dice** in the toolbar (or on the stage, while tuned in). The tray fills the screen: real 3D dice tumble with physics and bounce off its edges. Tap a die to add it (touch and hold to remove), set a modifier, then tap **Roll** (hold to throw harder). **A** (green) is a d20 with advantage, **DA** (red) with disadvantage. On iPhone, turn on **Shake to roll**: the dice follow the phone as you tilt and shake it, and the roll counts once it's still and they've settled. **Log** lists who rolled what. In a Live Session everyone sees every roll on their own screen, and the log is shared.
 - **Clips vs Full Sounds.** Short effects show as tiles, and songs and long tracks show as rows with a timer. Sounds a minute or longer count as full sounds automatically. You can change the type in a sound's editor.
 - **Tags.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic and more) plus your own. After you add sounds, the app asks you to name and tag them. Filter by tags in the sidebar (**Match any** or **Match all**). Search matches names and tags. Sort by your order, name, newest or longest.
 - **Bashes.** Several sounds fired together with one tap. The full-screen editor has a timeline: drag sounds left or right to set when they start, and up or down to layer them on lanes. Tap a sound to set its volume or make it repeat (with a gap, and a number of plays or until stopped). Give it a name and a cover: an icon or a photo.
@@ -148,6 +149,8 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Live/MirrorPlayer.swift` | Plays what a Live Session host sends, with the listener's volumes and haptics |
 | `Live/LiveSession.swift` | Live Session state, forwarding what the board plays while hosting, whispers, emphasis, listeners' sounds and buzz |
 | `Views/LiveView.swift` | The Live sheet (with Remove) and the toolbar's Live, Whisper and Emphasis controls |
+| `Views/DiceView.swift` | The dice tray: 3D dice (SceneKit) with physics, shake to roll, results, the roll log, showing others' rolls |
+| `Model/DiceGeometry.swift` | The dice's shapes, numbering, reading a die, advantage and totals (a copy of the Mac's dice-geometry.js) |
 | `Views/RecorderView.swift` | Record a Sound: microphone recording, level meter, listen back and save |
 | `Views/ListenerStageView.swift` | The full-screen stage listeners see while tuned in, their sound pads and volumes |
 | `YouTube/YouTubeController.swift` | The embedded YouTube view and capture bridge |

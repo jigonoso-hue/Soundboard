@@ -326,6 +326,12 @@ struct LiveControls: View {
                 .accessibilityAddTraits(live.emphasis ? .isSelected : [])
             }
             Button {
+                live.dice.open()
+            } label: {
+                Label("Dice", systemImage: "dice")
+            }
+            .accessibilityLabel("Roll dice")
+            Button {
                 showLive = true
             } label: {
                 Label(label, systemImage: "dot.radiowaves.left.and.right")

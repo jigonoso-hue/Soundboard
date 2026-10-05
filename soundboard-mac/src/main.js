@@ -381,6 +381,7 @@ function registerLiveIpc() {
     const session = { role: 'host', host, transport, mode: mode === 'online' ? 'online' : 'local' };
     live = session;
     host.on('peers', () => { if (live === session) sendToMain('live:status', liveStatus()); });
+    host.on('roll', (message) => { if (live === session) sendToMain('live:roll', message); });
     // A player played a sound for everyone: the board plays it here and sends it on.
     host.on('cue', (peer, playerName, cue) => {
       if (live !== session) return;
@@ -417,6 +418,8 @@ function registerLiveIpc() {
       }
       case 'playerSounds': host.setPlayerSounds(event.mode); break;
       case 'kick': host.kick(String(event.peer || '')); break;
+      case 'roll': host.roll(event, event.by); break;
+      case 'rollResult': host.rollResult(event); break;
       case 'catalog': host.setCatalog(event.items); break;
       case 'stop': host.stop(event.group); break;
       case 'volume': host.volume(event.group, event.volume); break;
@@ -448,6 +451,7 @@ function registerLiveIpc() {
       if (status.state === 'error' || status.state === 'ended') live = null;
       sendToMain('live:status', { role: live ? 'listen' : null, ...status });
     });
+    listener.on('roll', (message) => { if (live === session) sendToMain('live:roll', message); });
     listener.on('rules', (mode) => { if (live === session) sendToMain('live:rules', mode); });
     listener.on('catalog', (items) => { if (live === session) sendToMain('live:catalog', items); });
     listener.on('command', (command) => {
@@ -466,6 +470,11 @@ function registerLiveIpc() {
   });
 
   ipcMain.handle('live:leave', () => { endLive(); return liveStatus(); });
+
+  // A dice roll by this listener, for everyone in the session.
+  ipcMain.on('live:roll', (_e, message) => {
+    if (live && live.role === 'listen') live.listener.sendRoll(message);
+  });
 
   // A player's own sounds: offered to the host so it can fetch them ahead of time.
   ipcMain.handle('live:offer', async (_e, ids) => {

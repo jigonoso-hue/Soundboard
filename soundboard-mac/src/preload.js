@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld('soundboard', {
     offer: (ids) => ipcRenderer.invoke('live:offer', ids),
     cue: (request) => ipcRenderer.invoke('live:cue', request),
     notify: (note) => ipcRenderer.send('live:notify', note),
+    roll: (message) => ipcRenderer.send('live:roll', message),
+    onRoll: (callback) => ipcRenderer.on('live:roll', (_e, message) => callback(message)),
   },
   downloadAudio: (jobId, url) => ipcRenderer.invoke('youtube:download-audio', { jobId, url }),
   cancelDownload: (jobId) => ipcRenderer.invoke('youtube:cancel-download', jobId),

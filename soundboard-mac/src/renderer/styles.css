@@ -1281,3 +1281,56 @@ dialog label.picker-row input { width: auto; }
 .record-body p { margin: 0; }
 .record-after { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .record-after label { width: 100%; margin: 0; }
+
+/* ---------- Dice (dice.js) ---------- */
+.dice-layer { position: fixed; inset: 0; z-index: 40; overflow: hidden; color: #fff; }
+.dice-layer.tray { background: radial-gradient(ellipse at center, #1f5a3d, #0d2a1c 75%); background-size: 100% 100%; }
+.has-backdrop .dice-layer.tray { background-color: #000; }
+.dice-layer.watch { background: none !important; pointer-events: none; }
+.dice-layer.watch .dice-top, .dice-layer.watch .dice-ui, .dice-layer.watch .dice-log { display: none; }
+.dice-layer.fading { opacity: 0; transition: opacity 0.6s; }
+.dice-canvas { position: absolute; inset: 0; }
+.dice-canvas canvas { display: block; width: 100%; height: 100%; }
+.dice-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: 38px 18px 10px; -webkit-app-region: drag; }
+.dice-top > * { -webkit-app-region: no-drag; }
+.dice-top .spacer { -webkit-app-region: drag; }
+.dice-title { font-size: 18px; font-weight: 800; letter-spacing: 0.02em; text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+.dice-colors { display: flex; gap: 6px; margin-left: 8px; }
+.dice-color { width: 20px; height: 20px; border-radius: 50%; padding: 0; border: 2px solid rgba(255,255,255,0.35); }
+.dice-color.selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,0.4); }
+.dice-color:hover:not(:disabled) { border-color: #fff; }
+.dice-pill { background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.18); color: #fff; border-radius: 999px; padding: 6px 14px; font-weight: 600; }
+.dice-pill:hover:not(:disabled) { background: rgba(0,0,0,0.6); border-color: rgba(255,255,255,0.35); }
+.dice-ui { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 18px; background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); max-width: calc(100vw - 32px); }
+.dice-pool, .dice-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.dice-type { position: relative; min-width: 54px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-weight: 700; }
+.dice-type.on { background: color-mix(in srgb, var(--accent) 45%, rgba(0,0,0,0.3)); border-color: var(--accent); }
+.dice-type:hover:not(:disabled) { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.4); }
+.dice-count { position: absolute; top: -7px; right: -7px; min-width: 20px; height: 20px; border-radius: 10px; background: #fff; color: #111; font-size: 11px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.dice-mod { display: flex; align-items: center; gap: 6px; }
+.dice-mod-value { min-width: 36px; text-align: center; font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
+.dice-adv, .dice-dis { width: 46px; height: 40px; border-radius: 12px; font-weight: 900; font-size: 15px; color: #fff; border: none; }
+.dice-adv { background: #1f9d55; }
+.dice-adv:hover:not(:disabled) { background: #22b25f; border: none; }
+.dice-dis { background: #c62828; }
+.dice-dis:hover:not(:disabled) { background: #dc3030; border: none; }
+.dice-roll { position: relative; overflow: hidden; min-width: 200px; height: 44px; border-radius: 14px; font-weight: 800; font-size: 15px; color: #fff; background: var(--accent); border: none; user-select: none; }
+.dice-roll:hover:not(:disabled) { background: var(--accent-hover); border: none; }
+.dice-roll .dice-charge { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--charge, 0)); background: rgba(255,255,255,0.35); pointer-events: none; }
+.dice-roll-text { position: relative; }
+.dice-banner { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); min-width: 220px; max-width: min(560px, calc(100vw - 32px)); text-align: center; padding: 12px 22px 14px; border-radius: 18px; background: rgba(10,10,16,0.72); color: #fff; backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,0.4); pointer-events: none; }
+.dice-banner.pop { animation: dice-pop 0.35s ease-out; }
+@keyframes dice-pop { from { transform: translateX(-50%) scale(0.8); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+.dice-banner-who { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
+.dice-banner-title { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+.dice-banner-total { font-size: 44px; font-weight: 900; line-height: 1.1; }
+.dice-banner-detail { font-size: 13px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.dice-log { position: absolute; top: 80px; right: 14px; bottom: 150px; width: 280px; overflow-y: auto; padding: 12px; border-radius: 16px; background: rgba(0,0,0,0.55); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); }
+.dice-log-title { font-weight: 800; margin-bottom: 8px; }
+.dice-log-empty { opacity: 0.7; margin: 0; }
+.dice-log-row { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.06); margin-bottom: 6px; }
+.dice-log-row.mine { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+.dice-log-head { display: flex; justify-content: space-between; gap: 8px; }
+.dice-log-time { opacity: 0.6; font-size: 11px; }
+.dice-log-what { font-size: 12px; opacity: 0.8; }
+.dice-log-detail { font-weight: 700; font-variant-numeric: tabular-nums; }

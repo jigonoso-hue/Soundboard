@@ -54,6 +54,7 @@ struct ListenerStageView: View {
         .sheet(isPresented: $choosingSounds) {
             PlayerSoundPicker()
         }
+        .modifier(DicePresenter(tray: live.dice, active: true))
         .confirmationDialog("Leave the session?", isPresented: $confirmLeave, titleVisibility: .visible) {
             Button("Leave Session", role: .destructive) { live.leave() }
         }
@@ -122,6 +123,15 @@ struct ListenerStageView: View {
             .padding(.vertical, 6)
             .background(style.chipFill, in: Capsule())
             Spacer()
+            Button {
+                live.dice.open()
+            } label: {
+                Label("Dice", systemImage: "dice")
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(style.chipFill, in: Capsule())
+            }
+            .buttonStyle(.plain)
             Button {
                 showVolumes = true
             } label: {

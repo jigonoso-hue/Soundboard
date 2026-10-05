@@ -170,6 +170,49 @@ async function chunkOf(file, hash, ext, index) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Dice rolls, shared with everyone in the session (see PROTOCOL.md, Dice).
+
+const DIE_KINDS = { d4: [1, 4], d6: [1, 6], d8: [1, 8], d10: [0, 9], d10t: [0, 9], d12: [1, 12], d20: [1, 20] };
+const ROLL_TYPES = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
+const MAX_ROLL_DICE = 40;
+const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : 0; };
+
+// A roll's start, checked: the dice and how they're thrown.
+function cleanRollStart(m) {
+  const id = String(m.id || '');
+  if (!/^[\w-]{1,60}$/.test(id)) return null;
+  const kinds = Array.isArray(m.kinds) ? m.kinds.slice(0, MAX_ROLL_DICE) : [];
+  if (!kinds.length || !kinds.every((k) => DIE_KINDS[k])) return null;
+  const dice = (Array.isArray(m.dice) ? m.dice : []).slice(0, kinds.length).map((d) => ({
+    p: [num(d?.p?.[0], -1, 1), num(d?.p?.[1], -1, 1)],
+    h: num(d?.h, 0.5, 8),
+    v: [num(d?.v?.[0], -10, 10), num(d?.v?.[1], -10, 10)],
+    w: [0, 1, 2].map((i) => num(d?.w?.[i], -80, 80)),
+    q: [0, 1, 2, 3].map((i) => num(d?.q?.[i], -1, 1)),
+  }));
+  if (dice.length !== kinds.length) return null;
+  const groups = (Array.isArray(m.groups) ? m.groups : []).slice(0, MAX_ROLL_DICE).map((g) => ({
+    type: ROLL_TYPES.includes(g?.type) ? g.type : null,
+    dice: (Array.isArray(g?.dice) ? g.dice : []).slice(0, 2).map((i) => Math.trunc(num(i, 0, kinds.length - 1))),
+  }));
+  if (!groups.length || groups.some((g) => !g.type || !g.dice.length)) return null;
+  return {
+    t: 'roll', id, kinds, dice, groups,
+    mode: ['normal', 'adv', 'dis'].includes(m.mode) ? m.mode : 'normal',
+    modifier: Math.trunc(num(m.modifier, -99, 99)),
+    color: /^#[0-9a-f]{6}$/i.test(String(m.color)) ? String(m.color) : '#2a5bd7',
+    by: String(m.by || '').slice(0, 40),
+  };
+}
+
+// What each die of a roll shows, checked against the dice.
+function cleanRollValues(values, kinds) {
+  if (!Array.isArray(values) || values.length !== kinds.length) return null;
+  const out = values.map((v, i) => Math.trunc(Number(v)));
+  return out.every((v, i) => Number.isInteger(v) && v >= DIE_KINDS[kinds[i]][0] && v <= DIE_KINDS[kinds[i]][1]) ? out : null;
+}
+
 const PLAYER_SOUNDS = ['off', 'own', 'gm'];
 const PLAYER_SOUND_LIMIT = 5;
 
@@ -348,6 +391,8 @@ class LiveHost extends EventEmitter {
     this.hasher = hasher;
     this.playerSounds = 'off';
     this.catalog = []; // [{ id, name, color }]: the GM's sounds players may choose
+    this.rollStarts = new Map(); // roll id -> { start, peer } (recent rolls in progress)
+    this.rollLog = []; // finished rolls, for listeners who join later
     this.peers = new Map(); // peer -> { name, device, allowed: Set<hash>, cued, lastCue, offers, fetcher, waitingCues }
     this.files = new Map(); // hash -> { file, ext }
     this.active = new Map(); // pid -> { message, group, until }
@@ -387,6 +432,7 @@ class LiveHost extends EventEmitter {
       this.transport.send(peer, this.scene);
       this.transport.send(peer, this.rulesMessage());
       if (this.playerSounds === 'gm') this.transport.send(peer, this.catalogMessage());
+      if (this.rollLog.length) this.transport.send(peer, { t: 'rolls', list: this.rollLog.slice(-30) });
       await this.sendTo(peer, this.ambience);
       const prefetch = await this.prefetchMessage();
       await this.sendTo(peer, prefetch);
@@ -397,6 +443,10 @@ class LiveHost extends EventEmitter {
       this.transport.send(peer, { t: 'pong', id: message.id, t0: message.t0, t1: Date.now() });
     } else if (message.t === 'need') {
       await this.sendChunk(peer, info, String(message.hash || ''), Number(message.i) || 0);
+    } else if (message.t === 'roll') {
+      if (info.ready) this.startRoll(message, peer, info.name);
+    } else if (message.t === 'rollResult') {
+      if (info.ready) this.finishRoll(message, peer);
     } else if (message.t === 'cue') {
       this.handleCue(peer, info, message);
     } else if (message.t === 'offer') {
@@ -407,6 +457,39 @@ class LiveHost extends EventEmitter {
       info.fetcher?.onMissing(String(message.hash || ''));
     }
   }
+
+  // ---- Dice ----
+
+  // A roll starting (from a listener, or the host's own with peer null): everyone
+  // sees the dice thrown. The host names who rolled, so no one can roll as someone else.
+  startRoll(message, peer, name) {
+    const start = cleanRollStart(message);
+    if (!start || this.rollStarts.has(start.id)) return;
+    start.by = String(name || start.by || 'Someone').slice(0, 40);
+    this.rollStarts.set(start.id, { start, peer });
+    if (this.rollStarts.size > 60) this.rollStarts.delete(this.rollStarts.keys().next().value);
+    this.transport.send(null, start);
+    if (peer) this.emit('roll', start);
+  }
+
+  // A roll's result: the dice land on it everywhere, and it goes in the log.
+  finishRoll(message, peer) {
+    const entry = this.rollStarts.get(String(message.id || ''));
+    if (!entry || entry.peer !== peer || entry.done) return;
+    const values = cleanRollValues(message.values, entry.start.kinds);
+    if (!values) return;
+    entry.done = true;
+    const result = { t: 'rollResult', id: entry.start.id, values };
+    this.transport.send(null, result);
+    const { id, by, mode, modifier, groups } = entry.start;
+    this.rollLog.push({ id, by, mode, modifier, groups, values, at: Date.now() });
+    if (this.rollLog.length > 100) this.rollLog.shift();
+    if (peer) this.emit('roll', result);
+  }
+
+  // The host's own roll.
+  roll(message, name) { return this.enqueue(() => this.startRoll(message, null, name)); }
+  rollResult(message) { return this.enqueue(() => this.finishRoll(message, null)); }
 
   // ---- Listeners' sounds ----
 
@@ -743,6 +826,11 @@ class LiveListener extends EventEmitter {
         this.scene = message.name ? String(message.name) : null;
         this.setState(this.state);
         break;
+      case 'roll':
+      case 'rollResult':
+      case 'rolls':
+        this.emit('roll', message);
+        break;
       case 'rules':
         this.emit('rules', PLAYER_SOUNDS.includes(message.playerSounds) ? message.playerSounds : 'off');
         break;
@@ -808,6 +896,11 @@ class LiveListener extends EventEmitter {
   }
 
   // ---- Listeners' sounds ----
+
+  // A dice roll starting or finished on this device, for everyone to see.
+  sendRoll(message) {
+    if (message && (message.t === 'roll' || message.t === 'rollResult')) sendJSON(this.socket, message);
+  }
 
   // Asks the host to play one of the GM's sounds for everyone.
   cue(soundId) { sendJSON(this.socket, { t: 'cue', id: String(soundId) }); }
@@ -942,6 +1035,6 @@ function deviceName() {
 
 module.exports = {
   LiveHost, LiveListener, LanHostTransport, RelayHostTransport, LanBrowser, FileHasher, FileFetcher,
-  PLAYER_SOUND_LIMIT,
+  PLAYER_SOUND_LIMIT, cleanRollStart, cleanRollValues,
   relayUrl, deviceName, hasBonjour: () => !!Bonjour, CHUNK_SIZE, VERSION,
 };

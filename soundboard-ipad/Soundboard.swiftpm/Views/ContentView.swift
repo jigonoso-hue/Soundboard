@@ -133,6 +133,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: live.notice)
+        .modifier(DicePresenter(tray: live.dice, active: !(live.showStage && live.role == .listener)))
         .tint(themes.accent)
         .preferredColorScheme(themes.theme.colorScheme)
         .fontDesign(themes.theme.fontDesign)

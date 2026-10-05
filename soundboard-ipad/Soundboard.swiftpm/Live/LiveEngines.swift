@@ -195,6 +195,76 @@ final class FileFetcher {
     }
 }
 
+// MARK: - Dice rolls
+
+/// Dice rolls shared with everyone in a session (see PROTOCOL.md, Dice):
+/// checking what listeners send.
+enum LiveRolls {
+    static let ranges: [String: ClosedRange<Int>] = [
+        "d4": 1...4, "d6": 1...6, "d8": 1...8, "d10": 0...9, "d10t": 0...9, "d12": 1...12, "d20": 1...20,
+    ]
+    static let types = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]
+    static let maxDice = 40
+
+    private static func num(_ value: Any?, _ low: Double, _ high: Double) -> Double {
+        guard let n = LiveNet.number(value), n.isFinite else { return 0 }
+        return min(high, max(low, n))
+    }
+
+    private static func nums(_ value: Any?, count: Int, _ low: Double, _ high: Double) -> [Double] {
+        let list = (value as? [Any]) ?? []
+        return (0..<count).map { num($0 < list.count ? list[$0] : nil, low, high) }
+    }
+
+    /// A roll's start, checked: the dice and how they're thrown.
+    static func cleanStart(_ m: LiveJSON) -> LiveJSON? {
+        let id = LiveNet.string(m["id"]) ?? ""
+        guard (1...60).contains(id.count), id.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else { return nil }
+        let kinds = ((m["kinds"] as? [Any]) ?? []).prefix(maxDice).compactMap { LiveNet.string($0) }
+        guard !kinds.isEmpty, kinds.allSatisfy({ ranges[$0] != nil }) else { return nil }
+        let rawDice = ((m["dice"] as? [Any]) ?? []).prefix(kinds.count).compactMap { $0 as? LiveJSON }
+        guard rawDice.count == kinds.count else { return nil }
+        let dice: [LiveJSON] = rawDice.map { d in
+            [
+                "p": nums(d["p"], count: 2, -1, 1),
+                "h": num(d["h"], 0.5, 8),
+                "v": nums(d["v"], count: 2, -10, 10),
+                "w": nums(d["w"], count: 3, -80, 80),
+                "q": nums(d["q"], count: 4, -1, 1),
+            ]
+        }
+        var groups: [LiveJSON] = []
+        for item in ((m["groups"] as? [Any]) ?? []).prefix(maxDice) {
+            guard let g = item as? LiveJSON, let type = LiveNet.string(g["type"]), types.contains(type) else { return nil }
+            let indices = ((g["dice"] as? [Any]) ?? []).prefix(2).map { Int(num($0, 0, Double(kinds.count - 1))) }
+            guard !indices.isEmpty else { return nil }
+            groups.append(["type": type, "dice": indices])
+        }
+        guard !groups.isEmpty else { return nil }
+        let mode = LiveNet.string(m["mode"]) ?? "normal"
+        let color = LiveNet.string(m["color"]) ?? ""
+        let validColor = color.count == 7 && color.hasPrefix("#") && color.dropFirst().allSatisfy(\.isHexDigit)
+        return [
+            "t": "roll", "id": id, "kinds": Array(kinds), "dice": dice, "groups": groups,
+            "mode": ["normal", "adv", "dis"].contains(mode) ? mode : "normal",
+            "modifier": Int(num(m["modifier"], -99, 99)),
+            "color": validColor ? color : "#2a5bd7",
+            "by": String((LiveNet.string(m["by"]) ?? "").prefix(40)),
+        ]
+    }
+
+    /// What each die of a roll shows, checked against the dice.
+    static func cleanValues(_ value: Any?, kinds: [String]) -> [Int]? {
+        guard let list = value as? [Any], list.count == kinds.count else { return nil }
+        var out: [Int] = []
+        for (i, item) in list.enumerated() {
+            guard let n = LiveNet.number(item), n == n.rounded(), let range = ranges[kinds[i]], range.contains(Int(n)) else { return nil }
+            out.append(Int(n))
+        }
+        return out
+    }
+}
+
 // MARK: - Host
 
 @MainActor
@@ -244,7 +314,13 @@ final class LiveHostEngine {
     var onPeers: (([Peer]) -> Void)?
     /// A player's sound request, already checked against the rules: (peer, player name, cue).
     var onCue: ((String, String, Cue) -> Void)?
+    /// A listener's dice roll starting or finished, for the host's own screen.
+    var onRoll: ((LiveJSON) -> Void)?
     private(set) var playerSounds: PlayerSounds = .off
+    private var rollStarts: [String: (start: LiveJSON, peer: String?, done: Bool)] = [:]
+    private var rollOrder: [String] = []
+    /// Finished rolls, for listeners who join later.
+    private var rollLog: [LiveJSON] = []
 
     private struct PeerInfo {
         var name = "Listener"
@@ -318,6 +394,7 @@ final class LiveHostEngine {
             transport.send(scene, to: peer)
             transport.send(rulesMessage, to: peer)
             if playerSounds == .gm { transport.send(catalogMessage, to: peer) }
+            if !rollLog.isEmpty { transport.send(["t": "rolls", "list": Array(rollLog.suffix(30))], to: peer) }
             send(ambience, to: peer)
             send(await prefetchMessage(), to: peer)
             let now = LiveNet.now
@@ -338,6 +415,10 @@ final class LiveHostEngine {
             } else {
                 transport.send(["t": "missing", "hash": hash], to: peer)
             }
+        case "roll":
+            if let info = peers[peer], info.ready { startRoll(message, peer: peer, name: info.name) }
+        case "rollResult":
+            if peers[peer]?.ready == true { finishRoll(message, peer: peer) }
         case "cue":
             handleCue(from: peer, message)
         case "offer":
@@ -349,6 +430,45 @@ final class LiveHostEngine {
         default:
             break
         }
+    }
+
+    // MARK: Dice
+
+    /// A roll starting (from a listener, or the host's own with no peer): everyone
+    /// sees the dice thrown. The host names who rolled, so no one can roll as someone else.
+    private func startRoll(_ message: LiveJSON, peer: String?, name: String) {
+        guard var start = LiveRolls.cleanStart(message), let id = LiveNet.string(start["id"]), rollStarts[id] == nil else { return }
+        let fallback = LiveNet.string(start["by"]) ?? ""
+        start["by"] = String((name.isEmpty ? (fallback.isEmpty ? "Someone" : fallback) : name).prefix(40))
+        rollStarts[id] = (start, peer, false)
+        rollOrder.append(id)
+        if rollOrder.count > 60 { rollStarts[rollOrder.removeFirst()] = nil }
+        transport.send(start, to: nil)
+        if peer != nil { onRoll?(start) }
+    }
+
+    /// A roll's result: the dice land on it everywhere, and it goes in the log.
+    private func finishRoll(_ message: LiveJSON, peer: String?) {
+        guard let id = LiveNet.string(message["id"]), let entry = rollStarts[id], entry.peer == peer, !entry.done,
+              let kinds = entry.start["kinds"] as? [String],
+              let values = LiveRolls.cleanValues(message["values"], kinds: kinds) else { return }
+        rollStarts[id]?.done = true
+        let result: LiveJSON = ["t": "rollResult", "id": id, "values": values]
+        transport.send(result, to: nil)
+        var logged: LiveJSON = ["id": id, "values": values, "at": LiveNet.now]
+        for key in ["by", "mode", "modifier", "groups"] { logged[key] = entry.start[key] }
+        rollLog.append(logged)
+        if rollLog.count > 100 { rollLog.removeFirst() }
+        if peer != nil { onRoll?(result) }
+    }
+
+    /// The host's own roll.
+    func roll(_ message: LiveJSON, by name: String) {
+        enqueue { [weak self] in self?.startRoll(message, peer: nil, name: name) }
+    }
+
+    func rollResult(_ message: LiveJSON) {
+        enqueue { [weak self] in self?.finishRoll(message, peer: nil) }
     }
 
     // MARK: Listeners' sounds
@@ -620,6 +740,8 @@ final class LiveListenerEngine {
     var onScene: ((String?) -> Void)?
     var onRules: ((PlayerSounds) -> Void)?
     var onCatalog: (([CatalogItem]) -> Void)?
+    /// Dice rolls in the session: `roll`, `rollResult` and `rolls` messages.
+    var onRoll: ((LiveJSON) -> Void)?
     private(set) var hostName: String?
     /// Resolves a built-in loop's file name to its URL.
     var builtinURL: (String) -> URL? = { _ in nil }
@@ -678,6 +800,12 @@ final class LiveListenerEngine {
 
     // MARK: Player sounds
 
+    /// A dice roll starting or finished on this device, for everyone to see.
+    func sendRoll(_ message: LiveJSON) {
+        guard let t = LiveNet.string(message["t"]), t == "roll" || t == "rollResult" else { return }
+        socket.send(message)
+    }
+
     /// Asks the host to play one of the GM's sounds for everyone.
     func cue(soundId: String) {
         socket.send(["t": "cue", "id": soundId])
@@ -716,6 +844,8 @@ final class LiveListenerEngine {
             socket.close()
         case "pong": addClockSample(message)
         case "scene": onScene?(LiveNet.string(message["name"]))
+        case "roll", "rollResult", "rolls":
+            onRoll?(message)
         case "rules":
             onRules?(PlayerSounds(rawValue: LiveNet.string(message["playerSounds"]) ?? "") ?? .off)
         case "catalog":

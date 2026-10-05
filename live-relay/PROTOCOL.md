@@ -54,6 +54,7 @@ On the local network the host assigns peer ids itself.
 | `cue {id}` or `cue {hash}` | Play one of the listener's chosen sounds for everyone (see Listeners' sounds) |
 | `offer {sounds: [{hash, ext, name}]}` | The listener's own chosen sounds, at most five |
 | `chunk {…}` / `missing {hash}` | Answers to the host's `need` for an offered sound |
+| `roll {…}` / `rollResult {id, values}` | A dice roll on this listener's device (see Dice) |
 
 ### Host → listener
 
@@ -72,6 +73,8 @@ On the local network the host assigns peer ids itself.
 | `ambience {layers: […]}` | The full ambience state (below) |
 | `bye {}` | The host ended the session |
 | `kicked {}` | The host removed this listener; it disconnects and doesn't reconnect |
+| `roll {…}` / `rollResult {id, values}` | Someone's dice roll, for everyone to see (see Dice) |
+| `rolls {list: […]}` | Rolls made before this listener joined, for the roll log |
 | `rules {playerSounds, limit}` | Whether listeners may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
 | `catalog {sounds: [{id, name, color}]}` | The broadcaster's sounds listeners may choose from (when `playerSounds` is `"gm"`) |
 | `need {hash, i}` | Request chunk `i` of a sound the listener offered |
@@ -131,6 +134,37 @@ The host checks every cue (the right mode, at most five different sounds per
 player, at most one cue every 300 ms), then plays it on its own device and
 sends `play` to everyone, a quarter of a second ahead with `by` set to the
 listener's name, so all devices start together.
+
+## Dice
+
+Everyone in a session sees every roll. The roller's device sends `roll` as
+the dice leave its hand and `rollResult` once they stop; the host checks
+both, names the roller itself (`by`, from the listener's `hello`) and sends
+them to everyone. Each device throws the same dice in its own screen-sized
+tray and, as they slow down, renumbers their faces so they land on the
+result.
+
+```jsonc
+{
+  "t": "roll",
+  "id": "lq2x9a-1-k3f8",          // unique per roll
+  "by": "Sam",                    // set by the host
+  "kinds": ["d20", "d20"],        // the dice on the table: d4 d6 d8 d10 d10t d12 d20
+  "groups": [{"type": "d20", "dice": [0]}, {"type": "d20", "dice": [1]}],
+                                  // what was chosen (d100 = a d10t and a d10)
+  "mode": "adv",                  // "normal", "adv" (keep the higher d20) or "dis" (the lower)
+  "modifier": 2,
+  "color": "#b3261e",
+  "dice": [{"p": [x, z], "h": 3, "v": [vx, vz], "w": [wx, wy, wz], "q": [x, y, z, w]}]
+                                  // the throw: position and velocity as fractions of the
+                                  // tray's half-size, height, spin, starting rotation
+}
+{ "t": "rollResult", "id": "lq2x9a-1-k3f8", "values": [17, 4] }
+                                  // what each die shows (d10 0–9, d10t 0–9 for 00–90)
+```
+
+At most 40 dice per roll. Only the device that started a roll can finish it,
+and values outside a die's range are refused.
 
 ## Host-only features
 

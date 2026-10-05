@@ -195,6 +195,17 @@ How it works: the broadcaster's app sends commands, not audio. Each listener's a
 
 macOS asks for permission to use the local network the first time you broadcast or browse. Listeners on the same Wi-Fi also need the Mac's firewall to allow incoming connections for Dungeon Radio.
 
+## Dice
+
+Click **Dice** in the toolbar (or on the stage, while tuned in). The tray fills the window: real 3D dice tumble with physics and bounce off its edges.
+
+- Click a die (d4, d6, d8, d10, d12, d20, d100) to add one; right-click to remove one. **−** / **+** set a modifier.
+- **Roll** throws them. Hold it down to throw harder (the button fills up over a second and a half).
+- **A** (green) rolls a d20 with advantage: two d20s, keep the higher. **DA** (red) is disadvantage: keep the lower. The die that doesn't count is dimmed.
+- Pick your dice colour at the top. **Log** lists every roll: who rolled what.
+
+In a Live Session everyone sees every roll: the dice tumble across everyone's screen (over whatever they're looking at), with who rolled them and the result, and the roll log is shared. Late joiners get the rolls made before they arrived.
+
 ## Themes
 
 Click **Options** at the bottom of the sidebar to pick a theme and a highlight colour. The themes are the same as on the iPhone/iPad:
@@ -246,6 +257,8 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/live.js` | Live Session networking: local server, Bonjour, relay client, host and listener logic |
 | `src/renderer/live.js` | Live window, forwarding what the board plays, listeners' sounds, and the listener's player and stage |
 | `src/renderer/recorder.js` | Record a Sound: microphone recording, level meter, listen back and save as WAV |
+| `src/renderer/dice.js` | The dice tray: 3D dice (three.js) with physics (cannon-es), throwing, results, the roll log, showing others' rolls |
+| `src/renderer/dice-geometry.js` | The dice's shapes, numbering, reading a die, advantage and totals (shared with the tests; the iPad has a copy) |
 | `src/renderer/themes.js` | Themes and the Options window: colours, fonts, where backdrops and panels go, book-cover tiles and playing effects |
 | `src/renderer/theme-art.js` | The themes' drawings (parchment, wood, space, HUD, gilded frames, book covers, synth waves, magic, the stage) |
 | `src/renderer/kits.js` | Scene Kits sidebar, kit page (including ambience sections) and dialogs |

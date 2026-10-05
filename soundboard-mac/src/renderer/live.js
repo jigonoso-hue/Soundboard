@@ -680,7 +680,11 @@ const Live = (() => {
       const volumes = el('button', 'stage-pill stage-button', 'Volumes');
       volumes.type = 'button';
       volumes.addEventListener('click', openVolumes);
-      top.append(live, el('span', 'spacer'), volumes);
+      const dice = el('button', 'stage-pill stage-button', 'Dice');
+      dice.type = 'button';
+      dice.title = 'Roll dice: everyone in the session sees them';
+      dice.addEventListener('click', () => window.DiceTray?.open());
+      top.append(live, el('span', 'spacer'), dice, volumes);
 
       const center = el('div', 'stage-center');
       const emblem = el('div', 'stage-emblem');
@@ -824,6 +828,38 @@ const Live = (() => {
   })();
 
   // ---------------------------------------------------------------------
+  // Dice: everyone in the session sees every roll (dice.js draws them).
+
+  function myName() {
+    const name = (settings.yourName || '').trim();
+    if (hosting()) return name || 'Broadcaster';
+    if (listening()) return name || 'Listener';
+    return 'You';
+  }
+
+  function rollStart(start) {
+    const message = { t: 'roll', ...start, by: myName() };
+    if (hosting()) api.live.hostEvent(message);
+    else if (listening()) api.live.roll(message);
+  }
+
+  function rollResult(result) {
+    const message = { t: 'rollResult', ...result };
+    if (hosting()) api.live.hostEvent(message);
+    else if (listening()) api.live.roll(message);
+  }
+
+  api.live.onRoll((message) => {
+    const tray = window.DiceTray;
+    if (!tray || !(hosting() || listening())) return;
+    if (message.t === 'roll') tray.remoteStart(message);
+    else if (message.t === 'rollResult') tray.remoteResult(message);
+    else if (message.t === 'rolls') tray.setHistory(message.list);
+  });
+
+  $('#dice-btn').addEventListener('click', () => window.DiceTray?.open());
+
+  // ---------------------------------------------------------------------
   // Status and the dialog.
 
   function setStatus(next) {
@@ -831,6 +867,8 @@ const Live = (() => {
     status = next || { role: null };
     if (next && next.error) error = next.error;
     if (was === 'listen' && status.role !== 'listen') { Mirror.stopAll(true); allowed = 'off'; catalog = []; }
+    // A new session starts a new roll log.
+    if (status.role && !was) window.DiceTray?.resetLog();
     // Tuning in: the dialog closes and the stage takes over the window until you leave.
     if (status.role === 'listen') { if ($('#live-dialog').open) $('#live-dialog').close(); Stage.show(); } else Stage.hide();
     // No need to add sounds while broadcasting.
@@ -1070,5 +1108,5 @@ const Live = (() => {
 
   api.live.status().then((current) => { bonjour = current.bonjour !== false; setStatus(current); });
 
-  return { soundPlayed, soundStopped, soundVolume, stoppedAll, hosting, listening };
+  return { soundPlayed, soundStopped, soundVolume, stoppedAll, hosting, listening, myName, rollStart, rollResult };
 })();

@@ -82,6 +82,8 @@ final class LiveSession: ObservableObject {
     private weak var bashes: BashStore?
     private weak var player: SoundPlayer?
     private var host: LiveHostEngine?
+    /// The dice tray; in a session everyone sees every roll.
+    let dice = DiceTray()
     /// The relay connection while it waits for a room code.
     private var connectingRelay: RelayHost?
     private var listener: LiveListenerEngine?
@@ -132,7 +134,45 @@ final class LiveSession: ObservableObject {
         mirror.onBuzz = { [weak self] play in self?.buzz(play) }
         hostMirror.level = { [weak self] _ in self?.player?.masterVolume ?? 1 }
         browser.onChange = { [weak self] list in self?.found = list }
+        dice.myName = { [weak self] in self?.diceName ?? "You" }
+        dice.onStart = { [weak self] start in self?.sendRoll(start.json) }
+        dice.onResult = { [weak self] id, values in self?.sendRoll(["t": "rollResult", "id": id, "values": values]) }
+        dice.volume = { [weak self] in self?.player?.masterVolume ?? 1 }
         LiveFiles.pruneCache()
+    }
+
+    // MARK: Dice
+
+    /// Your name on rolls the others see.
+    private var diceName: String {
+        let name = yourName.trimmingCharacters(in: .whitespaces)
+        switch role {
+        case .host: return name.isEmpty ? "Broadcaster" : name
+        case .listener: return name.isEmpty ? "Listener" : name
+        case .idle: return "You"
+        }
+    }
+
+    /// A roll on this device, for everyone in the session.
+    private func sendRoll(_ message: LiveJSON) {
+        switch role {
+        case .host:
+            if LiveNet.string(message["t"]) == "roll" { host?.roll(message, by: diceName) } else { host?.rollResult(message) }
+        case .listener:
+            listener?.sendRoll(message)
+        case .idle:
+            break
+        }
+    }
+
+    /// Someone else's roll, from the session.
+    private func receiveRoll(_ message: LiveJSON) {
+        switch LiveNet.string(message["t"]) {
+        case "roll": dice.remoteStart(message)
+        case "rollResult": dice.remoteResult(message)
+        case "rolls": dice.setHistory((message["list"] as? [Any]) ?? [])
+        default: break
+        }
     }
 
     func attach(store: SoundStore, ambience: AmbienceMixer, kits: KitStore, bashes: BashStore, player: SoundPlayer) {
@@ -218,6 +258,8 @@ final class LiveSession: ObservableObject {
             self.whisperTargets = self.whisperTargets.intersection(ids)
         }
         engine.onCue = { [weak self] peer, name, cue in self?.playPlayerSound(from: peer, name: name, cue: cue) }
+        engine.onRoll = { [weak self] message in self?.receiveRoll(message) }
+        dice.resetLog()
         host = engine
         engine.setPlayerSounds(playerSounds)
         hostingName = name
@@ -508,6 +550,8 @@ final class LiveSession: ObservableObject {
             }
         }
         engine.onScene = { [weak self] name in self?.scene = name }
+        engine.onRoll = { [weak self] message in self?.receiveRoll(message) }
+        dice.resetLog()
         engine.onRules = { [weak self] rules in
             guard let self else { return }
             self.allowedPlayerSounds = rules
