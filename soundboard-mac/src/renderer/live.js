@@ -27,8 +27,8 @@ const Live = (() => {
   const LIMIT = 5;
   const PLAYER_SOUNDS = [
     ['off', 'Off', 'Only you play sounds.'],
-    ['own', 'Their own sounds', `Each player picks up to ${LIMIT} sounds from their own library. When they play one, everyone hears it. You can still use all your sounds.`],
-    ['gm', 'My soundboard', `Each player picks up to ${LIMIT} of your sounds (not GM-only ones). When they play one, everyone hears it. You can still use all your sounds.`],
+    ['own', 'Their own sounds', `Each listener picks up to ${LIMIT} sounds from their own library. When they play one, everyone hears it. You can still use all your sounds.`],
+    ['gm', 'My soundboard', `Each listener picks up to ${LIMIT} of your sounds (not broadcaster-only ones). When they play one, everyone hears it. You can still use all your sounds.`],
   ];
   // Listener: what the GM allows, and the GM's sounds to choose from.
   let allowed = 'off';
@@ -73,7 +73,7 @@ const Live = (() => {
   // A sound tile or row started playing.
   function soundPlayed(sound) {
     if (!hosting() || !sound || sound.gmOnly) {
-      if (hosting() && sound && sound.gmOnly && whisper.size) toast('GM-only sounds can’t be whispered.', true);
+      if (hosting() && sound && sound.gmOnly && whisper.size) toast('Broadcaster-only sounds can’t be whispered.', true);
       return;
     }
     const event = {
@@ -444,7 +444,7 @@ const Live = (() => {
     setTimeout(() => document.body.classList.remove('live-buzz'), 450);
     Stage.flash();
     api.live.notify({
-      title: `💥 ${status.host || 'Your GM'}`,
+      title: `💥 ${status.host || 'The broadcaster'}`,
       body: cmd && cmd.whisper ? 'Something only you can feel…' : (cmd && cmd.name ? cmd.name : 'Brace yourself!'),
     });
   }
@@ -463,7 +463,7 @@ const Live = (() => {
 
 
   // ---------------------------------------------------------------------
-  // Players' sounds (listener): up to five picks that play for everyone.
+  // Listeners' sounds (listener): up to five picks that play for everyone.
 
   api.live.onRules((mode) => {
     allowed = ['own', 'gm'].includes(mode) ? mode : 'off';
@@ -610,7 +610,7 @@ const Live = (() => {
       const items = Mirror.nowPlaying();
       const now = el('div', 'stage-now');
       now.id = 'live-now';
-      if (!items.length) now.append(el('div', 'stage-secondary', 'Waiting for the GM…'));
+      if (!items.length) now.append(el('div', 'stage-secondary', 'Waiting for the broadcaster…'));
       for (const [title, kind] of [['SOUNDS', 'sound'], ['FULL SOUNDS', 'music'], ['AMBIENCE', 'ambience']]) {
         const list = items.filter((i) => i.kind === kind);
         if (!list.length) continue;
@@ -629,7 +629,7 @@ const Live = (() => {
       const panel = el('div', 'stage-pads');
       panel.dataset.artSeed = 'stage-pads';
       const head = el('div', 'stage-pads-head');
-      head.append(el('div', 'stage-group-title', allowed === 'gm' ? "YOUR PICKS FROM THE GM'S SOUNDS" : 'YOUR SOUNDS'));
+      head.append(el('div', 'stage-group-title', allowed === 'gm' ? "YOUR PICKS FROM THE BROADCASTER'S SOUNDS" : 'YOUR SOUNDS'));
       const list = pickedSounds();
       const choose = el('button', 'link-btn', list.length ? 'Change' : 'Choose');
       choose.type = 'button';
@@ -688,7 +688,7 @@ const Live = (() => {
       center.append(emblem);
       if (connected) {
         center.append(el('div', 'stage-secondary', 'Tuned in to'));
-        const name = el('div', 'stage-host', status.host || 'the GM');
+        const name = el('div', 'stage-host', status.host || 'the broadcaster');
         name.dataset.font = st.title;
         center.append(name);
         if (status.scene) {
@@ -785,14 +785,14 @@ const Live = (() => {
         dialog.textContent = '';
         const form = el('form');
         form.method = 'dialog';
-        form.append(el('h2', null, allowed === 'gm' ? "The GM's Sounds" : 'Your Sounds'));
+        form.append(el('h2', null, allowed === 'gm' ? "The Broadcaster's Sounds" : 'Your Sounds'));
         const chosen = picks().length;
         form.append(el('div', 'live-subhead', `${chosen} of ${LIMIT} chosen`));
         const list = el('div', 'picker-list');
         const options = allowed === 'gm'
           ? catalog.map((c) => ({ id: c.id, name: c.name, color: paletteColor(c.color) }))
           : sounds.map((s) => ({ id: s.id, name: s.name, color: s.color }));
-        if (!options.length) list.append(el('p', 'muted', allowed === 'gm' ? "The GM hasn't any sounds to share yet." : 'Your library is empty. Add sounds to it first.'));
+        if (!options.length) list.append(el('p', 'muted', allowed === 'gm' ? "The broadcaster hasn't any sounds to share yet." : 'Your library is empty. Add sounds to it first.'));
         for (const option of options) {
           const picked = picks().includes(option.id);
           const row = el('label', 'picker-row');
@@ -899,7 +899,7 @@ const Live = (() => {
     }
   }
 
-  // Players' sounds: Off, their own sounds, or picks from the GM's soundboard.
+  // Listeners' sounds: Off, their own sounds, or picks from the GM's soundboard.
   function playerSoundsField() {
     const wrap = el('div', 'live-player-sounds');
     const select = el('select');
@@ -917,7 +917,7 @@ const Live = (() => {
       hint.textContent = PLAYER_SOUNDS.find((m) => m[0] === settings.playerSounds)[2];
       if (hosting()) api.live.hostEvent({ t: 'playerSounds', mode: settings.playerSounds });
     });
-    wrap.append(field("Players' sounds", select), hint);
+    wrap.append(field("Listeners' sounds", select), hint);
     return wrap;
   }
 
@@ -940,12 +940,12 @@ const Live = (() => {
     body.append(tabs);
 
     if (tab === 'broadcast') {
-      body.append(el('p', 'muted small', 'Play to your players’ devices. Each one plays the sounds itself, in sync, with its own volume for music, effects and ambience.'));
+      body.append(el('p', 'muted small', 'Play to your listeners’ devices. Each one plays the sounds itself, in sync, with its own volume for music, effects and ambience.'));
       body.append(field('Session name', textInput(settings.sessionName, 'e.g. Friday Night Game', (v) => { settings.sessionName = v; }, 40)));
       const modes = el('div', 'live-modes');
       for (const [id, title, hint] of [
-        ['local', 'At the table', 'Players on the same Wi-Fi find your session.'],
-        ['online', 'Online', 'Players anywhere join with a code.'],
+        ['local', 'At the table', 'Listeners on the same Wi-Fi find your session.'],
+        ['online', 'Online', 'Listeners anywhere join with a code.'],
       ]) {
         const option = el('label', `live-mode${settings.mode === id ? ' selected' : ''}`);
         const radio = el('input');
@@ -972,7 +972,7 @@ const Live = (() => {
       return;
     }
 
-    body.append(field('Your name (shown to the GM)', textInput(settings.yourName, 'e.g. Sam', (v) => { settings.yourName = v; }, 40)));
+    body.append(field('Your name (shown to the broadcaster)', textInput(settings.yourName, 'e.g. Sam', (v) => { settings.yourName = v; }, 40)));
     body.append(el('div', 'live-subhead', 'Sessions on this Wi-Fi'));
     const list = el('div', 'live-list');
     if (!sessions.length) list.append(el('p', 'muted small', 'Looking for sessions on this network…'));
@@ -1005,9 +1005,9 @@ const Live = (() => {
     head.append(el('div', 'live-hero-name', status.name || 'Live Session'));
     if (status.mode === 'online' && status.code) {
       head.append(el('div', 'live-code', status.code));
-      head.append(el('div', 'muted small', 'Players open Live → Tune In and enter this code.'));
+      head.append(el('div', 'muted small', 'Listeners open Live → Tune In and enter this code.'));
     } else {
-      head.append(el('div', 'muted small', 'Players on the same Wi-Fi open Live → Tune In and pick this session.'));
+      head.append(el('div', 'muted small', 'Listeners on the same Wi-Fi open Live → Tune In and pick this session.'));
     }
     if (status.reconnecting) head.append(el('div', 'live-error', 'Reconnecting to the relay…'));
     body.append(head);
@@ -1022,7 +1022,7 @@ const Live = (() => {
       if (peer.device) who.append(el('span', 'muted small', ` · ${peer.device}`));
       const whisperButton = el('button', whisper.has(peer.peer) ? 'active' : '', 'Whisper…');
       whisperButton.type = 'button';
-      whisperButton.title = 'The next sound you play goes only to this player';
+      whisperButton.title = 'The next sound you play goes only to this listener';
       whisperButton.addEventListener('click', () => {
         whisper.clear();
         whisper.set(peer.peer, peer.name);
@@ -1031,7 +1031,7 @@ const Live = (() => {
       });
       const kick = el('button', 'danger', 'Remove');
       kick.type = 'button';
-      kick.title = 'Remove this player from the session';
+      kick.title = 'Remove this listener from the session';
       kick.addEventListener('click', () => {
         // eslint-disable-next-line no-alert
         if (!window.confirm(`Remove ${peer.name} from the session?`)) return;
@@ -1045,7 +1045,7 @@ const Live = (() => {
       list.append(row);
     }
     body.append(list);
-    body.append(el('p', 'muted small', 'Whisper sends the next sound you play to that player only. Remove takes a player out of the session. Mark sounds GM only (never sent) or Buzz (vibrates phones) in each sound’s Edit window.'));
+    body.append(el('p', 'muted small', 'Whisper sends the next sound you play to that listener only. Remove takes a listener out of the session. Mark sounds Broadcaster only (never sent) or Buzz (vibrates phones) in each sound’s Edit window.'));
     body.append(playerSoundsField());
     const end = el('button', 'danger', 'End Session');
     end.type = 'button';

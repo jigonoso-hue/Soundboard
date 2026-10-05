@@ -435,7 +435,7 @@ function registerLiveIpc() {
       const base = Live.relayUrl(relay);
       if (!base) throw new Error('Set a relay server address first.');
       const clean = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (!clean) throw new Error('Enter the session code from your GM.');
+      if (!clean) throw new Error('Enter the session code from the broadcaster.');
       target = `${base}?role=listen&code=${clean}`;
     } else if (!/^ws:\/\/[^/]+$/.test(target)) {
       throw new Error('That isn’t a local session address.');

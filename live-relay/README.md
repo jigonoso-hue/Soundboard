@@ -1,8 +1,8 @@
 # Dungeon Radio relay server
 
 Online Live Sessions need a small relay server. It routes messages between the
-GM's app and the players' apps; no audio passes through it, only the sound
-files each player fetches once and short "play this now" commands.
+broadcaster's app and the listeners' apps; no audio passes through it, only the sound
+files each listener fetches once and short "play this now" commands.
 
 The apps use Dungeon Radio's own relay, `soundboard-r1zt.onrender.com`, hosted
 on Render from this folder. Its address is built into the apps
@@ -41,11 +41,11 @@ connect wakes it up.
 
 ## What it does
 
-- A GM's app connects and gets a 5-character room code.
-- Players connect with that code. Up to 32 per room.
-- Messages from players go to the GM; the GM's go to every player or to one
+- A broadcaster's app connects and gets a 5-character room code.
+- Listeners connect with that code. Up to 32 per room.
+- Messages from listeners go to the broadcaster; the broadcaster's go to every listener or to one
   (whispers).
-- If the GM's connection drops, the room stays open for a minute so the app can
+- If the broadcaster's connection drops, the room stays open for a minute so the app can
   reconnect.
 - Messages are limited to 1 MB. Nothing is stored.
 

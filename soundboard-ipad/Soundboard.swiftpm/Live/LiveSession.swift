@@ -281,7 +281,7 @@ final class LiveSession: ObservableObject {
     func soundPlayed(_ sound: Sound, volume: Double) {
         guard role == .host, let host else { return }
         if sound.gmOnly == true {
-            if !whisperTargets.isEmpty { notice = "GM-only sounds can't be whispered." }
+            if !whisperTargets.isEmpty { notice = "Broadcaster-only sounds can't be whispered." }
             return
         }
         var event = LiveHostEngine.PlayEvent(
@@ -343,7 +343,7 @@ final class LiveSession: ObservableObject {
         host?.stop(group: "b:\(runId)")
     }
 
-    // MARK: Players' sounds (host)
+    // MARK: Listeners' sounds (host)
 
     /// The GM's sounds players may choose from: everything except GM-only sounds.
     private func catalogItems() -> [CatalogItem] {
@@ -481,7 +481,7 @@ final class LiveSession: ObservableObject {
         }
         let clean = codeInput.uppercased().filter { $0.isLetter || $0.isNumber }
         guard !clean.isEmpty else {
-            error = "Enter the session code from your GM."
+            error = "Enter the session code from the broadcaster."
             return
         }
         var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
@@ -571,7 +571,7 @@ final class LiveSession: ObservableObject {
         BackgroundAudio.shared.keepAlive(false)
     }
 
-    // MARK: Players' sounds (listener)
+    // MARK: Listeners' sounds (listener)
 
     /// The player's chosen sounds for the current rules.
     var pickedSounds: [CatalogItem] {
@@ -655,7 +655,7 @@ final class LiveSession: ObservableObject {
             return
         }
         let content = UNMutableNotificationContent()
-        content.title = "💥 \(hostName ?? "Your GM")"
+        content.title = "💥 \(hostName ?? "The broadcaster")"
         content.body = play.whisper ? "Something only you can feel…" : (play.name.isEmpty ? "Brace yourself!" : play.name)
         content.sound = .default
         let request = UNNotificationRequest(identifier: "buzz-\(play.pid)", content: content, trigger: nil)

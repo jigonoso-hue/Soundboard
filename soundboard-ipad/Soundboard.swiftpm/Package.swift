@@ -35,7 +35,7 @@ let package = Package(
             capabilities: [
                 .microphone(purposeString: "Dungeon Radio uses the microphone when you record a sound for your library."),
                 .localNetwork(
-                    purposeString: "Dungeon Radio uses your local network to find and host Live Sessions with other players at the table.",
+                    purposeString: "Dungeon Radio uses your local network to find and host Live Sessions with other people nearby.",
                     bonjourServiceTypes: ["_dungeonradio._tcp"]
                 )
             ],

@@ -31,9 +31,9 @@ final class FileHasher {
 enum PlayerSounds: String, CaseIterable {
     /// Only the GM plays sounds.
     case off
-    /// Each player picks up to five sounds from their own library.
+    /// Each listener picks up to five sounds from their own library.
     case own
-    /// Each player picks up to five sounds from the GM's library.
+    /// Each listener picks up to five sounds from the GM's library.
     case gm
 
     static let limit = 5
@@ -351,7 +351,7 @@ final class LiveHostEngine {
         }
     }
 
-    // MARK: Players' sounds
+    // MARK: Listeners' sounds
 
     private var rulesMessage: LiveJSON {
         ["t": "rules", "playerSounds": playerSounds.rawValue, "limit": PlayerSounds.limit]
@@ -705,14 +705,14 @@ final class LiveListenerEngine {
             hostName = LiveNet.string(message["host"]) ?? "Game Master"
             onState?(.connected)
             startClockSync()
-        case "no-room": fail("No session with that code. Check it with your GM.")
+        case "no-room": fail("No session with that code. Check it with the broadcaster.")
         case "full": fail("That session is full.")
         case "ended", "bye", "kicked":
             closed = true
             pingTask?.cancel()
             onCommand?(.stopAll(ambienceToo: true))
             let kicked = LiveNet.string(message["t"]) == "kicked"
-            onState?(.ended(kicked ? "The GM removed you from the session." : "The GM ended the session."))
+            onState?(.ended(kicked ? "The broadcaster removed you from the session." : "The broadcaster ended the session."))
             socket.close()
         case "pong": addClockSample(message)
         case "scene": onScene?(LiveNet.string(message["name"]))

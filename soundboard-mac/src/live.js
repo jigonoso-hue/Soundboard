@@ -408,7 +408,7 @@ class LiveHost extends EventEmitter {
     }
   }
 
-  // ---- Players' sounds ----
+  // ---- Listeners' sounds ----
 
   rulesMessage() { return { t: 'rules', playerSounds: this.playerSounds, limit: PLAYER_SOUND_LIMIT }; }
 
@@ -723,18 +723,18 @@ class LiveListener extends EventEmitter {
         this.setState('connected');
         this.startClockSync();
         break;
-      case 'no-room': this.setState('error', 'No session with that code. Check it with your GM.'); break;
+      case 'no-room': this.setState('error', 'No session with that code. Check it with the broadcaster.'); break;
       case 'full': this.setState('error', 'That session is full.'); break;
       case 'kicked':
         this.emit('command', { t: 'stopAll', ambienceToo: true });
-        this.setState('ended', 'The GM removed you from the session.');
+        this.setState('ended', 'The broadcaster removed you from the session.');
         this.closed = true;
         this.socket?.close();
         break;
       case 'ended':
       case 'bye':
         this.emit('command', { t: 'stopAll', ambienceToo: true });
-        this.setState('ended', 'The GM ended the session.');
+        this.setState('ended', 'The broadcaster ended the session.');
         this.closed = true;
         this.socket?.close();
         break;
@@ -807,7 +807,7 @@ class LiveListener extends EventEmitter {
     sendJSON(this.socket, chunk || { t: 'missing', hash });
   }
 
-  // ---- Players' sounds ----
+  // ---- Listeners' sounds ----
 
   // Asks the host to play one of the GM's sounds for everyone.
   cue(soundId) { sendJSON(this.socket, { t: 'cue', id: String(soundId) }); }

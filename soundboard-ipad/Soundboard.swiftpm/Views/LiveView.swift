@@ -37,7 +37,7 @@ struct LiveView: View {
                 }
             }
             .confirmationDialog(
-                "Remove \(kicking?.name ?? "this player") from the session?",
+                "Remove \(kicking?.name ?? "this listener") from the session?",
                 isPresented: Binding(get: { kicking != nil }, set: { if !$0 { kicking = nil } }),
                 titleVisibility: .visible
             ) {
@@ -83,14 +83,14 @@ struct LiveView: View {
     private var broadcastForm: some View {
         Section {
             TextField("Session name, e.g. Friday Night Game", text: $live.sessionName)
-            Picker("Where are your players?", selection: $live.mode) {
+            Picker("Where are your listeners?", selection: $live.mode) {
                 Text("At the table").tag(LiveSession.Mode.local)
                 Text("Online").tag(LiveSession.Mode.online)
             }
         } footer: {
             Text(live.mode == .local
-                 ? "Players on the same Wi-Fi find your session under Tune In."
-                 : "Players anywhere join with a code.")
+                 ? "Listeners on the same Wi-Fi find your session under Tune In."
+                 : "Listeners anywhere join with a code.")
         }
         playerSoundsSection
         Section {
@@ -107,13 +107,13 @@ struct LiveView: View {
             }
             .disabled(live.busy)
         } footer: {
-            Text("Each player's device plays the sounds itself, in sync, with its own volume for music, effects and ambience.")
+            Text("Each listener's device plays the sounds itself, in sync, with its own volume for music, effects and ambience.")
         }
     }
 
     @ViewBuilder
     private var tuneInForm: some View {
-        Section("Your name (shown to the GM)") {
+        Section("Your name (shown to the broadcaster)") {
             TextField("e.g. Sam", text: $live.yourName)
         }
         Section("Sessions on this Wi-Fi") {
@@ -151,16 +151,16 @@ struct LiveView: View {
     /// Whether players may play sounds for everyone, and from whose soundboard.
     private var playerSoundsSection: some View {
         Section {
-            Picker("Player sounds", selection: $live.playerSounds) {
+            Picker("Listener sounds", selection: $live.playerSounds) {
                 ForEach(PlayerSounds.allCases, id: \.self) { Text($0.label).tag($0) }
             }
         } header: {
-            Text("Players' sounds")
+            Text("Listeners' sounds")
         } footer: {
             switch live.playerSounds {
             case .off: Text("Only you play sounds.")
-            case .own: Text("Each player picks up to \(PlayerSounds.limit) sounds from their own library. When they play one, everyone hears it. You can still use all your sounds.")
-            case .gm: Text("Each player picks up to \(PlayerSounds.limit) of your sounds (not GM-only ones). When they play one, everyone hears it. You can still use all your sounds.")
+            case .own: Text("Each listener picks up to \(PlayerSounds.limit) sounds from their own library. When they play one, everyone hears it. You can still use all your sounds.")
+            case .gm: Text("Each listener picks up to \(PlayerSounds.limit) of your sounds (not broadcaster-only ones). When they play one, everyone hears it. You can still use all your sounds.")
             }
         }
     }
@@ -181,11 +181,11 @@ struct LiveView: View {
                         .tracking(6)
                         .foregroundStyle(Color.accentColor)
                         .textSelection(.enabled)
-                    Text("Players open Live → Tune In and enter this code.")
+                    Text("Listeners open Live → Tune In and enter this code.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Players on the same Wi-Fi open Live → Tune In and pick this session.")
+                    Text("Listeners on the same Wi-Fi open Live → Tune In and pick this session.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -230,7 +230,7 @@ struct LiveView: View {
         } header: {
             Text(live.peers.isEmpty ? "Listeners" : "Listening (\(live.peers.count))")
         } footer: {
-            Text("Whisper sends the next sound you play to that player only. Remove takes a player out of the session. Mark sounds GM only or Buzz in each sound's Edit screen.")
+            Text("Whisper sends the next sound you play to that listener only. Remove takes a listener out of the session. Mark sounds Broadcaster only or Buzz in each sound's Edit screen.")
         }
         playerSoundsSection
         Section {
@@ -246,7 +246,7 @@ struct LiveView: View {
             VStack(spacing: 6) {
                 if live.connected {
                     Text("Tuned in to").font(.caption).foregroundStyle(.secondary)
-                    Text(live.hostName ?? "the GM").font(.title3.bold())
+                    Text(live.hostName ?? "the broadcaster").font(.title3.bold())
                     if let scene = live.scene {
                         Text("Scene: \(scene)").font(.caption).foregroundStyle(.secondary)
                     }
@@ -322,7 +322,7 @@ struct LiveControls: View {
                     Label("Emphasis", systemImage: live.emphasis ? "iphone.radiowaves.left.and.right.circle.fill" : "iphone.radiowaves.left.and.right")
                 }
                 .tint(live.emphasis ? Color(hex: 0xFF6A3D) : nil)
-                .accessibilityLabel("Emphasis: the next sound vibrates players' phones")
+                .accessibilityLabel("Emphasis: the next sound vibrates listeners' phones")
                 .accessibilityAddTraits(live.emphasis ? .isSelected : [])
             }
             Button {

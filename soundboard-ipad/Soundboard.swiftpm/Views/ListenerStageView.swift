@@ -149,7 +149,7 @@ struct ListenerStageView: View {
             emblem
             if live.connected {
                 Text("Tuned in to").font(.subheadline).foregroundStyle(style.secondaryInk)
-                Text(live.hostName ?? "the GM")
+                Text(live.hostName ?? "the broadcaster")
                     .font(.system(size: 34, weight: .bold, design: style.titleDesign))
                     .multilineTextAlignment(.center)
                 if let scene = live.scene {
@@ -455,7 +455,7 @@ private struct NowPlayingGroups: View {
     var body: some View {
         VStack(spacing: 12) {
             if items.isEmpty {
-                Text("Waiting for the GM…")
+                Text("Waiting for the broadcaster…")
                     .font(.callout)
                     .foregroundStyle(style.secondaryInk)
             } else {
@@ -603,7 +603,7 @@ private struct PlayerPads: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(live.allowedPlayerSounds == .gm ? "YOUR PICKS FROM THE GM'S SOUNDS" : "YOUR SOUNDS")
+                Text(live.allowedPlayerSounds == .gm ? "YOUR PICKS FROM THE BROADCASTER'S SOUNDS" : "YOUR SOUNDS")
                     .font(.caption.weight(.bold))
                     .tracking(1.2)
                     .foregroundStyle(style.secondaryInk)
@@ -692,7 +692,7 @@ struct PlayerSoundPicker: View {
                 Section {
                     if live.allowedPlayerSounds == .gm {
                         if live.catalog.isEmpty {
-                            Text("The GM hasn't any sounds to share yet.").foregroundStyle(.secondary)
+                            Text("The broadcaster hasn't any sounds to share yet.").foregroundStyle(.secondary)
                         }
                         ForEach(live.catalog) { item in
                             row(id: item.id, name: item.name, colorIndex: item.colorIndex)
@@ -711,7 +711,7 @@ struct PlayerSoundPicker: View {
                     Text("When you tap one of these on the stage, everyone in the session hears it.")
                 }
             }
-            .navigationTitle(live.allowedPlayerSounds == .gm ? "The GM's Sounds" : "Your Sounds")
+            .navigationTitle(live.allowedPlayerSounds == .gm ? "The Broadcaster's Sounds" : "Your Sounds")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

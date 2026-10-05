@@ -229,7 +229,7 @@ test('the host can remove a listener', async () => {
     const [peer] = await waitFor(host, 'peers', (list) => list.length === 1);
     const ended = waitFor(sam, 'status', (st) => st.state === 'ended');
     host.kick(peer.peer);
-    assert.equal((await ended).error, 'The GM removed you from the session.');
+    assert.equal((await ended).error, 'The broadcaster removed you from the session.');
     assert.equal(host.peerList().length, 0);
   } finally {
     sam.leave();

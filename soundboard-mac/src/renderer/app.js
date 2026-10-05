@@ -390,8 +390,8 @@ function makeTrack(sound, { reorder = true } = {}) {
 function gmBadge() {
   const badge = document.createElement('span');
   badge.className = 'tile-hotkey gm-badge';
-  badge.textContent = 'GM';
-  badge.title = 'GM only: not played for Live Session listeners';
+  badge.textContent = 'Only me';
+  badge.title = 'Broadcaster only: not played for Live Session listeners';
   return badge;
 }
 

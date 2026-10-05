@@ -364,11 +364,11 @@ struct SynthWave: View {
 /// Marks sounds that never play for Live Session listeners.
 struct GMBadge: View {
     var body: some View {
-        Text("GM")
+        Text("Only me")
             .font(.caption2.weight(.heavy))
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .background(Color(hex: 0xFF6A3D).opacity(0.3), in: Capsule())
-            .accessibilityLabel("GM only")
+            .accessibilityLabel("Broadcaster only")
     }
 }
