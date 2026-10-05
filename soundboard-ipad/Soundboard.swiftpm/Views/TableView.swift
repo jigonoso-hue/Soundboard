@@ -1006,7 +1006,10 @@ struct ContestPanel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(DiceTable.contests, id: \.self) { c in
-                            TablePill(title: c, small: true, on: table.contestLabel == c) { table.contestLabel = c }
+                            TablePill(title: c, small: true, on: table.contestLabel == c) {
+                                table.contestLabel = c
+                                if c != "Who pays?" { table.contestLowest = false }
+                            }
                         }
                     }
                 }

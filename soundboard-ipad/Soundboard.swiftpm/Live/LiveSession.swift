@@ -320,6 +320,8 @@ final class LiveSession: ObservableObject {
             self.peers = list
             let ids = Set(list.map(\.id))
             self.whisperTargets = self.whisperTargets.intersection(ids)
+            // Someone in a "who wins" left: it may be complete now.
+            self.dice.table.maybeFinishContest()
         }
         engine.onCue = { [weak self] peer, name, cue in self?.playPlayerSound(from: peer, name: name, cue: cue) }
         engine.onRoll = { [weak self] message in self?.receiveRoll(message) }
