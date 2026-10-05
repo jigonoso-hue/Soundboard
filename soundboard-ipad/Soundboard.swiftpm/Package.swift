@@ -33,6 +33,7 @@ let package = Package(
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
+                .microphone(purposeString: "Dungeon Radio uses the microphone when you record a sound for your library."),
                 .localNetwork(
                     purposeString: "Dungeon Radio uses your local network to find and host Live Sessions with other players at the table.",
                     bonjourServiceTypes: ["_dungeonradio._tcp"]

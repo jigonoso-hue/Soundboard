@@ -64,6 +64,7 @@
         </select>
         <span class="spacer"></span>
         <button id="add-btn" class="primary" title="Add audio files"><i data-icon="plus"></i> Add Sounds</button>
+        <button id="record-btn" title="Record a sound with the microphone"><span class="rec-dot"></span> Record</button>
         <button id="toggle-yt" title="Show/hide the YouTube browser"><i data-icon="video"></i> YouTube</button>
         <button id="whisper-btn" class="hidden" title="Whisper: the next sound goes only to the players you tick"><i data-icon="speech"></i> <span id="whisper-label">Whisper</span></button>
         <button id="emphasis-btn" class="hidden" title="Emphasis: the next sound vibrates players' phones"><i data-icon="bolt"></i> Emphasis</button>
@@ -336,6 +337,27 @@
     </form>
   </dialog>
 
+  <dialog id="record-dialog">
+    <form method="dialog">
+      <h2>Record a Sound</h2>
+      <div class="record-body">
+        <div id="record-time" class="record-time mono">0:00.0</div>
+        <canvas id="record-meter" class="record-meter"></canvas>
+        <button type="button" id="record-toggle" class="record-toggle" aria-label="Record"><span></span></button>
+        <p id="record-hint" class="muted small"></p>
+        <div id="record-after" class="record-after hidden">
+          <button type="button" id="record-listen">▶ Listen</button>
+          <label>Name <input id="record-name" maxlength="80"></label>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" id="record-cancel" formnovalidate>Cancel</button>
+        <button id="record-save" class="primary" disabled>Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="hidden"></div>
 
   <script src="theme-art.js"></script>
@@ -350,5 +372,6 @@
   <script src="kits.js"></script>
   <script src="bashes-board.js"></script>
   <script src="live.js"></script>
+  <script src="recorder.js"></script>
 </body>
 </html>

@@ -6,6 +6,8 @@ struct LiveView: View {
     @EnvironmentObject private var live: LiveSession
     @Environment(\.dismiss) private var dismiss
     @State private var tab: Tab = .broadcast
+    /// The player waiting for "Remove from the session?" to be confirmed.
+    @State private var kicking: LiveHostEngine.Peer?
 
     enum Tab: String, CaseIterable {
         case broadcast = "Broadcast"
@@ -32,6 +34,16 @@ struct LiveView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                }
+            }
+            .confirmationDialog(
+                "Remove \(kicking?.name ?? "this player") from the session?",
+                isPresented: Binding(get: { kicking != nil }, set: { if !$0 { kicking = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Remove", role: .destructive) {
+                    if let peer = kicking { live.kick(peer.id) }
+                    kicking = nil
                 }
             }
             .onAppear { live.browse(live.role == .idle && tab == .tuneIn) }
@@ -207,12 +219,18 @@ struct LiveView: View {
                         Label("Whisper", systemImage: "ear")
                     }
                     .buttonStyle(.bordered)
+                    Button(role: .destructive) {
+                        kicking = peer
+                    } label: {
+                        Label("Remove", systemImage: "person.fill.xmark")
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         } header: {
             Text(live.peers.isEmpty ? "Listeners" : "Listening (\(live.peers.count))")
         } footer: {
-            Text("Whisper sends the next sound you play to that player only. Mark sounds GM only or Buzz in each sound's Edit screen.")
+            Text("Whisper sends the next sound you play to that player only. Remove takes a player out of the session. Mark sounds GM only or Buzz in each sound's Edit screen.")
         }
         playerSoundsSection
         Section {

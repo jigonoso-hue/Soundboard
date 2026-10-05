@@ -238,6 +238,12 @@ class LanHostTransport extends EventEmitter {
     }
   }
 
+  // Disconnects a listener (after the 'kicked' message has gone out).
+  kick(peer) {
+    const socket = this.sockets.get(peer);
+    if (socket) setTimeout(() => socket.close(1000, 'kicked'), 100);
+  }
+
   close() {
     try { this.bonjour?.unpublishAll(() => this.bonjour?.destroy()); } catch { /* ignore */ }
     for (const socket of this.sockets.values()) socket.close(1000, 'ended');
@@ -315,6 +321,9 @@ class RelayHostTransport extends EventEmitter {
   send(peer, message) {
     sendJSON(this.socket, peer ? { t: 'send', to: peer, msg: message } : { t: 'send', msg: message });
   }
+
+  // The relay tells the listener and disconnects it.
+  kick(peer) { sendJSON(this.socket, { t: 'kick', peer }); }
 
   close() {
     this.closed = true;
@@ -624,6 +633,17 @@ class LiveHost extends EventEmitter {
     for (const [pid, entry] of this.active) if (entry.until < now) this.active.delete(pid);
   }
 
+  // Removes a listener from the session.
+  kick(peer) {
+    return this.enqueue(() => {
+      if (!this.peers.has(peer)) return;
+      this.transport.send(peer, { t: 'kicked' });
+      this.transport.kick(peer);
+      this.peers.delete(peer);
+      this.emitPeers();
+    });
+  }
+
   end() {
     this.transport.send(null, { t: 'bye' });
     setTimeout(() => this.transport.close(), 200);
@@ -705,6 +725,12 @@ class LiveListener extends EventEmitter {
         break;
       case 'no-room': this.setState('error', 'No session with that code. Check it with your GM.'); break;
       case 'full': this.setState('error', 'That session is full.'); break;
+      case 'kicked':
+        this.emit('command', { t: 'stopAll', ambienceToo: true });
+        this.setState('ended', 'The GM removed you from the session.');
+        this.closed = true;
+        this.socket?.close();
+        break;
       case 'ended':
       case 'bye':
         this.emit('command', { t: 'stopAll', ambienceToo: true });

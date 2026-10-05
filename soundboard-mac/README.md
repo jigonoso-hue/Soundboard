@@ -34,6 +34,10 @@ The DMG is written to `dist/`. Open it and drag **Dungeon Radio** into Applicati
 
 The app icon comes from `build/icon.png` (1024×1024).
 
+## Recording a sound
+
+Click **Record** in the toolbar, then the red button, and record with your microphone (up to 10 minutes). Click it again to stop. **Listen** plays it back; name it and click **Save** to add it to your library. macOS asks for microphone access the first time.
+
 ## Making a sound from YouTube
 
 1. Click **▶ YouTube** to open the browser panel.
@@ -182,7 +186,8 @@ Everything you play is sent to listeners: sounds, full sounds, bashes, ambience 
 - **Buzz:** tick it in a sound's Edit window for big hits. Listeners' phones vibrate when it plays (a Mac shakes its window instead).
 
 - **Players' sounds:** choose who else may play sounds for everyone, when you start broadcasting or any time after in the Live window. **Off**: only you. **Their own sounds**: each player picks up to 5 sounds from their own library. **My soundboard**: each player picks up to 5 of your sounds (GM-only sounds are never offered). When a player plays one, it plays for everyone, you included, and you see who played it. You can still use all your sounds.
-- **Add Sounds** hides while you broadcast.
+- **Remove:** in the Live window, **Remove** next to a player takes them out of the session.
+- **Add Sounds** and **Record** hide while you broadcast.
 
 **Tune In (a player).** Enter your name, then pick a session on this Wi-Fi or enter the GM's code. The window turns into a full-window stage in your theme's style, until you click **Leave**: rings ripple out while sounds play, whispers glow purple, buzz sounds shake the stage (with a notification and a bouncing Dock icon if Dungeon Radio isn't in front), and what's playing is grouped into sounds, full sounds and, last, ambience. A sound a player played shows their name. **Volumes** sets your own levels for music, effects and ambience. When the GM allows players' sounds, your pads sit at the bottom: **Choose** up to 5, then click one to play it for everyone.
 
@@ -240,6 +245,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/kits.js` | Scene Kit storage (`kits.json`) |
 | `src/live.js` | Live Session networking: local server, Bonjour, relay client, host and listener logic |
 | `src/renderer/live.js` | Live window, forwarding what the board plays, players' sounds, and the listener's player and stage |
+| `src/renderer/recorder.js` | Record a Sound: microphone recording, level meter, listen back and save as WAV |
 | `src/renderer/themes.js` | Themes and the Options window: colours, fonts, where backdrops and panels go, book-cover tiles and playing effects |
 | `src/renderer/theme-art.js` | The themes' drawings (parchment, wood, space, HUD, gilded frames, book covers, synth waves, magic, the stage) |
 | `src/renderer/kits.js` | Scene Kits sidebar, kit page (including ambience sections) and dialogs |

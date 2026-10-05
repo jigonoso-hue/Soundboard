@@ -218,6 +218,25 @@ test("players' sounds: rules, the GM's catalog, limits and own sounds", async ()
   }
 });
 
+test('the host can remove a listener', async () => {
+  const library = makeLibrary();
+  const transport = new LanHostTransport({ name: 'Kick' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Kick', transport, resolveSound: library.resolveSound });
+  const sam = new LiveListener({ cacheDir: tempDir('kick'), name: 'Sam' });
+  try {
+    sam.connect(`ws://127.0.0.1:${transport.port}`);
+    const [peer] = await waitFor(host, 'peers', (list) => list.length === 1);
+    const ended = waitFor(sam, 'status', (st) => st.state === 'ended');
+    host.kick(peer.peer);
+    assert.equal((await ended).error, 'The GM removed you from the session.');
+    assert.equal(host.peerList().length, 0);
+  } finally {
+    sam.leave();
+    transport.close();
+  }
+});
+
 let createRelay = null;
 try { ({ createRelay } = require('../../live-relay/server')); } catch { /* relay deps not installed */ }
 

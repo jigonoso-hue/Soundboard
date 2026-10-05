@@ -3,6 +3,7 @@
 The iPad version of the soundboard: a native SwiftUI app with the same features as the Mac app.
 
 - **Sidebar.** Scene Kits at the top. Under them, the library views (**All**, **Clips**, **Full Sounds**, **Bashes**) with counts, and collapsible **Tags** filters.
+- **Record.** **Add Sounds → Record…** records a sound with the microphone (up to 10 minutes). Listen back, name it, and save it to your library.
 - **Clips vs Full Sounds.** Short effects show as tiles, and songs and long tracks show as rows with a timer. Sounds a minute or longer count as full sounds automatically. You can change the type in a sound's editor.
 - **Tags.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic and more) plus your own. After you add sounds, the app asks you to name and tag them. Filter by tags in the sidebar (**Match any** or **Match all**). Search matches names and tags. Sort by your order, name, newest or longest.
 - **Bashes.** Several sounds fired together with one tap. The full-screen editor has a timeline: drag sounds left or right to set when they start, and up or down to layer them on lanes. Tap a sound to set its volume or make it repeat (with a gap, and a number of plays or until stopped). Give it a name and a cover: an icon or a photo.
@@ -94,6 +95,8 @@ While broadcasting, two buttons join the toolbar:
 - **Whisper:** a drop-down of everyone tuned in. Tick one or more players, and the next sound (or bash) you play goes only to them. Then it switches off again.
 - **Emphasis:** the next sound (or bash) makes players' phones vibrate. Then it switches off again.
 
+In the Live sheet, **Remove** next to a player takes them out of the session.
+
 A banner shows what's armed, with Cancel.
 
 - **GM only:** turn it on in a sound's Edit screen and it plays only on your device. Tiles show a **GM** badge.
@@ -144,7 +147,8 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Live/LiveEngines.swift` | Live Session host and listener logic (files, clock sync, commands) |
 | `Live/MirrorPlayer.swift` | Plays what a Live Session host sends, with the listener's volumes and haptics |
 | `Live/LiveSession.swift` | Live Session state, forwarding what the board plays while hosting, whispers, emphasis, players' sounds and buzz |
-| `Views/LiveView.swift` | The Live sheet and the toolbar's Live, Whisper and Emphasis controls |
+| `Views/LiveView.swift` | The Live sheet (with Remove) and the toolbar's Live, Whisper and Emphasis controls |
+| `Views/RecorderView.swift` | Record a Sound: microphone recording, level meter, listen back and save |
 | `Views/ListenerStageView.swift` | The full-screen stage players see while tuned in, their sound pads and volumes |
 | `YouTube/YouTubeController.swift` | The embedded YouTube view and capture bridge |
 | `YouTube/SegmentScript.swift` | Saves the audio YouTube's player downloads |

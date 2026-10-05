@@ -835,6 +835,7 @@ const Live = (() => {
     if (status.role === 'listen') { if ($('#live-dialog').open) $('#live-dialog').close(); Stage.show(); } else Stage.hide();
     // No need to add sounds while broadcasting.
     $('#add-btn').classList.toggle('hidden', status.role === 'host');
+    $('#record-btn').classList.toggle('hidden', status.role === 'host');
     if (status.role === 'host' && was !== 'host') { lastScene = undefined; syncHostState(true); }
     if (status.role !== 'host') { whisper.clear(); emphasis = false; $('#whisper-menu').classList.add('hidden'); }
     // Drop whisper targets who left.
@@ -1028,11 +1029,23 @@ const Live = (() => {
         renderArmed();
         $('#live-dialog').close();
       });
-      row.append(who, whisperButton);
+      const kick = el('button', 'danger', 'Remove');
+      kick.type = 'button';
+      kick.title = 'Remove this player from the session';
+      kick.addEventListener('click', () => {
+        // eslint-disable-next-line no-alert
+        if (!window.confirm(`Remove ${peer.name} from the session?`)) return;
+        api.live.hostEvent({ t: 'kick', peer: peer.peer });
+        whisper.delete(peer.peer);
+        renderArmed();
+      });
+      const actions = el('span', 'live-row-actions');
+      actions.append(whisperButton, kick);
+      row.append(who, actions);
       list.append(row);
     }
     body.append(list);
-    body.append(el('p', 'muted small', 'Mark sounds GM only (never sent) or Buzz (vibrates phones) in each sound’s Edit window. Players set their own music, effects and ambience volumes.'));
+    body.append(el('p', 'muted small', 'Whisper sends the next sound you play to that player only. Remove takes a player out of the session. Mark sounds GM only (never sent) or Buzz (vibrates phones) in each sound’s Edit window.'));
     body.append(playerSoundsField());
     const end = el('button', 'danger', 'End Session');
     end.type = 'button';

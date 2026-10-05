@@ -74,6 +74,15 @@ function createRelay({ port = 8787, host = '0.0.0.0', log = () => {} } = {}) {
       if (isBinary) return;
       let message;
       try { message = JSON.parse(data.toString()); } catch { return; }
+      if (message && message.t === 'kick' && typeof message.peer === 'string') {
+        // The host removed a listener from the session.
+        const target = room.listeners.get(message.peer);
+        if (target) {
+          send(target, { t: 'kicked' });
+          target.close(1000, 'kicked');
+        }
+        return;
+      }
       if (!message || message.t !== 'send' || typeof message.msg !== 'object') return;
       const text = JSON.stringify(message.msg);
       const targets = message.to ? [room.listeners.get(message.to)] : [...room.listeners.values()];

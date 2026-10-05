@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, shell, globalShortcut, nativeImage, session, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, globalShortcut, nativeImage, session, Notification, systemPreferences } = require('electron');
 const path = require('path');
 const { Readable } = require('stream');
 const fs = require('fs');
@@ -154,6 +154,12 @@ function registerIpc() {
     }
     if (added.length) broadcast('sounds:changed', null, e.sender);
     return added;
+  });
+
+  // Recording a sound: macOS asks the first time.
+  ipcMain.handle('media:mic-access', async () => {
+    if (process.platform !== 'darwin') return true;
+    try { return await systemPreferences.askForMediaAccess('microphone'); } catch { return false; }
   });
 
   ipcMain.handle('sounds:add', (e, { name, data, ext, source, kind, duration }) => {
@@ -410,6 +416,7 @@ function registerLiveIpc() {
         break;
       }
       case 'playerSounds': host.setPlayerSounds(event.mode); break;
+      case 'kick': host.kick(String(event.peer || '')); break;
       case 'catalog': host.setCatalog(event.items); break;
       case 'stop': host.stop(event.group); break;
       case 'volume': host.volume(event.group, event.volume); break;

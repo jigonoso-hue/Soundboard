@@ -23,12 +23,14 @@ Where the code lives, side by side:
 | Live session state and UI | `src/renderer/live.js` | `Live/LiveSession.swift`, `Views/LiveView.swift` |
 | Listener stage | `src/renderer/live.js` (Stage), `styles.css` | `Views/ListenerStageView.swift` |
 | Listener playback | `src/renderer/live.js` (Mirror) | `Live/MirrorPlayer.swift` |
+| Recording | `src/renderer/recorder.js` | `Views/RecorderView.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
 
 ## Platform differences (allowed)
 
 - Mac only: global hotkeys, audio output device picker, the Mac's own window chrome. A Live buzz shakes the stage and shows a notification with a Dock bounce, since a Mac can't vibrate.
-- iPad / iPhone only: background audio while locked, vibration, the Photos video importer, the split Add menu (audio from Files / video from Files / Photos). The Mac's Add Sounds opens one file picker for audio and video files.
+- iPad / iPhone only: background audio while locked, vibration, the Photos video importer, the split Add menu (Record / audio from Files / video from Files / Photos). The Mac's Add Sounds opens one file picker for audio and video files, with Record as its own toolbar button.
+- Recordings are saved as M4A on the iPad and WAV on the Mac (Chromium can't record AAC); both play everywhere.
 - Options: the iPad keeps playback and library settings on its Options screen; the Mac keeps them in the sidebar and the toolbar.
 
 ## Other rules

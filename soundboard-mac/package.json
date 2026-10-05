@@ -29,7 +29,7 @@
         }
       ],
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Dungeon Radio does not record your microphone; this is only required by macOS for audio output device selection.",
+        "NSMicrophoneUsageDescription": "Dungeon Radio uses the microphone when you record a sound for your library.",
         "NSLocalNetworkUsageDescription": "Dungeon Radio uses your local network to find and host Live Sessions with other players at the table.",
         "NSBonjourServices": [
           "_dungeonradio._tcp"

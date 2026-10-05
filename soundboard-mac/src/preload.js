@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('soundboard', {
   list: () => ipcRenderer.invoke('sounds:list'),
   importDialog: () => ipcRenderer.invoke('sounds:import-dialog'),
   add: (sound) => ipcRenderer.invoke('sounds:add', sound),
+  micAccess: () => ipcRenderer.invoke('media:mic-access'),
   update: (id, changes) => ipcRenderer.invoke('sounds:update', id, changes),
   remove: (id) => ipcRenderer.invoke('sounds:remove', id),
   reorder: (ids) => ipcRenderer.invoke('sounds:reorder', ids),

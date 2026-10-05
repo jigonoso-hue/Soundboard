@@ -264,6 +264,13 @@ final class LiveSession: ObservableObject {
         peers.filter { whisperTargets.contains($0.id) }.map(\.name)
     }
 
+    /// Removes a player from the session.
+    func kick(_ peer: String) {
+        guard role == .host, let host else { return }
+        whisperTargets.remove(peer)
+        host.kick(peer)
+    }
+
     /// Clears an armed whisper and emphasis.
     func disarm() {
         whisperTargets = []

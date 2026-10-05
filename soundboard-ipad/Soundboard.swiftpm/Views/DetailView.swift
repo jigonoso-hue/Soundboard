@@ -22,6 +22,7 @@ struct DetailView: View {
     @State private var trimming: TrimRequest?
     @State private var showSettings = false
     @State private var showLive = false
+    @State private var showRecorder = false
     /// What the Files picker offers: audio (MP3, M4A, WAV…) or video.
     @State private var importingVideo = false
 
@@ -71,6 +72,9 @@ struct DetailView: View {
         }
         .sheet(isPresented: $showLive) {
             LiveView()
+        }
+        .sheet(isPresented: $showRecorder) {
+            RecorderView()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showStrip {
@@ -189,6 +193,11 @@ struct DetailView: View {
             if live.role != .host {
                 Menu {
                     Section("Add Sounds") {
+                        Button {
+                            showRecorder = true
+                        } label: {
+                            Label("Record…", systemImage: "mic.fill")
+                        }
                         Button {
                             importingVideo = false
                             showFileImporter = true

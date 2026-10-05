@@ -227,6 +227,8 @@ protocol LiveHostTransport: AnyObject {
     var onMessage: ((String, LiveJSON) -> Void)? { get set }
     /// To one listener, or to every listener when `peer` is nil.
     func send(_ message: LiveJSON, to peer: String?)
+    /// Disconnects a listener (after the `kicked` message has gone out).
+    func kick(_ peer: String)
     func close()
 }
 
@@ -283,6 +285,14 @@ final class LanServer: LiveHostTransport {
             sockets[peer]?.send(message)
         } else {
             for socket in sockets.values { socket.send(message) }
+        }
+    }
+
+    func kick(_ peer: String) {
+        guard let socket = sockets[peer] else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            socket.close()
         }
     }
 
@@ -392,6 +402,11 @@ final class RelayHost: LiveHostTransport {
         var envelope: LiveJSON = ["t": "send", "msg": message]
         if let peer { envelope["to"] = peer }
         socket?.send(envelope)
+    }
+
+    /// The relay tells the listener and disconnects it.
+    func kick(_ peer: String) {
+        socket?.send(["t": "kick", "peer": peer])
     }
 
     func close() {

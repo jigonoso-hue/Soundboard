@@ -84,3 +84,22 @@ test('unknown codes are refused and the host can resume', async () => {
     await relay.close();
   }
 });
+
+test('the host can kick a listener', async () => {
+  const relay = await createRelay({ port: 0, host: '127.0.0.1' });
+  const base = `ws://127.0.0.1:${relay.port}/live`;
+  try {
+    const host = connect(`${base}?role=host`);
+    const room = await host.next();
+    const a = connect(`${base}?role=listen&code=${room.code}`);
+    assert.deepEqual(await host.next(), { t: 'join', peer: 'p1' });
+    await a.opened;
+    host.sendJSON({ t: 'kick', peer: 'p1' });
+    assert.deepEqual(await a.next(), { t: 'kicked' });
+    await a.closed;
+    assert.deepEqual(await host.next(), { t: 'leave', peer: 'p1' });
+    host.close();
+  } finally {
+    await relay.close();
+  }
+});

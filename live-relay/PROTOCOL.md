@@ -34,6 +34,7 @@ The relay wraps traffic for the host only:
 | --- | --- |
 | `{"t":"send","msg":{…}}` | To every listener |
 | `{"t":"send","to":"<peer>","msg":{…}}` | To one listener |
+| `{"t":"kick","peer":"<peer>"}` | Remove a listener: the relay sends it `{"t":"kicked"}` and disconnects it |
 
 Listeners send and receive bare messages. The relay sends a listener
 `{"t":"no-room"}` if the code is unknown and `{"t":"ended"}` when the host
@@ -70,6 +71,7 @@ On the local network the host assigns peer ids itself.
 | `stopAll {}` | Stop all sounds (not ambience) |
 | `ambience {layers: […]}` | The full ambience state (below) |
 | `bye {}` | The host ended the session |
+| `kicked {}` | The host removed this listener; it disconnects and doesn't reconnect |
 | `rules {playerSounds, limit}` | Whether players may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
 | `catalog {sounds: [{id, name, color}]}` | The GM's sounds players may choose from (when `playerSounds` is `"gm"`) |
 | `need {hash, i}` | Request chunk `i` of a sound the player offered |
@@ -135,6 +137,9 @@ player's name, so all devices start together.
 - **GM-only sounds** are never sent to listeners, nor offered in the catalog.
 - **Whispers** are `play` messages sent to one or more chosen listeners, with
   `whisper: true`.
+- **Kick** removes a listener. The host sends `kicked` and closes the
+  connection (on the relay, with the `kick` command, so the relay enforces it
+  even if the listener's app ignores the message).
 - **Buzz** marks a sound as a big impact; phones vibrate when it starts (a
   notification while the app is in the background). **Emphasis** sets `buzz`
   on the GM's next sound.

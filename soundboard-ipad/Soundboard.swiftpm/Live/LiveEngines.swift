@@ -579,6 +579,17 @@ final class LiveHostEngine {
         }
     }
 
+    /// Removes a listener from the session.
+    func kick(_ peer: String) {
+        enqueue { [weak self] in
+            guard let self, self.peers[peer] != nil else { return }
+            self.transport.send(["t": "kicked"], to: peer)
+            self.transport.kick(peer)
+            self.peers[peer] = nil
+            self.emitPeers()
+        }
+    }
+
     func end() {
         transport.send(["t": "bye"], to: nil)
         let transport = self.transport
@@ -696,11 +707,12 @@ final class LiveListenerEngine {
             startClockSync()
         case "no-room": fail("No session with that code. Check it with your GM.")
         case "full": fail("That session is full.")
-        case "ended", "bye":
+        case "ended", "bye", "kicked":
             closed = true
             pingTask?.cancel()
             onCommand?(.stopAll(ambienceToo: true))
-            onState?(.ended("The GM ended the session."))
+            let kicked = LiveNet.string(message["t"]) == "kicked"
+            onState?(.ended(kicked ? "The GM removed you from the session." : "The GM ended the session."))
             socket.close()
         case "pong": addClockSample(message)
         case "scene": onScene?(LiveNet.string(message["name"]))
