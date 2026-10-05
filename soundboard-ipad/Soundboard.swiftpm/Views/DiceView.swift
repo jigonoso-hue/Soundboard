@@ -633,6 +633,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         ground.physicsBody?.friction = 0.25
         ground.physicsBody?.restitution = 0.35
         ground.physicsBody?.categoryBitMask = 1
+        ground.physicsBody?.collisionBitMask = -1
         scene.rootNode.addChildNode(ground)
         layout(aspect: 0.6)
     }
@@ -661,6 +662,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             node.physicsBody?.friction = 0.25
             node.physicsBody?.restitution = 0.35
             node.physicsBody?.categoryBitMask = 1
+            node.physicsBody?.collisionBitMask = -1
             scene.rootNode.addChildNode(node)
             return node
         }
@@ -679,6 +681,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         lid.position = SCNVector3(0, 12 + thick / 2, 0)
         lid.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: w, height: CGFloat(thick), length: l, chamferRadius: 0)))
         lid.physicsBody?.categoryBitMask = 1
+        lid.physicsBody?.collisionBitMask = -1
         scene.rootNode.addChildNode(lid)
         walls.append(lid)
     }
@@ -742,7 +745,9 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
     private func groupFor(_ owner: String) -> Int {
         if let bit = groups[owner] { return bit }
         let used = Set(rolls.compactMap { groups[$0.owner] })
-        let bit = (1..<16).map { 1 << $0 }.first { !used.contains($0) } ?? 2
+        // Bits 1, 2 and 4 are SceneKit's own (default, static, kinematic): a die
+        // in the static group never touches the table.
+        let bit = (3..<16).map { 1 << $0 }.first { !used.contains($0) } ?? (1 << 3)
         groups[owner] = bit
         return bit
     }
