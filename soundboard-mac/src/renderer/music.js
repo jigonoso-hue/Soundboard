@@ -42,6 +42,7 @@ const Music = (() => {
     const audio = play(id, {
       fresh: true,
       fadeIn,
+      gain: list.gain,
       group: `pl:${list.sectionId}:${list.n++}`,
       nearEnd: { seconds: fade, fn: () => { if (list.audio === audio) advance(list, fade); } },
       onEnded: () => { if (list.audio === audio) advance(list, 0); },
@@ -94,7 +95,7 @@ const Music = (() => {
       if (section.playlistShuffle) order = [fromId, ...order.filter((id) => id !== fromId)];
       else index = order.indexOf(fromId);
     }
-    const list = { kitId: kit.id, sectionId: section.id, order, index, id: null, audio: null, n: 1, failures: 0, shuffle: !!section.playlistShuffle };
+    const list = { kitId: kit.id, sectionId: section.id, order, index, id: null, audio: null, n: 1, failures: 0, shuffle: !!section.playlistShuffle, gain: section.volume ?? 1 };
     lists.set(section.id, list);
     startTrack(list, index, fade || (current ? 2 : 0));
   }
@@ -120,7 +121,7 @@ const Music = (() => {
         if (anyRemembered && !layer.on) continue;
         const id = voiceId(section, layer);
         keep.add(id);
-        toStart.push({ id, layer });
+        toStart.push({ id, layer, gain: section.volume ?? 1 });
       }
     }
     // Its first playlist, from the top of the board.
@@ -144,11 +145,10 @@ const Music = (() => {
     Ambience.fadeOutAll(keep, SCENE_FADE);
 
     // Fade in this scene's.
-    for (const { id, layer } of toStart) {
-      Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every }, { fade: SCENE_FADE });
+    for (const { id, layer, gain } of toStart) {
+      Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume * gain, every: layer.every }, { fade: SCENE_FADE });
     }
     if (playlist && !ours) start(kit, playlist, null, SCENE_FADE);
-    if (typeof Live !== 'undefined') Live.sceneChanged(SCENE_FADE);
   }
 
   return {
@@ -156,6 +156,8 @@ const Music = (() => {
     SCENE_FADE,
     start,
     stop: stopList,
+    // The section's volume slider moved: the songs still to come play at the new level.
+    setGain(sectionId, gain) { const list = lists.get(sectionId); if (list) list.gain = gain; },
     sceneOpened,
     songsIn,
     isPlaying: (sectionId) => lists.has(sectionId),

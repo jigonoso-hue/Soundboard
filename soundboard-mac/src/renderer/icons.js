@@ -110,6 +110,7 @@
   const UI = [
     ['play', 'Play', 'Interface', '<path d="M7 4l13 8-13 8z"/>'],
     ['stop', 'Stop', 'Interface', '<rect x="6" y="6" width="12" height="12" rx="1.5"/>'],
+    ['shuffle', 'Shuffle', 'Interface', '<path d="M3 7h3.5c2 0 3.2.9 4.3 2.6l2.4 4.8c1.1 1.7 2.3 2.6 4.3 2.6H21M3 17h3.5c1.4 0 2.4-.4 3.2-1.2M14.3 8.2c.8-.8 1.8-1.2 3.2-1.2H21"/><path d="M18 4l3 3-3 3M18 14l3 3-3 3"/>'],
     ['repeat', 'Repeat', 'Interface', '<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/>'],
     ['scissors', 'Clip', 'Interface', '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.2 7.8L20 19M8.2 16.2L20 5"/>'],
     ['layers', 'Ambience', 'Interface', '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 17l9 5 9-5"/>'],

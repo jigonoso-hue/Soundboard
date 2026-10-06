@@ -34,7 +34,8 @@ const Bashes = (() => {
   }
 
   // One bash card; used on the board and inside scene kit sections.
-  function makeCard(bash) {
+  // gain: a scene kit section's volume slider.
+  function makeCard(bash, { gain = 1 } = {}) {
     const card = document.createElement('div');
     card.className = 'bash-card';
     card.dataset.id = bash.id;
@@ -70,16 +71,16 @@ const Bashes = (() => {
     progress.className = 'bash-progress';
 
     card.append(cover, info, more, progress);
-    card.addEventListener('click', () => toggle(bash.id));
+    card.addEventListener('click', () => toggle(bash.id, gain));
     card.addEventListener('dblclick', (e) => { e.preventDefault(); player.stop(); api.bashes.openEditor(bash.id); });
-    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(bash.id); } });
+    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(bash.id, gain); } });
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(bash.id, card); });
     const state = player.state();
     if (state && state.bashId === bash.id) card.classList.add('playing');
     return card;
   }
 
-  async function toggle(id) {
+  async function toggle(id, gain = 1) {
     const state = player.state();
     if (state && state.bashId === id) { player.stop(); return; }
     const bash = list.find((b) => b.id === id);
@@ -88,7 +89,7 @@ const Bashes = (() => {
       api.bashes.openEditor(id);
       return;
     }
-    await player.play(bash, sounds);
+    await player.play(bash, sounds, 0, gain);
   }
 
   // Progress bar and ▶/■ on the playing card.

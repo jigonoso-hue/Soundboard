@@ -113,6 +113,8 @@ Click **Done** to lock the layout, so nothing moves by accident during a session
 - **Rename** it (double-clicking the title also works).
 - **Item size:** Small, Medium or Large.
 - **Meant for:** sets which items the add panel shows first (clips, full sounds, Bashes or anything).
+- **Volume slider:** a slider under the title that adjusts everything played from the section, including what's already playing.
+- **Shuffle button** (sound sections): plays a random sound or Bash from the section, never the same one twice in a row.
 - **Remove section.**
 
 **Kit options:** **Edit** (name, icon, icon colour, background colour), **Duplicate** and **Delete** are at the top of the kit, and on its right-click menu in the sidebar. You can also add a single sound with **Add to Scene Kit…** in its editor, or a Bash from its **⋯** menu. These go into the section that suits them.
@@ -123,6 +125,7 @@ Every sound has a type, which you can change in its editor or when adding it:
 
 - **Clips** are short effects. Tapping a clip again layers another copy (unless *Restart instead of overlap* is on).
 - **Full Sounds** are songs and long tracks. Clicking one again stops it, and the row shows elapsed time against the total length.
+- While a full sound plays, its row shows a volume slider, like an ambience layer's. The level you set is kept for next time.
 
 The type is detected automatically. Anything a minute or longer, and anything saved with **Save Full Audio**, starts as a Full Sound. Everything else starts as a Clip.
 

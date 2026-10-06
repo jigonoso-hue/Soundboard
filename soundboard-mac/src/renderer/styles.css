@@ -174,6 +174,7 @@ button.mini { padding: 2px 8px; font-size: 11px; border-radius: 6px; text-transf
 .titlebar {
   -webkit-app-region: drag;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
@@ -181,7 +182,13 @@ button.mini { padding: 2px 8px; font-size: 11px; border-radius: 6px; text-transf
 }
 .titlebar > * { -webkit-app-region: no-drag; }
 .titlebar .spacer { flex: 1; -webkit-app-region: drag; }
-#filter { width: 240px; }
+#filter { width: auto; flex: 1 1 150px; max-width: 240px; min-width: 130px; }
+#sort { flex: none; }
+.titlebar button { flex: none; }
+/* Not enough room: icons only (their names are tooltips). */
+.titlebar.compact .bar-label { display: none; }
+.titlebar.compact button { padding-left: 9px; padding-right: 9px; }
+.titlebar.compact #stop-all { color: #fff; background: var(--danger); border-color: transparent; }
 
 .active-filters {
   display: flex;
@@ -289,6 +296,9 @@ button.mini { padding: 2px 8px; font-size: 11px; border-radius: 6px; text-transf
 
 /* ---------- YouTube browser ---------- */
 
+/* A small window with the YouTube browser open: the board and the browser
+   get the room, and the sidebar comes back when the browser closes. */
+@media (max-width: 1140px) { body.browser-open #sidebar { display: none; } }
 #browser {
   flex: 1 1 55%;
   min-width: 460px;
@@ -776,7 +786,7 @@ dialog { max-height: 90vh; overflow-y: auto; }
 }
 .kit-board.editing .kit-section-head { cursor: grab; background: var(--hover); }
 .kit-board.editing .kit-section.moving .kit-section-head { cursor: grabbing; }
-.kit-section-title { font-weight: 700; font-size: 13px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kit-section-title { flex: 0 1 auto; min-width: 2.5em; font-weight: 700; font-size: 13px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kit-section-head .count { margin-left: 0; }
 .section-add { margin-left: auto; }
 .section-more { padding: 2px 7px; }
@@ -911,7 +921,7 @@ dialog { max-height: 90vh; overflow-y: auto; }
 .kit-layer.on .kit-layer-icon { background: var(--amb); color: var(--on-amb); }
 .kit-layer-text { display: flex; flex-direction: column; min-width: 0; }
 .kit-layer-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 18px; }
-.kit-layer-status { font-size: 11px; color: var(--muted); }
+.kit-layer-status { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
 .kit-layer.on .kit-layer-status { color: var(--amb); }
 .kit-layer input[type="range"] { width: 100%; }
 .kit-section.size-s .section-layers { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
@@ -1711,4 +1721,35 @@ body.handout-open .game-screen { visibility: hidden; }
   .handout-close { min-width: 0 !important; flex: 1.6 !important; }
   .handout-log { padding: 16px; }
   .handout-log-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* A playing song's own volume, under its row (kept for next time). */
+.track { flex-wrap: wrap; }
+.track-volume { display: none; flex: 0 0 100%; align-items: center; gap: 8px; padding: 2px 4px 0 48px; color: var(--muted); }
+.track.playing .track-volume { display: flex; }
+.track-volume input[type="range"] { flex: 1; min-width: 0; accent-color: var(--tile-color); }
+/* A scene kit section's volume slider and shuffle button. */
+.kit-section-volume { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
+.section-shuffle { margin-left: auto; padding: 2px 7px; }
+.section-shuffle + .section-add { margin-left: 0; }
+.kit-section-volume input[type="range"] { flex: 1; min-width: 0; }
+
+/* Narrow scene kit sections: icon-only header buttons, and a song's timer
+   moves under its name so the name has room. */
+.kit-section { container-type: inline-size; }
+@container (max-width: 320px) {
+  .kit-section-head .icon-label { display: none; }
+  .kit-section-head { gap: 6px; }
+  .track { gap: 8px 10px; padding-right: 8px; }
+  .track-play { width: 32px; height: 32px; margin-left: 4px; }
+  .track-meta { order: 5; flex: 0 0 100%; padding-left: 46px; margin-top: -6px; }
+  .track-time { text-align: left; font-size: 11px; }
+  .track-volume { order: 6; padding-left: 46px; }
+}
+
+/* A narrow kit header: its buttons tighten up to stay on one row. */
+.kit-header { container-type: inline-size; }
+@container (max-width: 700px) {
+  .kit-header-actions { gap: 6px; }
+  .kit-header-actions button { padding-left: 9px; padding-right: 9px; }
 }

@@ -21,12 +21,15 @@ final class MusicDirector: ObservableObject {
         var n = 1
         var failures = 0
         let shuffle: Bool
+        /// The section's volume slider, if it has one.
+        var gain: Double
 
-        init(kitId: UUID, sectionId: UUID, order: [UUID], shuffle: Bool) {
+        init(kitId: UUID, sectionId: UUID, order: [UUID], shuffle: Bool, gain: Double) {
             self.kitId = kitId
             self.sectionId = sectionId
             self.order = order
             self.shuffle = shuffle
+            self.gain = gain
         }
     }
 
@@ -100,7 +103,7 @@ final class MusicDirector: ObservableObject {
             guard let self, let list, list.token == token else { return }
             self.end(list.sectionId)
         }
-        token = try? player.play(sound, url: store.url(for: sound), options: options)
+        token = try? player.play(sound, url: store.url(for: sound), gain: list.gain, options: options)
         list.token = token
         if token == nil {
             list.failures += 1
@@ -154,9 +157,14 @@ final class MusicDirector: ObservableObject {
         if let songId, order.contains(songId) {
             if shuffle { order = [songId] + order.filter { $0 != songId } } else { index = order.firstIndex(of: songId) ?? 0 }
         }
-        let list = Playlist(kitId: kit.id, sectionId: section.id, order: order, shuffle: shuffle)
+        let list = Playlist(kitId: kit.id, sectionId: section.id, order: order, shuffle: shuffle, gain: section.gain)
         lists[section.id] = list
         startTrack(list, at: index, fadeIn: fade > 0 ? fade : (wasPlaying ? 2 : 0))
+    }
+
+    /// The section's volume slider moved: the songs still to come play at the new level.
+    func setGain(_ gain: Double, for sectionId: UUID) {
+        lists[sectionId]?.gain = gain
     }
 
     func stop(_ sectionId: UUID, fade: Double = 0) {
@@ -174,12 +182,12 @@ final class MusicDirector: ObservableObject {
         // The layers you had on when you last left it; the first time, all of them.
         let anyRemembered = ambienceSections.contains { $0.layers.contains { $0.on == true } }
         var keep = Set<String>()
-        var toStart: [(id: String, layer: KitLayer)] = []
+        var toStart: [(id: String, layer: KitLayer, gain: Double)] = []
         for section in ambienceSections {
             for layer in section.layers where !anyRemembered || layer.on == true {
                 let id = section.voiceId(layer)
                 keep.insert(id)
-                toStart.append((id, layer))
+                toStart.append((id, layer, section.gain))
             }
         }
         // Its first playlist, from the top of the board.
@@ -203,10 +211,9 @@ final class MusicDirector: ObservableObject {
         ambience.fadeOutAll(keep: keep, fade: Self.sceneFade)
 
         // Fade in this scene's.
-        for (id, layer) in toStart {
-            ambience.startVoice(id, kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every, fade: Self.sceneFade)
+        for (id, layer, gain) in toStart {
+            ambience.startVoice(id, kind: layer.kind, ref: layer.ref, volume: layer.volume * gain, every: layer.every, fade: Self.sceneFade)
         }
         if let playlist, ours == nil { start(kit: kit, section: playlist, fade: Self.sceneFade) }
-        live?.sceneChanged(fade: Self.sceneFade)
     }
 }

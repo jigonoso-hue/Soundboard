@@ -31,11 +31,18 @@
 
     applyPrefs() {
       const prefs = readPrefs();
-      this.master.gain.value = typeof prefs.master === 'number' ? prefs.master : 1;
+      // gain: a scene kit section's volume slider, for the bash playing from it.
+      this.master.gain.value = (typeof prefs.master === 'number' ? prefs.master : 1) * (this.gain ?? 1);
       if (this.ctx.setSinkId) this.ctx.setSinkId(prefs.outputDevice || '').catch(() => {});
     }
 
     onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+
+    // A scene kit section's volume slider moved while its bash plays.
+    setGain(gain) {
+      this.gain = gain;
+      this.applyPrefs();
+    }
     emit() { for (const fn of this.listeners) fn(this.state()); }
 
     buffer(sound) {
@@ -60,8 +67,9 @@
       return end;
     }
 
-    async play(bash, sounds, from = 0) {
+    async play(bash, sounds, from = 0, gain = 1) {
       this.stop(false);
+      this.gain = gain;
       this.applyPrefs();
       if (this.ctx.state === 'suspended') await this.ctx.resume();
       const token = {};

@@ -21,6 +21,8 @@ const Kits = (() => {
   const bashList = () => (typeof Bashes !== 'undefined' ? Bashes.all() : []);
   const allItems = (kit) => kit.sections.flatMap((s) => s.items);
   const allLayers = (kit) => kit.sections.flatMap((s) => s.layers || []);
+  // A section's volume slider (1 when it has none).
+  const gainOf = (section) => section.volume ?? 1;
   const inSection = (section, type, id) => section.items.some((i) => i.type === type && i.id === id);
 
   async function load() {
@@ -196,6 +198,16 @@ const Kits = (() => {
     Icons.set(add, 'plus', 'Add', { size: 12 });
     add.title = isAmbience(section) ? 'Add looping layers to this section' : 'Add sounds and bashes to this section';
     add.addEventListener('click', (e) => { e.stopPropagation(); openDrawer(section.id); });
+    // A shuffle button: a random item from the section.
+    const shuffle = !isAmbience(section) && section.shuffle ? document.createElement('button') : null;
+    if (shuffle) {
+      shuffle.className = 'mini section-shuffle';
+      Icons.set(shuffle, 'shuffle', '', { size: 13 });
+      shuffle.title = 'Play a random item from this section';
+      shuffle.setAttribute('aria-label', 'Play a random item');
+      shuffle.disabled = !section.items.length;
+      shuffle.addEventListener('click', (e) => { e.stopPropagation(); shufflePlay(section); });
+    }
     const more = document.createElement('button');
     more.className = 'mini section-more';
     Icons.set(more, 'more', '', { size: 14 });
@@ -214,7 +226,7 @@ const Kits = (() => {
         e.stopPropagation();
         if (Music.isPlaying(section.id)) Music.stop(section.id, 2); else Music.start(kit, section);
       });
-      head.append(title, count, toggle, add, more);
+      head.append(title, count, toggle, ...(shuffle ? [shuffle] : []), add, more);
     } else if (isAmbience(section)) {
       title.prepend(Icons.el('layers', { size: 14, className: 'section-kind-icon' }));
       const stop = document.createElement('button');
@@ -229,7 +241,7 @@ const Kits = (() => {
       });
       head.append(title, count, stop, add, more);
     } else {
-      head.append(title, count, add, more);
+      head.append(title, count, ...(shuffle ? [shuffle] : []), add, more);
     }
     head.addEventListener('pointerdown', (e) => {
       if (!editing || e.button !== 0 || e.target.closest('button')) return;
@@ -240,7 +252,9 @@ const Kits = (() => {
     body.className = 'kit-section-body';
     if (isAmbience(section)) fillAmbience(kit, section, body); else fillSection(kit, section, body);
 
-    el.append(head, body);
+    el.append(head);
+    if (section.volume !== undefined) el.append(volumeRow(kit, section));
+    el.append(body);
     if (editing) {
       const handle = document.createElement('div');
       handle.className = 'resize-handle';
@@ -314,13 +328,13 @@ const Kits = (() => {
     if (bashItems.length) {
       const wrap = document.createElement('div');
       wrap.className = 'section-bashes';
-      for (const { item, bash } of bashItems) wrap.appendChild(decorate(Bashes.makeCard(bash), kit, section, item));
+      for (const { item, bash } of bashItems) wrap.appendChild(decorate(Bashes.makeCard(bash, { gain: gainOf(section) }), kit, section, item));
       body.appendChild(wrap);
     }
     if (clipItems.length) {
       const grid = document.createElement('div');
       grid.className = 'section-clips';
-      for (const { item, sound } of clipItems) grid.appendChild(decorate(makeTile(sound, { reorder: false }), kit, section, item));
+      for (const { item, sound } of clipItems) grid.appendChild(decorate(makeTile(sound, { reorder: false, gain: gainOf(section) }), kit, section, item));
       body.appendChild(grid);
     }
     if (fullItems.length) {
@@ -332,7 +346,7 @@ const Kits = (() => {
           if (Music.current(section.id) === sound.id) Music.stop(section.id, 2);
           else Music.start(kit, section, sound.id);
         } : null;
-        const row = makeTrack(sound, { reorder: false, onPlay });
+        const row = makeTrack(sound, { reorder: false, onPlay, gain: gainOf(section) });
         if (section.playlist && Music.current(section.id) === sound.id) row.classList.add('playlist-current');
         rows.appendChild(decorate(row, kit, section, item));
       }
@@ -447,7 +461,7 @@ const Kits = (() => {
       toggle.append(text);
       toggle.addEventListener('click', () => {
         // Remembered, so the kit can bring back the same layers when it opens.
-        if (Ambience.isPlaying(id)) { Ambience.stop(id); delete layer.on; } else { Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every }); layer.on = true; }
+        if (Ambience.isPlaying(id)) { Ambience.stop(id); delete layer.on; } else { Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume * gainOf(section), every: layer.every }); layer.on = true; }
         saveSections(kit);
       });
       card.addEventListener('contextmenu', (e) => {
@@ -455,7 +469,7 @@ const Kits = (() => {
         Ambience.cueMenu(layer.every, e, (every) => {
           if (every) layer.every = every; else delete layer.every;
           saveSections(kit, true);
-          if (Ambience.isPlaying(id)) { Ambience.stop(id); Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every }); }
+          if (Ambience.isPlaying(id)) { Ambience.stop(id); Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume * gainOf(section), every: layer.every }); }
           render();
         });
       });
@@ -470,7 +484,7 @@ const Kits = (() => {
       volume.title = 'Layer volume';
       volume.addEventListener('input', () => {
         layer.volume = Number(volume.value);
-        Ambience.setVolume(id, layer.volume);
+        Ambience.setVolume(id, layer.volume * gainOf(section));
         saveSections(kit);
       });
 
@@ -599,6 +613,58 @@ const Kits = (() => {
 
   // ---------- Section menu ----------
 
+  // The section's own volume: scales everything played from it.
+  function volumeRow(kit, section) {
+    const row = document.createElement('div');
+    row.className = 'kit-section-volume';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = 0;
+    slider.max = 1;
+    slider.step = 0.01;
+    slider.value = gainOf(section);
+    slider.title = `${section.title} volume`;
+    slider.setAttribute('aria-label', `${section.title} volume`);
+    slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+    slider.addEventListener('input', () => {
+      section.volume = Number(slider.value);
+      applyGain(section);
+      saveSections(kit);
+    });
+    row.append(Icons.el('speaker', { size: 12 }), slider);
+    return row;
+  }
+
+  // Brings what's playing from a section to its volume slider's level.
+  function applyGain(section) {
+    const gain = gainOf(section);
+    if (isAmbience(section)) {
+      for (const layer of section.layers) {
+        const id = voiceId(section, layer);
+        if (Ambience.isPlaying(id)) Ambience.setVolume(id, layer.volume * gain);
+      }
+      return;
+    }
+    setPlayingGain(section.items.filter((i) => i.type === 'sound').map((i) => i.id), gain);
+    Music.setGain(section.id, gain);
+    const state = Bashes.player.state();
+    if (state && section.items.some((i) => i.type === 'bash' && i.id === state.bashId)) Bashes.player.setGain(gain);
+  }
+
+  // Plays a random sound or bash from the section (not the same one twice in a row).
+  const lastShuffled = new Map();
+  function shufflePlay(section) {
+    const bashesById = new Map(bashList().map((b) => [b.id, b]));
+    const candidates = section.items.filter((i) => (i.type === 'bash' ? bashesById.has(i.id) : sounds.some((s) => s.id === i.id)));
+    const last = lastShuffled.get(section.id);
+    const fresh = candidates.length > 1 ? candidates.filter((i) => !(i.type === last?.type && i.id === last?.id)) : candidates;
+    const pick = fresh[Math.floor(Math.random() * fresh.length)];
+    if (!pick) return;
+    lastShuffled.set(section.id, pick);
+    if (pick.type === 'bash') Bashes.player.play(bashesById.get(pick.id), sounds, 0, gainOf(section));
+    else play(pick.id, { gain: gainOf(section) });
+  }
+
   function openSectionMenu(kit, section, anchor) {
     const menu = $('#section-menu');
     menu.textContent = '';
@@ -617,7 +683,18 @@ const Kits = (() => {
     };
     add(isAmbience(section) ? 'Add layers…' : 'Add from library…', () => openDrawer(section.id));
     add('Rename…', () => renameSection(kit, section));
+    add('Volume slider', () => {
+      if (section.volume === undefined) section.volume = 1; else delete section.volume;
+      applyGain(section);
+      saveSections(kit, true);
+      renderBoard();
+    }, section.volume !== undefined ? 'checked' : '');
     if (!isAmbience(section)) {
+      add('Shuffle button', () => {
+        if (section.shuffle) delete section.shuffle; else section.shuffle = true;
+        saveSections(kit, true);
+        renderBoard();
+      }, section.shuffle ? 'checked' : '');
       heading('Item size');
       for (const [size, label] of [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) {
         add(label, () => { section.size = size; saveSections(kit, true); renderBoard(); }, section.size === size ? 'checked' : '');

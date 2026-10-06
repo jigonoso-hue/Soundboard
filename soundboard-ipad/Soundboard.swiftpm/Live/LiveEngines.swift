@@ -1063,7 +1063,7 @@ final class LiveListenerEngine {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("handouts-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         handoutDir = dir
-        let fetcher = FileFetcher(folder: dir) { [weak socket] message in socket?.send(message) }
+        let fetcher = FileFetcher(folder: dir) { [weak self] message in self?.socket.send(message) }
         fetcher.onArrived = { [weak self] hash, url in self?.handoutArrived(hash, url) }
         fetcher.onFailed = { [weak self] hash in self?.waitingHandouts[hash] = nil }
         handoutFetcher = fetcher

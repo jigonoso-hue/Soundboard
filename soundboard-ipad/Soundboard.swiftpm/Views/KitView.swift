@@ -691,6 +691,7 @@ struct KitSectionView: View {
             return
         }
         player.setGain(gain, for: section.items.filter { $0.type == .sound }.map(\.id))
+        music.setGain(gain, for: section.id)
         if let playing = bashPlayer.playingId, section.items.contains(KitItem(type: .bash, id: playing)) {
             bashPlayer.setVolume(player.masterVolume * gain)
         }

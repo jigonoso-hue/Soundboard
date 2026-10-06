@@ -78,8 +78,8 @@ final class SoundPlayer: ObservableObject {
     /// Plays a sound. Returns the copy's token (to stop just that copy later), or nil.
     @discardableResult
     func play(_ sound: Sound, url: URL, gain: Double = 1, options: PlayOptions = PlayOptions()) throws -> UUID? {
-        // A repeating sound toggles: tapping it again stops it instead of stacking another copy.
-        if !options.fresh && sound.repeatGap != nil && progress[sound.id] != nil {
+        // Full sounds and repeating sounds toggle: tapping again stops them instead of stacking another copy.
+        if !options.fresh && (sound.repeatGap != nil || sound.isFull) && progress[sound.id] != nil {
             stop(sound.id)
             return nil
         }

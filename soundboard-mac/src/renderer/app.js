@@ -59,6 +59,7 @@ function rampVolume(audio, to, seconds, then) {
 //   group: what Live Session listeners stop it by (default "s:<id>")
 //   nearEnd: { seconds, fn }: calls fn once when that much of it is left
 //   onEnded: called when it finishes by itself
+//   gain: extra level from where it was played (a scene kit section's volume slider)
 // Returns the audio element, or null.
 function play(id, options = {}) {
   const sound = sounds.find((s) => s.id === id);
@@ -68,7 +69,8 @@ function play(id, options = {}) {
   if (prefs.noOverlap && !options.fresh) stop(id);
   const audio = new Audio(soundUrl(sound));
   audio.group = options.group || `s:${id}`;
-  const target = Math.min(1, sound.volume * prefs.master);
+  audio.gain = options.gain ?? 1;
+  const target = Math.min(1, sound.volume * audio.gain * prefs.master);
   audio.volume = options.fadeIn ? 0 : target;
   if (prefs.outputDevice && audio.setSinkId) audio.setSinkId(prefs.outputDevice).catch(() => {});
   if (sound.repeat && sound.repeat.gap === 0 && !options.fresh) audio.loop = true; // replay immediately
@@ -118,6 +120,31 @@ function play(id, options = {}) {
   updateTile(id, audio);
   if (typeof Live !== 'undefined') Live.soundPlayed(sound, { group: audio.group, fadeIn: options.fadeIn || 0 });
   return audio;
+}
+
+// A playing sound's level changed: its own volume (the slider on a playing
+// song) or a scene kit section's volume slider (gain, for these ids).
+function setPlayingVolume(id, volume) {
+  const sound = sounds.find((s) => s.id === id);
+  if (!sound) return;
+  sound.volume = Math.max(0, Math.min(1, volume));
+  for (const audio of playing.get(id) || []) {
+    if (audio.rampTimer) continue;
+    audio.volume = Math.min(1, sound.volume * (audio.gain ?? 1) * prefs.master);
+    if (typeof Live !== 'undefined') Live.groupVolume(audio.group, audio.volume);
+  }
+}
+
+function setPlayingGain(ids, gain) {
+  for (const id of ids) {
+    const sound = sounds.find((s) => s.id === id);
+    for (const audio of playing.get(id) || []) {
+      audio.gain = gain;
+      if (audio.rampTimer) continue;
+      audio.volume = Math.min(1, (sound ? sound.volume : 1) * gain * prefs.master);
+      if (typeof Live !== 'undefined') Live.groupVolume(audio.group, audio.volume);
+    }
+  }
 }
 
 // Stops one playing copy of a sound, fading it out over `fade` seconds.
@@ -376,8 +403,9 @@ function tagLine(sound, max) {
 
 // Full sounds: a row with play button, name, tags, timer and progress.
 // onPlay: what clicking it does instead of playing it (a playlist starts from it).
-function makeTrack(sound, { reorder = true, onPlay = null } = {}) {
-  const go = () => (onPlay ? onPlay() : play(sound.id));
+// gain: a scene kit section's volume slider.
+function makeTrack(sound, { reorder = true, onPlay = null, gain = 1 } = {}) {
+  const go = () => (onPlay ? onPlay() : play(sound.id, { gain }));
   const row = document.createElement('div');
   row.className = 'track';
   row.dataset.soundId = sound.id;
@@ -426,7 +454,23 @@ function makeTrack(sound, { reorder = true, onPlay = null } = {}) {
   const progress = document.createElement('div');
   progress.className = 'tile-progress';
 
-  row.append(playBtn, info, meta, edit, progress);
+  // Its volume, like an ambience layer's, while it plays. The level is kept for next time.
+  const volume = document.createElement('div');
+  volume.className = 'track-volume';
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = 0;
+  slider.max = 1;
+  slider.step = 0.01;
+  slider.value = sound.volume ?? 1;
+  slider.title = `${sound.name} volume`;
+  slider.setAttribute('aria-label', `${sound.name} volume`);
+  for (const type of ['click', 'pointerdown', 'keydown']) slider.addEventListener(type, (e) => e.stopPropagation());
+  slider.addEventListener('input', () => setPlayingVolume(sound.id, Number(slider.value)));
+  slider.addEventListener('change', () => api.update(sound.id, { volume: Number(slider.value) }).catch(() => {}));
+  volume.append(Icons.el('speaker', { size: 12 }), slider);
+
+  row.append(playBtn, info, meta, edit, volume, progress);
   row.addEventListener('click', go);
   row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
@@ -475,7 +519,8 @@ function addReorder(el, sound) {
   });
 }
 
-function makeTile(sound, { reorder = true } = {}) {
+// gain: a scene kit section's volume slider.
+function makeTile(sound, { reorder = true, gain = 1 } = {}) {
   const tile = document.createElement('div');
   tile.className = 'tile';
   tile.dataset.id = sound.id;
@@ -530,8 +575,8 @@ function makeTile(sound, { reorder = true } = {}) {
   progress.className = 'tile-progress';
   tile.appendChild(progress);
 
-  tile.addEventListener('click', (e) => (e.altKey ? stop(sound.id) : play(sound.id)));
-  tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
+  tile.addEventListener('click', (e) => (e.altKey ? stop(sound.id) : play(sound.id, { gain })));
+  tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id, { gain }); } });
   tile.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
 
   if (reorder) addReorder(tile, sound);
@@ -625,9 +670,9 @@ master.addEventListener('input', () => {
   savePrefs();
   for (const [id, set] of playing) {
     const sound = sounds.find((s) => s.id === id);
-    const level = Math.min(1, (sound ? sound.volume : 1) * prefs.master);
     for (const audio of set) {
       if (audio.rampTimer) continue; // fading in or out: it ends where it was going
+      const level = Math.min(1, (sound ? sound.volume : 1) * (audio.gain ?? 1) * prefs.master);
       audio.volume = level;
       if (typeof Live !== 'undefined') Live.groupVolume(audio.group, level);
     }
@@ -665,6 +710,38 @@ document.addEventListener('keydown', (e) => {
 });
 
 api.onHotkey(play);
+
+// The top bar's buttons show only their icons when there isn't room for their
+// names (a small window, or the extra buttons a Live Session adds). Each keeps
+// its name as a tooltip.
+(() => {
+  const bar = $('.titlebar');
+  for (const button of bar.querySelectorAll('button')) {
+    if (!button.title) button.title = button.textContent.trim();
+    const label = button.querySelector('span[id$="-label"]');
+    if (label) { label.classList.add('bar-label'); continue; }
+    for (const node of [...button.childNodes]) {
+      if (node.nodeType !== Node.TEXT_NODE || !node.textContent.trim()) continue;
+      const span = document.createElement('span');
+      span.className = 'bar-label';
+      span.textContent = node.textContent.trim();
+      node.replaceWith(span);
+    }
+    button.setAttribute('aria-label', button.querySelector('.bar-label')?.textContent || button.title);
+  }
+  // Too many to fit on one row: icons only (and if even those don't fit, a second row).
+  const wraps = () => {
+    const shown = [...bar.children].filter((c) => c.offsetParent !== null);
+    return shown.some((c) => c.offsetTop > shown[0].offsetTop + 4);
+  };
+  const fit = () => {
+    bar.classList.remove('compact');
+    if (wraps()) bar.classList.add('compact');
+  };
+  new ResizeObserver(fit).observe(bar);
+  new MutationObserver((changes) => { if (changes.some((c) => c.target !== bar)) fit(); })
+    .observe(bar, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+})();
 
 // ---------- Edit dialog ----------
 
@@ -808,6 +885,7 @@ function setBrowserOpen(open) {
   prefs.browserOpen = open;
   savePrefs();
   $('#browser').classList.toggle('hidden', !open);
+  document.body.classList.toggle('browser-open', open);
   $('#toggle-yt').classList.toggle('active', open);
   if (open && !webview) createWebview();
   clearInterval(stateTimer);

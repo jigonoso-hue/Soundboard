@@ -156,3 +156,26 @@ test('scene music: autoplay kits, playlist sections, now-and-then layers', () =>
   assert.equal(store.get(store.duplicate(kit.id).id).autoplay, true);
   assert.equal(store.update(kit.id, { autoplay: false }).autoplay, undefined);
 });
+
+test('section volume sliders and shuffle buttons', () => {
+  const dir = tmp();
+  const store = new KitStore(dir);
+  const kit = store.create({ name: 'Brawl' });
+  const [a, b, , ambience] = kit.sections;
+  store.update(kit.id, {
+    sections: kit.sections.map((s) => {
+      if (s.id === a.id) return { ...s, volume: 0.4, shuffle: true };
+      if (s.id === b.id) return { ...s, volume: 7, shuffle: 'yes' };
+      if (s.id === ambience.id) return { ...s, volume: 0.5, shuffle: true };
+      return { ...s, volume: '0.3' };
+    }),
+  });
+  const saved = new KitStore(dir).get(kit.id);
+  const find = (id) => saved.sections.find((s) => s.id === id);
+  assert.equal(find(a.id).volume, 0.4);
+  assert.equal(find(a.id).shuffle, true);
+  assert.equal(find(b.id).volume, 1, 'kept between 0 and 1');
+  assert.equal(find(ambience.id).volume, 0.5);
+  assert.equal(find(ambience.id).shuffle, undefined, 'ambience sections have no shuffle button');
+  assert.ok(saved.sections.filter((s) => ![a.id, b.id, ambience.id].includes(s.id)).every((s) => s.volume === undefined), 'only numbers are kept');
+});

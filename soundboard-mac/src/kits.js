@@ -235,6 +235,10 @@ function normalizeSection(section, index) {
     size: SIZES.includes(section.size) ? section.size : 'm',
     items: section.kind === 'ambience' ? [] : cleanItems(section.items),
     layers: section.kind === 'ambience' ? cleanLayers(section.layers) : [],
+    // The section's own volume slider (absent when it doesn't show one).
+    ...(Number.isFinite(section.volume) ? { volume: Math.min(1, Math.max(0, section.volume)) } : {}),
+    // A shuffle button that plays a random item.
+    ...(section.kind !== 'ambience' && section.shuffle ? { shuffle: true } : {}),
     // A playlist: its full sounds play one after another.
     ...(section.kind !== 'ambience' && section.playlist ? { playlist: true } : {}),
     ...(section.kind !== 'ambience' && section.playlist && section.playlistShuffle ? { playlistShuffle: true } : {}),
