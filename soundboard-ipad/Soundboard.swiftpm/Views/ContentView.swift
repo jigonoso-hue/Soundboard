@@ -172,9 +172,12 @@ struct ContentView: View {
             // A deleted kit can't stay selected, and bookmarks forget it.
             if case .kit(let id)? = selection, !list.contains(where: { $0.id == id }) { selection = .all }
             let ids = Set(list.map(\.id))
-            let gone = Set(bookmarks.bookmarks.flatMap { b in [b.kitId].compactMap { $0 } + b.music.playlists.map(\.kitId) })
-                .subtracting(ids)
-            for id in gone { bookmarks.forgetKit(id) }
+            var used = Set<UUID>()
+            for b in bookmarks.bookmarks {
+                if let kitId = b.kitId { used.insert(kitId) }
+                for spot in b.music.playlists { used.insert(spot.kitId) }
+            }
+            for id in used.subtracting(ids) { bookmarks.forgetKit(id) }
         }
     }
 

@@ -88,7 +88,7 @@ struct AvatarPicker<Label: View>: View {
             .onChange(of: item) { _, picked in
                 guard let picked else { return }
                 item = nil
-                Task {
+                Task { @MainActor in
                     guard let data = try? await picked.loadTransferable(type: Data.self),
                           let image = UIImage(data: data),
                           let avatar = await Task.detached(priority: .userInitiated, operation: { FaceCache.avatar(from: image) }).value

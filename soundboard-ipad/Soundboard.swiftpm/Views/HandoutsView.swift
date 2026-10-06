@@ -327,7 +327,7 @@ private struct HandoutThumb: View {
         }
         .task(id: url) {
             let path = url.path
-            image = await Task.detached(priority: .userInitiated) {
+            image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
                 guard let full = UIImage(contentsOfFile: path) else { return nil }
                 let ratio = min(1, 400 / max(full.size.width, full.size.height, 1))
                 return full.preparingThumbnail(of: CGSize(width: full.size.width * ratio, height: full.size.height * ratio))

@@ -107,7 +107,7 @@ final class SoundPlayer: ObservableObject {
         volumes[sound.id] = volume
         startTicker()
         live?.soundPlayed(sound, volume: min(1, volume * gain * masterVolume), group: voice.group, fadeIn: options.fadeIn,
-                          seek: player.currentTime)
+                          seek: options.seek > 0 ? player.currentTime : 0)
         return voice.token
     }
 

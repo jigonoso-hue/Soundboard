@@ -575,6 +575,7 @@ struct WhisperPicker: View {
                     .padding(16)
             }
             // A big table scrolls instead of running off a phone's screen.
+            if !live.peers.isEmpty {
             ScrollView {
             VStack(spacing: 0) {
             ForEach(live.peers) { peer in
@@ -602,8 +603,9 @@ struct WhisperPicker: View {
             }
             }
             }
-            .frame(maxHeight: 340)
-            .fixedSize(horizontal: false, vertical: true)
+            // Each row is 44 points: as tall as the list, up to about seven rows.
+            .frame(height: min(340, CGFloat(live.peers.count) * 44))
+            }
             if !live.whisperTargets.isEmpty {
                 Divider()
                 Button("Don't Whisper") { live.whisperTargets = [] }
