@@ -426,6 +426,8 @@ class LiveHost extends EventEmitter {
     this.game = null;
     // Pictures sent this session, newest last: listeners who join later get the list.
     this.handouts = [];
+    // Listeners' pictures: peer -> base64 JPEG or PNG.
+    this.avatars = new Map();
     this.gameTimer = null;
     this.peers = new Map(); // peer -> { name, device, allowed: Set<hash>, cued, lastCue, offers, fetcher, waitingCues }
     this.files = new Map(); // hash -> { file, ext }
@@ -442,6 +444,7 @@ class LiveHost extends EventEmitter {
     }));
     transport.on('leave', (peer) => {
       this.peers.delete(peer);
+      if (this.avatars.delete(peer)) this.transport.send(null, { t: 'avatar', peer, data: '' });
       this.emitPeers();
       // Their dice colour is free again.
       if (this.diceColors.delete(peer)) this.broadcastColors();
@@ -455,7 +458,7 @@ class LiveHost extends EventEmitter {
   }
 
   peerList() {
-    return [...this.peers].filter(([, p]) => p.ready).map(([peer, p]) => ({ peer, name: p.name, device: p.device }));
+    return [...this.peers].filter(([, p]) => p.ready).map(([peer, p]) => ({ peer, name: p.name, device: p.device, avatar: this.avatars.get(peer) || '' }));
   }
 
   emitPeers() { this.emit('peers', this.peerList()); }
@@ -478,7 +481,10 @@ class LiveHost extends EventEmitter {
       for (const ask of this.tableState.asks.values()) if (!ask.to) this.transport.send(peer, ask);
       if (this.tableState.turns) this.transport.send(peer, this.tableState.turns);
       if (this.game) this.transport.send(peer, Game.publicView(this.game));
-      if (this.handouts.length) await this.sendTo(peer, { t: 'handouts', list: this.handouts });
+      // Everyone's pictures, then the handouts shown so far (secret ones only to whom they were for).
+      for (const [other, data] of this.avatars) this.transport.send(peer, { t: 'avatar', peer: other, data });
+      const shown = this.handouts.filter((h) => !h.to || h.to.includes(peer)).map(handoutMessage);
+      if (shown.length) await this.sendTo(peer, { t: 'handouts', list: shown });
       await this.sendTo(peer, this.ambience);
       const prefetch = await this.prefetchMessage();
       await this.sendTo(peer, prefetch);
@@ -493,6 +499,13 @@ class LiveHost extends EventEmitter {
       if (info.ready) this.startRoll(message, peer, info.name);
     } else if (message.t === 'rollResult') {
       if (info.ready) this.finishRoll(message, peer);
+    } else if (message.t === 'avatar') {
+      if (!info.ready) return;
+      const data = cleanAvatar(message.data);
+      if (data === null) return;
+      if (data) this.avatars.set(peer, data); else this.avatars.delete(peer);
+      this.transport.send(null, { t: 'avatar', peer, data });
+      this.emitPeers();
     } else if (message.t === 'diceColor') {
       if (info.ready) this.claimColor(peer, message.color);
     } else if (message.t === 'gameInput') {
@@ -895,14 +908,19 @@ class LiveHost extends EventEmitter {
   }
 
   // A picture for every listener's screen: `file` on disk, `hash` its SHA-256.
-  // Showing one again (same id) moves it to the end of the list.
-  handout({ id, file, hash, ext, title }) {
-    return this.enqueue(() => {
+  // `to` (a list of peers) makes it secret: only they get it. Showing one
+  // again (same id) moves it to the end of the list.
+  handout({ id, file, hash, ext, title, to }) {
+    return this.enqueue(async () => {
       const item = cleanHandout({ id, hash, ext, title, at: Date.now() });
       if (!item || !file) return;
+      const targets = Array.isArray(to) && to.length ? to.map(String).slice(0, 50) : null;
+      if (targets) item.to = targets;
       this.files.set(item.hash, { file, ext: item.ext });
       this.handouts = this.handouts.filter((h) => h.id !== item.id).concat(item).slice(-20);
-      this.broadcast({ t: 'handout', ...item });
+      const message = { t: 'handout', ...handoutMessage(item) };
+      if (!targets) { this.broadcast(message); return; }
+      for (const peer of targets) if (this.peers.has(peer)) await this.sendTo(peer, message);
     });
   }
 
@@ -933,10 +951,33 @@ function cleanTitle(value) {
   return String(value || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60);
 }
 
-// A handout from a message, or null.
+// A handout from a message, or null. `secret`: only some listeners got it.
 function cleanHandout(h) {
   if (!h || !HASH_RE.test(String(h.hash)) || !['jpg', 'png'].includes(String(h.ext))) return null;
-  return { id: String(h.id || h.hash).slice(0, 80), hash: String(h.hash), ext: String(h.ext), title: cleanTitle(h.title), at: Number(h.at) || Date.now() };
+  return {
+    id: String(h.id || h.hash).slice(0, 80), hash: String(h.hash), ext: String(h.ext), title: cleanTitle(h.title), at: Number(h.at) || Date.now(),
+    ...(h.secret === true ? { secret: true } : {}),
+  };
+}
+
+// What listeners are sent about a handout (not who else got it).
+function handoutMessage(item) {
+  const { to, ...rest } = item;
+  return to ? { ...rest, secret: true } : rest;
+}
+
+// A listener's picture: base64 of a JPEG or PNG of at most 32 KB, '' for none,
+// or null if it isn't one.
+const AVATAR_MAX = 32 * 1024;
+function cleanAvatar(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const text = String(value);
+  if (text.length > Math.ceil(AVATAR_MAX / 3) * 4 + 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(text)) return null;
+  const bytes = Buffer.from(text, 'base64');
+  if (!bytes.length || bytes.length > AVATAR_MAX) return null;
+  const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  return jpeg || png ? text : null;
 }
 
 // A fade length in seconds from a message: 0 (none) up to 10.
@@ -1039,6 +1080,15 @@ class LiveListener extends EventEmitter {
     });
   }
 
+  // This listener's picture (base64), sent now and whenever it changes.
+  setAvatar(data) {
+    const clean = cleanAvatar(data);
+    if (clean === null) return false;
+    this.avatar = clean;
+    if (this.state === 'connected') sendJSON(this.socket, { t: 'avatar', data: clean });
+    return true;
+  }
+
   setState(state, error = null) {
     this.state = state;
     this.emit('status', { state, host: this.host || null, scene: this.scene || null, error });
@@ -1053,7 +1103,13 @@ class LiveListener extends EventEmitter {
         this.host = String(message.host || 'Game Master');
         this.setState('connected');
         this.startClockSync();
+        if (this.avatar) sendJSON(this.socket, { t: 'avatar', data: this.avatar });
         break;
+      case 'avatar': {
+        const data = cleanAvatar(message.data);
+        if (data !== null && message.peer) this.emit('avatars', [{ peer: String(message.peer), data }]);
+        break;
+      }
       case 'no-room': this.setState('error', 'No session with that code. Check it with the broadcaster.'); break;
       case 'full': this.setState('error', 'That session is full.'); break;
       case 'kicked':
@@ -1318,6 +1374,7 @@ function deviceName() {
 }
 
 module.exports = {
+  cleanAvatar,
   LiveHost, LiveListener, LanHostTransport, RelayHostTransport, LanBrowser, FileHasher, FileFetcher,
   PLAYER_SOUND_LIMIT, cleanRollStart, cleanRollValues, DICE_COLORS,
   relayUrl, deviceName, hasBonjour: () => !!Bonjour, CHUNK_SIZE, VERSION,

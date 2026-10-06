@@ -164,6 +164,15 @@ struct ListenerStageView: View {
                 }
                 .buttonStyle(.plain)
             }
+            // Your picture: tap to change it.
+            AvatarPicker {
+                FaceView(avatar: live.yourAvatar, name: live.yourName.isEmpty ? "?" : live.yourName, size: 34)
+                    .overlay(Circle().strokeBorder(style.ink.opacity(0.5), lineWidth: 2))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(live.yourAvatar.isEmpty ? "Add your picture" : "Change your picture")
             Button {
                 showVolumes = true
             } label: {

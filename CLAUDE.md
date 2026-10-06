@@ -30,6 +30,7 @@ Where the code lives, side by side:
 | Games: buzzer and quiz (rules) | `src/game.js` | `Live/LiveGame.swift` (keep in step) |
 | Games: screens | `src/renderer/games.js`, `styles.css` | `Views/GamesView.swift` |
 | Handouts | `src/renderer/handouts.js`, `src/live.js` | `Views/HandoutsView.swift`, `Live/LiveEngines.swift` |
+| Listeners' pictures | `face()` in `src/renderer/live.js`, `cleanAvatar` in `src/live.js` | `Views/FaceView.swift`, `LiveNet.cleanAvatar` |
 | Playlists and scene changes | `src/renderer/music.js` | `Audio/MusicDirector.swift` (keep in step) |
 | Ambience (loops, now-and-then layers) | `src/renderer/ambience.js` | `Audio/AmbienceMixer.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |

@@ -740,11 +740,20 @@ function endWatch(delay = 4500) {
   watchTimer = setTimeout(() => { if (mode === 'watch') { layer.classList.add('fading'); setTimeout(() => { layer.classList.remove('fading'); if (mode === 'watch') close(); }, 600); } }, delay);
 }
 
+// "🎲 Sam rolled": with the roller's picture in a Live Session.
+function whoLine(peer, name, text) {
+  const line = el('div', 'dice-banner-who');
+  if (peer && typeof Live !== 'undefined' && (Live.hosting() || Live.listening())) line.append(Live.face(peer, name, 22));
+  else line.append(document.createTextNode('🎲 '));
+  line.append(document.createTextNode(text));
+  return line;
+}
+
 function showBanner(entry) {
   banner.textContent = '';
   const words = entry.total === null || entry.total === undefined;
   banner.append(
-    el('div', 'dice-banner-who', `🎲 ${entry.by}${entry.hidden ? ' · hidden' : ''}`),
+    whoLine(entry.peer, entry.by, `${entry.by}${entry.hidden ? ' · hidden' : ''}`),
     el('div', 'dice-banner-title', entry.title),
     el('div', `dice-banner-total${words ? ' words' : ''}`, words ? entry.detail : String(entry.total)),
   );
@@ -792,7 +801,7 @@ function reveal(id, start, summary, entry) {
 function makeEntry(id, start, values, summary, mine) {
   const counted = G.countedD20s(start, values);
   return {
-    id, by: start.by || 'Someone', title: summary.title, detail: summary.detail, total: summary.total,
+    id, by: start.by || 'Someone', peer: start.peer || (mine && typeof Live !== 'undefined' ? Live.you() : null), title: summary.title, detail: summary.detail, total: summary.total,
     at: Date.now(), mine, hidden: !!start.hidden, ask: start.ask || null,
     d20s: G.d20s(start, values), nat20: counted.filter((v) => v === 20).length, nat1: counted.filter((v) => v === 1).length,
   };
@@ -1196,7 +1205,7 @@ function remoteStart(msg) {
     if (msg.hidden) return;
     watch();
     banner.textContent = '';
-    banner.append(el('div', 'dice-banner-who', `🎲 ${msg.by || 'Someone'} is rolling…`));
+    banner.append(whoLine(msg.peer, msg.by, `${msg.by || 'Someone'} is rolling…`));
     banner.classList.remove('hidden');
     return;
   }
@@ -1328,7 +1337,10 @@ function renderLog() {
   for (const entry of log) {
     const row = el('div', `dice-log-row${entry.mine ? ' mine' : ''}`);
     const head = el('div', 'dice-log-head');
-    head.append(el('b', null, entry.by + (entry.hidden ? ' 🙈' : '')), el('span', 'dice-log-time', new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
+    const who = el('b', 'dice-log-who');
+    if (entry.peer && typeof Live !== 'undefined' && (Live.hosting() || Live.listening())) who.append(Live.face(entry.peer, entry.by, 20));
+    who.append(document.createTextNode(entry.by + (entry.hidden ? ' 🙈' : '')));
+    head.append(who, el('span', 'dice-log-time', new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
     row.append(head, el('div', 'dice-log-what', entry.title), el('div', 'dice-log-detail', entry.detail));
     sidePanel.append(row);
   }

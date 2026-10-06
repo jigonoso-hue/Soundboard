@@ -213,6 +213,68 @@ test('handouts: sent to everyone at the table, listed for late joiners, never ke
   }
 });
 
+test('secret handouts reach only their listeners, and pictures reach everyone', async () => {
+  const library = makeLibrary();
+  const transport = new LanHostTransport({ name: 'Secrets' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Secrets', transport, resolveSound: library.resolveSound });
+  const url = `ws://127.0.0.1:${transport.port}`;
+  const picture = crypto.randomBytes(2000);
+  const file = path.join(tempDir('pic'), 'note.jpg');
+  fs.writeFileSync(file, picture);
+  const hash = crypto.createHash('sha256').update(picture).digest('hex');
+  // A tiny JPEG-looking picture (just the magic bytes matter).
+  const face = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), crypto.randomBytes(500)]).toString('base64');
+  const sam = new LiveListener({ cacheDir: tempDir('sam'), name: 'Sam' });
+  const kim = new LiveListener({ cacheDir: tempDir('kim'), name: 'Kim' });
+  let lee;
+  try {
+    sam.setAvatar(face);
+    // Not a picture: refused.
+    assert.equal(kim.setAvatar(Buffer.from('hello world').toString('base64')), false);
+    const kimSeesSam = waitFor(kim, 'avatars', (list) => list.some((a) => a.data === face), 5000);
+    kim.connect(url);
+    await waitFor(host, 'peers', (list) => list.length === 1);
+    sam.connect(url);
+    const peers = await waitFor(host, 'peers', (list) => list.length === 2 && list.some((p) => p.avatar === face));
+    const samPeer = peers.find((p) => p.name === 'Sam').peer;
+    await kimSeesSam;
+
+    // A secret handout for Sam only.
+    let kimGot = false;
+    kim.on('handout', () => { kimGot = true; });
+    const samGot = waitFor(sam, 'handout', () => true, 5000);
+    await host.handout({ id: 'secret', file, hash, ext: 'jpg', title: 'For Sam', to: [samPeer] });
+    const got = await samGot;
+    assert.equal(got.secret, true);
+    assert.equal(got.show, true);
+    // Kim can't fetch it either.
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(kimGot, false);
+    assert.equal(kim.handoutFetcher, null);
+
+    // Someone joining later doesn't get it in their list; they do get Sam's picture.
+    lee = new LiveListener({ cacheDir: tempDir('lee'), name: 'Lee' });
+    const leeSeesSam = waitFor(lee, 'avatars', (list) => list.some((a) => a.peer === samPeer && a.data === face), 5000);
+    let leeGot = false;
+    lee.on('handout', () => { leeGot = true; });
+    lee.connect(url);
+    await leeSeesSam;
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(leeGot, false);
+
+    // Clearing a picture, and leaving, tell everyone.
+    const cleared = waitFor(kim, 'avatars', (list) => list.some((a) => a.peer === samPeer && a.data === ''), 5000);
+    sam.leave();
+    await cleared;
+  } finally {
+    sam.leave();
+    kim.leave();
+    lee?.leave();
+    transport.close();
+  }
+});
+
 // The listener only ever keeps handouts in its own temporary folder.
 function cleanHandoutsOnly(listener) {
   return !!listener.handoutDir && listener.handoutDir.includes('dungeon-radio-handouts-');

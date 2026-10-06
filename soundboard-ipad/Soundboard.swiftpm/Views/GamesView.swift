@@ -273,6 +273,7 @@ private struct Shake: GeometryEffect {
 }
 
 private struct BuzzOrder: View {
+    @EnvironmentObject private var live: LiveSession
     let buzzes: [GameState.Buzz]
     let me: String
 
@@ -281,6 +282,7 @@ private struct BuzzOrder: View {
             ForEach(Array(buzzes.enumerated()), id: \.element.id) { i, b in
                 HStack(spacing: 10) {
                     Text(ordinal(i + 1)).font(.subheadline.weight(.heavy)).opacity(0.75).frame(width: 40, alignment: .leading)
+                    live.face(b.peer, name: b.name, size: 28)
                     Text(b.name).font(.body.weight(.bold)).lineLimit(1)
                     Spacer()
                     Text(i == 0 ? seconds(b.ms) : "+\(seconds(b.ms - buzzes[0].ms))").font(.body.weight(.heavy).monospacedDigit())
@@ -408,6 +410,7 @@ private struct QuizScreen: View {
 }
 
 private struct Leaderboard: View {
+    @EnvironmentObject private var live: LiveSession
     let list: [GameState.Ranked]
     let me: String
     let max: Int
@@ -426,6 +429,7 @@ private struct Leaderboard: View {
     private func row(_ i: Int, _ p: GameState.Ranked) -> some View {
         HStack(spacing: 10) {
             Text("\(i + 1)").font(.subheadline.weight(.heavy)).opacity(0.75).frame(width: 28, alignment: .leading)
+            live.face(p.peer, name: p.name, size: 28)
             Text(p.name).font(.body.weight(.bold)).lineLimit(1)
             Spacer()
             Text("\(p.score)").font(.body.weight(.heavy).monospacedDigit())
@@ -438,6 +442,7 @@ private struct Leaderboard: View {
 }
 
 private struct Podium: View {
+    @EnvironmentObject private var live: LiveSession
     let list: [GameState.Ranked]
     let me: String
     let compact: Bool
@@ -448,6 +453,7 @@ private struct Podium: View {
                 if i < list.count {
                     let p = list[i]
                     VStack(spacing: 4) {
+                        live.face(p.peer, name: p.name, size: compact ? 36 : 44)
                         Text(p.name).font(.headline.weight(.black)).lineLimit(1).underline(p.peer == me)
                         Text("\(p.score)").font(.caption.monospacedDigit()).opacity(0.8)
                         Text("\(i + 1)")

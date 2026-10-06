@@ -309,6 +309,8 @@ final class LiveHostEngine {
         let id: String
         var name: String
         var device: String
+        /// Their picture (base64 JPEG or PNG), or "" for none.
+        var avatar: String = ""
     }
 
     /// Where a play's file comes from.
@@ -378,6 +380,10 @@ final class LiveHostEngine {
     private var game: LiveGame?
     /// Pictures sent this session, newest last: listeners who join later get the list.
     private var handouts: [LiveJSON] = []
+    /// Who each secret handout went to (by handout id).
+    private var handoutTargets: [String: [String]] = [:]
+    /// Listeners' pictures: peer → base64.
+    private var avatars: [String: String] = [:]
     private var gameTimer: Task<Void, Never>?
 
     private struct PeerInfo {
@@ -419,6 +425,9 @@ final class LiveHostEngine {
         transport.onLeave = { [weak self] peer in
             guard let self else { return }
             self.peers[peer] = nil
+            if self.avatars.removeValue(forKey: peer) != nil {
+                self.transport.send(["t": "avatar", "peer": peer, "data": ""], to: nil)
+            }
             self.emitPeers()
             // Their dice colour is free again.
             if self.diceColors.removeValue(forKey: peer) != nil { self.broadcastColors() }
@@ -430,7 +439,7 @@ final class LiveHostEngine {
 
     var peerList: [Peer] {
         peers.filter { $0.value.ready }
-            .map { Peer(id: $0.key, name: $0.value.name, device: $0.value.device) }
+            .map { Peer(id: $0.key, name: $0.value.name, device: $0.value.device, avatar: avatars[$0.key] ?? "") }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -461,7 +470,17 @@ final class LiveHostEngine {
             for id in tableAskOrder { if let ask = tableAsks[id], ask["to"] == nil { transport.send(ask, to: peer) } }
             if let tableTurns { transport.send(tableTurns, to: peer) }
             if game != nil { transport.send(LiveGame.publicView(game), to: peer) }
-            if !handouts.isEmpty { send(["t": "handouts", "list": handouts], to: peer) }
+            // Everyone's pictures, then the handouts shown so far (secret ones only to whom they were for).
+            for (other, data) in avatars { transport.send(["t": "avatar", "peer": other, "data": data], to: peer) }
+            let shown = handouts.filter { item in
+                guard let id = LiveNet.string(item["id"]), let to = handoutTargets[id] else { return true }
+                return to.contains(peer)
+            }.map { item -> LiveJSON in
+                var out = item
+                if let id = LiveNet.string(item["id"]), handoutTargets[id] != nil { out["secret"] = true }
+                return out
+            }
+            if !shown.isEmpty { send(["t": "handouts", "list": shown], to: peer) }
             send(ambience, to: peer)
             send(await prefetchMessage(), to: peer)
             let now = LiveNet.now
@@ -486,6 +505,11 @@ final class LiveHostEngine {
             if let info = peers[peer], info.ready { startRoll(message, peer: peer, name: info.name) }
         case "rollResult":
             if peers[peer]?.ready == true { finishRoll(message, peer: peer) }
+        case "avatar":
+            guard peers[peer]?.ready == true, let data = LiveNet.cleanAvatar(message["data"]) else { return }
+            if data.isEmpty { avatars[peer] = nil } else { avatars[peer] = data }
+            transport.send(["t": "avatar", "peer": peer, "data": data], to: nil)
+            emitPeers()
         case "diceColor":
             if peers[peer]?.ready == true { _ = claimColor(peer, LiveNet.string(message["color"]) ?? "") }
         case "gameInput":
@@ -843,8 +867,9 @@ final class LiveHostEngine {
     }
 
     /// A picture for every listener's screen: `url` on disk, `hash` its SHA-256.
-    /// Showing one again (same id) moves it to the end of the list.
-    func handout(id: String, url: URL, hash: String, title: String) {
+    /// `to` (peers) makes it secret: only they get it. Showing one again (same
+    /// id) moves it to the end of the list.
+    func handout(id: String, url: URL, hash: String, title: String, to: [String]? = nil) {
         enqueue { [weak self] in
             guard let self, LiveFiles.isHash(hash) else { return }
             self.files[hash] = url
@@ -852,14 +877,21 @@ final class LiveHostEngine {
             self.handouts = Array((self.handouts.filter { LiveNet.string($0["id"]) != id } + [item]).suffix(20))
             var message = item
             message["t"] = "handout"
-            self.broadcast(message)
+            if let to, !to.isEmpty {
+                self.handoutTargets[id] = Array(to.prefix(50))
+                message["secret"] = true
+                for peer in to where self.peers[peer] != nil { self.send(message, to: peer) }
+            } else {
+                self.handoutTargets[id] = nil
+                self.broadcast(message)
+            }
         }
     }
 
     func showHandout(id: String) {
         guard let item = handouts.first(where: { LiveNet.string($0["id"]) == id }),
               let hash = LiveNet.string(item["hash"]), let url = files[hash] else { return }
-        handout(id: id, url: url, hash: hash, title: LiveNet.string(item["title"]) ?? "")
+        handout(id: id, url: url, hash: hash, title: LiveNet.string(item["title"]) ?? "", to: handoutTargets[id])
     }
 
     /// The ambience layers playing now: built-in loops by file name, library sounds by id.
@@ -1015,6 +1047,10 @@ final class LiveListenerEngine {
     private(set) var handoutDir: URL?
     private var handoutFetcher: FileFetcher?
     private var waitingHandouts: [String: [Handout]] = [:]
+    /// Someone's picture changed: (peer, base64, or "" for none).
+    var onAvatar: ((String, String) -> Void)?
+    /// This listener's picture (base64), sent once tuned in and whenever it changes.
+    private(set) var avatar = ""
 
     init(socket: LiveSocket, name: String, device: String) {
         self.socket = socket
@@ -1076,7 +1112,7 @@ final class LiveListenerEngine {
               let ext = LiveNet.string(message["ext"]), ["jpg", "png"].contains(ext) else { return }
         let item = Handout(id: String((LiveNet.string(message["id"]) ?? hash).prefix(80)),
                            title: Handout.cleanTitle(LiveNet.string(message["title"]) ?? ""),
-                           url: nil, show: show)
+                           url: nil, show: show, secret: message["secret"] as? Bool == true)
         let fetcher = handoutFiles()
         if let url = fetcher.cached(hash, ext) {
             var ready = item
@@ -1101,6 +1137,17 @@ final class LiveListenerEngine {
         handoutDir = nil
         handoutFetcher = nil
         waitingHandouts = [:]
+    }
+
+    // MARK: Picture
+
+    /// Sets this listener's picture; false if it isn't a small JPEG or PNG.
+    @discardableResult
+    func setAvatar(_ data: String) -> Bool {
+        guard let clean = LiveNet.cleanAvatar(data) else { return false }
+        avatar = clean
+        if hostName != nil { socket.send(["t": "avatar", "data": clean]) }
+        return true
     }
 
     // MARK: Player sounds
@@ -1146,6 +1193,11 @@ final class LiveListenerEngine {
             hostName = LiveNet.string(message["host"]) ?? "Game Master"
             onState?(.connected)
             startClockSync()
+            if !avatar.isEmpty { socket.send(["t": "avatar", "data": avatar]) }
+        case "avatar":
+            if let peer = LiveNet.string(message["peer"]), let data = LiveNet.cleanAvatar(message["data"]) {
+                onAvatar?(peer, data)
+            }
         case "no-room": fail("No session with that code. Check it with the broadcaster.")
         case "full": fail("That session is full.")
         case "ended", "bye", "kicked":

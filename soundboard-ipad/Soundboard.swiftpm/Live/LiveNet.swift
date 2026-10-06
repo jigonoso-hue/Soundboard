@@ -61,6 +61,20 @@ enum LiveNet {
     static func bool(_ value: Any?) -> Bool { (value as? NSNumber)?.boolValue ?? false }
 
     /// A fade length in seconds from a message: 0 (none) up to 10.
+    /// A listener's picture: base64 of a JPEG or PNG of at most 32 KB, "" for
+    /// none, or nil if it isn't one. Matches the Mac app's cleanAvatar.
+    static let avatarMax = 32 * 1024
+    static func cleanAvatar(_ value: Any?) -> String? {
+        guard let text = value as? String, !text.isEmpty else { return value == nil || value is NSNull || (value as? String) == "" ? "" : nil }
+        guard text.count <= (avatarMax + 2) / 3 * 4 + 4,
+              text.range(of: "^[A-Za-z0-9+/]+={0,2}$", options: .regularExpression) != nil,
+              let bytes = Data(base64Encoded: text), !bytes.isEmpty, bytes.count <= avatarMax else { return nil }
+        let b = [UInt8](bytes.prefix(4))
+        let jpeg = b.count >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF
+        let png = b.count >= 4 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47
+        return jpeg || png ? text : nil
+    }
+
     static func fadeSeconds(_ value: Any?) -> Double {
         guard let n = (value as? Double) ?? number(value), n.isFinite, n > 0 else { return 0 }
         return min(10, n)

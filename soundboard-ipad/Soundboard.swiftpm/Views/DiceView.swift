@@ -170,6 +170,8 @@ struct RollOutcome {
 struct RollEntry: Identifiable, Equatable {
     let id: String
     let by: String
+    /// Who rolled, in a Live Session ("host" for the broadcaster).
+    var peer: String?
     let title: String
     let detail: String
     /// nil when the dice show words.
@@ -188,6 +190,7 @@ struct RollEntry: Identifiable, Equatable {
     init(id: String, start: RollStart, values: [Int], summary: RollSummary, mine: Bool) {
         self.id = id
         by = start.by
+        peer = start.peer
         title = summary.title
         detail = summary.detail
         total = summary.total
@@ -1159,6 +1162,14 @@ final class DiceTray: ObservableObject {
     /// nil when not in a session.
     @Published private(set) var sessionColors: [ColorClaim]?
     private var myPeer = ""
+    /// Someone's picture by peer id (set by the Live Session).
+    var avatarOf: (String) -> String = { _ in "" }
+
+    /// A roll's face in a Live Session: (picture, name), or nil outside one.
+    func face(for entry: RollEntry) -> (avatar: String, name: String)? {
+        guard sessionColors != nil, let peer = entry.mine ? myPeer : entry.peer, !peer.isEmpty else { return nil }
+        return (avatarOf(peer), entry.by)
+    }
     /// Bumped when someone tries to roll without a colour, to point at the swatches.
     @Published private(set) var needColor = 0
     /// Asks the session for a colour.
@@ -1654,6 +1665,7 @@ final class DiceTray: ObservableObject {
                                   kinds: [], color: "", dice: [])
             start.custom = RollStart.customs(json["custom"])
             start.ask = LiveNet.string(json["ask"])
+            start.peer = LiveNet.string(json["peer"])
             var entry = RollEntry(id: id, start: start, values: values, summary: start.summarize(values), mine: false)
             entry.at = Date(timeIntervalSince1970: (LiveNet.number(json["at"]) ?? LiveNet.now) / 1000)
             log.append(entry)
@@ -1800,13 +1812,18 @@ extension View {
 /// The result: who rolled, what, and the total.
 struct DiceBanner: View {
     let entry: RollEntry
+    /// The roller's picture, in a Live Session.
+    var face: (avatar: String, name: String)? = nil
 
     var body: some View {
         VStack(spacing: 2) {
-            Text("🎲 \(entry.by.uppercased())\(entry.hidden ? " · HIDDEN" : "")")
-                .font(.caption.weight(.bold))
-                .tracking(1)
-                .opacity(0.8)
+            HStack(spacing: 6) {
+                if let face { FaceView(avatar: face.avatar, name: face.name, size: 22) }
+                Text("\(face == nil ? "🎲 " : "")\(entry.by.uppercased())\(entry.hidden ? " · HIDDEN" : "")")
+                    .font(.caption.weight(.bold))
+                    .tracking(1)
+                    .opacity(0.8)
+            }
             Text(entry.title).font(.footnote).opacity(0.85)
             if let total = entry.total {
                 Text("\(total)").font(.system(size: 44, weight: .black, design: .rounded))
@@ -1901,7 +1918,7 @@ struct DiceWatchOverlay: View {
                 if tray.level != .lite { DiceStage(tray: tray) }
                 DiceFlatView(tray: tray)
                 if let banner = tray.banner {
-                    DiceBanner(entry: banner).diceCover(tray, "banner").padding(.top, 70)
+                    DiceBanner(entry: banner, face: tray.face(for: banner)).diceCover(tray, "banner").padding(.top, 70)
                 } else if let name = tray.rollingName {
                     DiceRolling(name: name).padding(.top, 70)
                 }
@@ -1932,7 +1949,7 @@ struct DiceView: View {
                 // The turn order, between the top bar and the result.
                 TurnStripSlot(table: tray.table)
                 if let banner = tray.banner {
-                    DiceBanner(entry: banner).diceCover(tray, "banner").padding(.top, 8)
+                    DiceBanner(entry: banner, face: tray.face(for: banner)).diceCover(tray, "banner").padding(.top, 8)
                 } else if let name = tray.rollingName {
                     DiceRolling(name: name).padding(.top, 8)
                 }
@@ -2300,6 +2317,7 @@ struct DiceView: View {
         ForEach(tray.log) { entry in
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
+                    if let face = tray.face(for: entry) { FaceView(avatar: face.avatar, name: face.name, size: 22) }
                     Text(entry.by + (entry.hidden ? " 🙈" : "")).font(.subheadline.weight(.bold))
                     Spacer()
                     Text(entry.at, style: .time).font(.caption2).opacity(0.6)

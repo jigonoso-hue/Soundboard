@@ -110,7 +110,7 @@ const Games = (() => {
     const list = el('ol', 'game-order');
     buzzes.forEach((b, i) => {
       const row = el('li', `${b.peer === you ? 'me' : ''}${i === 0 ? ' first' : ''}`);
-      row.append(el('span', 'game-place', ordinal(i + 1)), el('b', null, b.name), el('span', 'game-ms', i === 0 ? seconds(b.ms) : `+${seconds(b.ms - buzzes[0].ms)}`));
+      row.append(el('span', 'game-place', ordinal(i + 1)), who(b), el('span', 'game-ms', i === 0 ? seconds(b.ms) : `+${seconds(b.ms - buzzes[0].ms)}`));
       list.append(row);
     });
     return list;
@@ -186,18 +186,25 @@ const Games = (() => {
     const box = el('ol', 'game-board');
     list.slice(0, max).forEach((p, i) => {
       const row = el('li', p.peer === you ? 'me' : '');
-      row.append(el('span', 'game-place', String(i + 1)), el('b', null, p.name), el('span', 'game-score', String(p.score)));
+      row.append(el('span', 'game-place', String(i + 1)), who(p), el('span', 'game-score', String(p.score)));
       box.append(row);
     });
     if (you && !list.slice(0, max).some((p) => p.peer === you)) {
       const at = list.findIndex((p) => p.peer === you);
       if (at >= 0) {
         const row = el('li', 'me');
-        row.append(el('span', 'game-place', String(at + 1)), el('b', null, list[at].name), el('span', 'game-score', String(list[at].score)));
+        row.append(el('span', 'game-place', String(at + 1)), who(list[at]), el('span', 'game-score', String(list[at].score)));
         box.append(row);
       }
     }
     return box;
+  }
+
+  // A name with the player's picture.
+  function who(p) {
+    const b = el('b', 'game-who');
+    b.append(Live.face(p.peer, p.name, 24), el('span', null, p.name));
+    return b;
   }
 
   function podium(list) {
@@ -206,7 +213,9 @@ const Games = (() => {
       const p = list[i];
       if (!p) return;
       const step = el('div', `game-step p${i + 1}${p.peer === you ? ' me' : ''}`);
-      step.append(el('div', 'game-step-name', p.name), el('div', 'game-step-score', String(p.score)), el('div', 'game-step-block', String(i + 1)));
+      const name = el('div', 'game-step-name');
+      name.append(Live.face(p.peer, p.name, 40), el('span', null, p.name));
+      step.append(name, el('div', 'game-step-score', String(p.score)), el('div', 'game-step-block', String(i + 1)));
       box.append(step);
     });
     return box;
@@ -450,6 +459,13 @@ const Games = (() => {
 
   $('#games-btn').addEventListener('click', () => (panel.classList.contains('hidden') ? openPanel() : hidePanel()));
 
-  return { receive, statusChanged };
+  // Pictures changed: redraw with them.
+  function refresh() {
+    if (!game) return;
+    if (!screen.classList.contains('hidden')) renderScreen();
+    if (!panel.classList.contains('hidden')) renderPanel();
+  }
+
+  return { receive, statusChanged, refresh };
 })();
 window.Games = Games;

@@ -457,7 +457,7 @@ function registerLiveIpc() {
     }
   });
 
-  ipcMain.handle('live:listen', (_e, { url, code, relay, name }) => {
+  ipcMain.handle('live:listen', (_e, { url, code, relay, name, avatar }) => {
     endLive();
     let target = url;
     if (!target) {
@@ -470,6 +470,7 @@ function registerLiveIpc() {
       throw new Error('That isn’t a local session address.');
     }
     const listener = new Live.LiveListener({ cacheDir: liveCacheDir(), name: String(name || '').trim().slice(0, 40) || Live.deviceName(), device: 'Mac' });
+    if (avatar) listener.setAvatar(avatar);
     const session = { role: 'listen', listener };
     live = session;
     listener.on('status', (status) => {
@@ -480,6 +481,7 @@ function registerLiveIpc() {
     listener.on('roll', (message) => { if (live === session) sendToMain('live:roll', message); });
     listener.on('rules', (mode) => { if (live === session) sendToMain('live:rules', mode); });
     listener.on('catalog', (items) => { if (live === session) sendToMain('live:catalog', items); });
+    listener.on('avatars', (list) => { if (live === session) sendToMain('live:avatars', list); });
     // A handout arrived: shown as image data (the window only loads images it's given).
     const handoutFiles = new Map(); // id -> { file, title, ext }
     session.handoutFiles = handoutFiles;
@@ -489,7 +491,7 @@ function registerLiveIpc() {
       try { bytes = fs.readFileSync(h.file); } catch { return; }
       handoutFiles.set(h.id, { file: h.file, title: h.title, ext: h.ext });
       sendToMain('live:handout', {
-        id: h.id, title: h.title, at: h.at, show: !!h.show,
+        id: h.id, title: h.title, at: h.at, show: !!h.show, secret: !!h.secret,
         src: `data:${HANDOUT_TYPES[h.ext] || 'image/jpeg'};base64,${bytes.toString('base64')}`,
       });
     });
@@ -512,7 +514,7 @@ function registerLiveIpc() {
   ipcMain.handle('live:leave', () => { endLive(); return liveStatus(); });
 
   // The broadcaster sends a picture (already scaled down to a JPEG by the window).
-  ipcMain.handle('live:handout-send', async (_e, { data, title }) => {
+  ipcMain.handle('live:handout-send', async (_e, { data, title, to }) => {
     if (!live || live.role !== 'host') throw new Error('Not broadcasting');
     const bytes = Buffer.from(data || []);
     if (!bytes.length || bytes.length > HANDOUT_MAX_BYTES) throw new Error('That picture is too big to send.');
@@ -520,7 +522,7 @@ function registerLiveIpc() {
     const file = path.join(hostHandoutDir(), `${hash}.jpg`);
     fs.writeFileSync(file, bytes);
     const id = `h-${Date.now().toString(36)}-${hash.slice(0, 6)}`;
-    await live.host.handout({ id, file, hash, ext: 'jpg', title });
+    await live.host.handout({ id, file, hash, ext: 'jpg', title, to: Array.isArray(to) ? to : null });
     return { id };
   });
   ipcMain.handle('live:handout-show', async (_e, id) => {
@@ -538,6 +540,12 @@ function registerLiveIpc() {
     if (result.canceled || !result.filePath) return false;
     fs.copyFileSync(entry.file, result.filePath);
     return true;
+  });
+
+  // This listener's picture (base64 JPEG), for the session and the next one.
+  ipcMain.handle('live:avatar', (_e, data) => {
+    if (live && live.role === 'listen') return live.listener.setAvatar(String(data || ''));
+    return Live.cleanAvatar(String(data || '')) !== null;
   });
 
   // A dice roll by this listener, for everyone in the session.

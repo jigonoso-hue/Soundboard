@@ -151,6 +151,25 @@ struct LiveView: View {
             Text("Enter your name to tune in. Everyone sees it on your sounds and dice rolls.")
                 .foregroundStyle(hasName ? Color.secondary : Color.red)
         }
+        // Your picture, shown beside your name (optional).
+        Section {
+            HStack(spacing: 12) {
+                FaceView(avatar: live.yourAvatar, name: live.yourName.isEmpty ? "?" : live.yourName, size: 48)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Your picture").font(.body.weight(.semibold))
+                    Text("Optional. Shown beside your name to everyone.").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                AvatarPicker {
+                    Text(live.yourAvatar.isEmpty ? "Choose…" : "Change…")
+                        .frame(minHeight: 36)
+                }
+                .buttonStyle(.bordered)
+            }
+            if !live.yourAvatar.isEmpty {
+                Button("Remove Picture", role: .destructive) { live.setAvatar("") }
+            }
+        }
         Section("Sessions on this Wi-Fi") {
             if live.found.isEmpty {
                 HStack(spacing: 10) {
@@ -280,7 +299,8 @@ struct LiveView: View {
                 Text("No one has tuned in yet.").foregroundStyle(.secondary)
             }
             ForEach(live.peers) { peer in
-                HStack {
+                HStack(spacing: 10) {
+                    live.face(peer.id, name: peer.name, size: 34)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(peer.name).font(.body.weight(.semibold))
                         if !peer.device.isEmpty {
@@ -568,6 +588,7 @@ struct WhisperPicker: View {
                     HStack {
                         Image(systemName: live.whisperTargets.contains(peer.id) ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(live.whisperTargets.contains(peer.id) ? Color(hex: 0xB07CFF) : .secondary)
+                        live.face(peer.id, name: peer.name, size: 26)
                         Text(peer.name)
                         Spacer()
                         Text(peer.device).font(.caption).foregroundStyle(.secondary)

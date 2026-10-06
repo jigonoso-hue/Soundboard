@@ -20,6 +20,10 @@ struct Handout: Identifiable, Equatable {
     var url: URL?
     /// A new handout: lock the screen to it.
     var show: Bool
+    /// Sent only to some listeners.
+    var secret = false
+    /// The broadcaster's own list: who a secret one went to.
+    var sentTo: [String] = []
 
     /// Pictures are scaled down to this many pixels on their longest side.
     static let maxSide: CGFloat = 2048
@@ -98,7 +102,7 @@ private struct HandoutLockView: View {
 
     var body: some View {
         if let handout = live.viewingHandout, let url = handout.url {
-            HandoutViewer(title: handout.title, url: url) { live.closeHandout() }
+            HandoutViewer(title: handout.title, url: url, secret: handout.secret) { live.closeHandout() }
                 .id(handout.id)
         }
     }
@@ -111,6 +115,7 @@ private struct HandoutLockView: View {
 struct HandoutViewer: View {
     let title: String
     let url: URL
+    var secret = false
     let onClose: () -> Void
 
     @State private var image: UIImage?
@@ -125,12 +130,19 @@ struct HandoutViewer: View {
         ZStack {
             Color(red: 0.024, green: 0.024, blue: 0.04).ignoresSafeArea()
             VStack(spacing: 0) {
-                Text(title.isEmpty ? "Handout" : title)
+                Text((secret ? "🔒 " : "") + (title.isEmpty ? "Handout" : title))
                     .font(.headline.weight(.heavy))
                     .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, secret ? 2 : 10)
+                if secret {
+                    Text("Only you can see this.")
+                        .font(.footnote)
+                        .foregroundStyle(Color(hex: 0xD9C2FF))
+                        .padding(.bottom, 8)
+                }
                 GeometryReader { geo in
                     if let image {
                         Image(uiImage: image)
@@ -278,10 +290,16 @@ struct HandoutGrid: View {
                                 if let url = handout.url { HandoutThumb(url: url) }
                             }
                             .clipShape(RoundedRectangle(cornerRadius: 8))
-                        Text(handout.title.isEmpty ? "Handout" : handout.title)
+                        Text((handout.secret ? "🔒 " : "") + (handout.title.isEmpty ? "Handout" : handout.title))
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                             .foregroundStyle(Color.primary)
+                        if !handout.sentTo.isEmpty {
+                            Text("To " + handout.sentTo.joined(separator: ", "))
+                                .font(.caption)
+                                .lineLimit(1)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(6)
                     .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
@@ -329,6 +347,10 @@ struct HandoutSendView: View {
     @State private var title = ""
     @State private var importing = false
     @State private var failed = false
+    /// Who it goes to: nobody picked is everyone; picking listeners makes it secret.
+    @State private var sendTo: Set<String> = []
+
+    private var chosenNames: [String] { live.peers.filter { sendTo.contains($0.id) }.map(\.name) }
 
     var body: some View {
         NavigationStack {
@@ -354,6 +376,7 @@ struct HandoutSendView: View {
                     }
                     TextField("Title, e.g. Wanted: The Red Fox (optional)", text: $title)
                         .textFieldStyle(.roundedBorder)
+                    recipients
                     let sent = live.handouts.reversed()
                     if !sent.isEmpty {
                         Text("SENT THIS SESSION").font(.caption.weight(.bold)).foregroundStyle(.secondary).padding(.top, 8)
@@ -365,10 +388,11 @@ struct HandoutSendView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 Button {
-                    if let image { live.sendHandout(image, title: title) }
+                    if let image { live.sendHandout(image, title: title, to: Array(sendTo)) }
                     dismiss()
                 } label: {
-                    Text("Send to Everyone")
+                    Text(chosenNames.isEmpty ? "Send to Everyone"
+                         : "Send to \(chosenNames.count == 1 ? chosenNames[0] : "\(chosenNames.count) Listeners")")
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
@@ -410,6 +434,50 @@ struct HandoutSendView: View {
                 }
             }
         }
+    }
+
+    /// Everyone, or only the listeners picked (a secret handout).
+    private var recipients: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("SEND TO").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+            FlowLayout(spacing: 8) {
+                chip(on: sendTo.isEmpty) { sendTo = [] } label: { Text("Everyone").padding(.leading, 6) }
+                ForEach(live.peers) { peer in
+                    chip(on: sendTo.contains(peer.id)) {
+                        if sendTo.contains(peer.id) { sendTo.remove(peer.id) } else { sendTo.insert(peer.id) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            live.face(peer.id, name: peer.name, size: 26)
+                            Text(peer.name).lineLimit(1)
+                        }
+                    }
+                    .accessibilityLabel("Only \(peer.name)")
+                    .accessibilityAddTraits(sendTo.contains(peer.id) ? .isSelected : [])
+                }
+            }
+            if !sendTo.isEmpty {
+                Text("A secret handout: only they see it. No one else is told.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: live.peers) { _, peers in
+            sendTo = sendTo.filter { id in peers.contains { $0.id == id } }
+        }
+    }
+
+    private func chip<L: View>(on: Bool, action: @escaping () -> Void, @ViewBuilder label: () -> L) -> some View {
+        Button(action: action) {
+            label()
+                .font(.subheadline.weight(.semibold))
+                .padding(.leading, 6)
+                .padding(.trailing, 12)
+                .frame(minHeight: 40)
+                .foregroundStyle(on ? Color.white : Color.primary)
+                .background(on ? Color.accentColor : Color.secondary.opacity(0.15), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

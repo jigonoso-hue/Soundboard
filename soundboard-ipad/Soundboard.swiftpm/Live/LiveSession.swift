@@ -54,6 +54,10 @@ final class LiveSession: ObservableObject {
     // Settings, kept between launches
     @Published var sessionName: String { didSet { save("live.sessionName", sessionName) } }
     @Published var yourName: String { didSet { save("live.yourName", yourName) } }
+    /// Your picture (base64 JPEG, "" for none): shown beside your name to everyone.
+    @Published private(set) var yourAvatar: String
+    /// Everyone else's pictures while tuned in: peer → base64.
+    @Published private(set) var avatars: [String: String] = [:]
     @Published var mode: Mode { didSet { save("live.mode", mode.rawValue) } }
     /// Online sessions go through Dungeon Radio's own relay server.
     private var relayAddress: String { LiveNet.defaultRelay }
@@ -128,6 +132,7 @@ final class LiveSession: ObservableObject {
         let defaults = UserDefaults.standard
         sessionName = defaults.string(forKey: "live.sessionName") ?? ""
         yourName = defaults.string(forKey: "live.yourName") ?? ""
+        yourAvatar = defaults.string(forKey: "live.yourAvatar") ?? ""
         mode = Mode(rawValue: defaults.string(forKey: "live.mode") ?? "") ?? .local
         // Custom relay addresses from older versions are no longer used.
         defaults.removeObject(forKey: "live.relay")
@@ -140,6 +145,7 @@ final class LiveSession: ObservableObject {
         picksFromGM = defaults.stringArray(forKey: "live.picksGM") ?? []
         picksOwn = defaults.stringArray(forKey: "live.picksOwn") ?? []
 
+        dice.avatarOf = { [weak self] peer in self?.avatar(of: peer) ?? "" }
         mirror.level = { [weak self] category in
             guard let self else { return 1 }
             return (self.levels["master"] ?? 1) * (self.levels[category] ?? 1)
@@ -728,6 +734,12 @@ final class LiveSession: ObservableObject {
         }
         engine.onScene = { [weak self] name in self?.scene = name }
         engine.onHandout = { [weak self] handout in self?.receiveHandout(handout) }
+        engine.onAvatar = { [weak self] peer, data in
+            guard let self else { return }
+            if data.isEmpty { self.avatars[peer] = nil } else { self.avatars[peer] = data }
+        }
+        if !yourAvatar.isEmpty { engine.setAvatar(yourAvatar) }
+        avatars = [:]
         engine.onRoll = { [weak self] message in self?.receiveRoll(message) }
         dice.resetLog()
         engine.onRules = { [weak self] rules in
@@ -793,6 +805,7 @@ final class LiveSession: ObservableObject {
         GameLock.shared.update(self)
         handouts = []
         viewingHandout = nil
+        avatars = [:]
         HandoutLock.shared.update(self)
         if was { dice.recap() }
         mirror.stopAll(ambienceToo: true)
@@ -886,7 +899,8 @@ final class LiveSession: ObservableObject {
         if handout.show {
             viewingHandout = handout
             HandoutLock.shared.update(self)
-            nudge(title: "🗺️ New handout", body: handout.title.isEmpty ? "The broadcaster sent a picture." : handout.title)
+            nudge(title: handout.secret ? "🔒 A secret handout" : "🗺️ New handout",
+                  body: handout.title.isEmpty ? (handout.secret ? "Only you can see this one." : "The broadcaster sent a picture.") : handout.title)
         }
     }
 
@@ -901,35 +915,61 @@ final class LiveSession: ObservableObject {
         HandoutLock.shared.update(self)
     }
 
-    /// The broadcaster sends a picture to every listener's screen.
-    func sendHandout(_ image: UIImage, title: String) {
+    /// The broadcaster sends a picture to every listener's screen, or (`to`,
+    /// peers) secretly to just those listeners.
+    func sendHandout(_ image: UIImage, title: String, to: [String] = []) {
         guard role == .host else { return }
         notice = "Sending…"
         // Scaling and compressing a big photo takes a moment: off the main thread.
         Task { @MainActor [weak self] in
             let prepared = await Task.detached(priority: .userInitiated) { Handout.prepare(image) }.value
-            self?.finishSending(prepared, title: title)
+            self?.finishSending(prepared, title: title, to: to)
         }
     }
 
-    private func finishSending(_ prepared: (url: URL, hash: String)?, title: String) {
+    private func finishSending(_ prepared: (url: URL, hash: String)?, title: String, to: [String]) {
         guard role == .host, let host, let prepared else {
             notice = "Couldn't send that picture."
             return
         }
         let id = "h-\(Int(Date().timeIntervalSince1970 * 1000))-\(prepared.hash.prefix(6))"
         let clean = Handout.cleanTitle(title)
-        host.handout(id: id, url: prepared.url, hash: prepared.hash, title: clean)
+        let targets = to.filter { peer in peers.contains { $0.id == peer } }
+        host.handout(id: id, url: prepared.url, hash: prepared.hash, title: clean, to: targets.isEmpty ? nil : targets)
         handouts.removeAll { $0.id == id }
-        handouts.append(Handout(id: id, title: clean, url: prepared.url, show: false))
+        let names = peers.filter { targets.contains($0.id) }.map(\.name)
+        handouts.append(Handout(id: id, title: clean, url: prepared.url, show: false, secret: !targets.isEmpty, sentTo: names))
         let n = peers.count
-        notice = "Sent “\(clean.isEmpty ? "Handout" : clean)” to \(n) listener\(n == 1 ? "" : "s")."
+        notice = targets.isEmpty
+            ? "Sent “\(clean.isEmpty ? "Handout" : clean)” to \(n) listener\(n == 1 ? "" : "s")."
+            : "Sent “\(clean.isEmpty ? "Handout" : clean)” secretly to \(names.joined(separator: ", "))."
     }
 
-    /// The broadcaster puts a handout back on everyone's screen.
+    /// The broadcaster puts a handout back on screen (a secret one, for the same listeners).
     func showHandoutAgain(_ handout: Handout) {
         host?.showHandout(id: handout.id)
         notice = "Showing “\(handout.title.isEmpty ? "Handout" : handout.title)” again."
+    }
+
+    // MARK: Pictures
+
+    /// Sets your picture ("" removes it); sent to the session if you're tuned in.
+    func setAvatar(_ data: String) {
+        guard LiveNet.cleanAvatar(data) != nil else {
+            notice = "Couldn't use that picture."
+            return
+        }
+        yourAvatar = data
+        save("live.yourAvatar", data)
+        listener?.setAvatar(data)
+    }
+
+    /// Someone's picture: a listener's (by peer id), or yours.
+    func avatar(of peer: String) -> String {
+        if peer.isEmpty { return "" }
+        if role == .host { return peers.first { $0.id == peer }?.avatar ?? "" }
+        if role == .listener && peer == myPeer { return yourAvatar }
+        return avatars[peer] ?? ""
     }
 
     // MARK: Buzz

@@ -33,6 +33,7 @@ const Handouts = (() => {
   viewer.setAttribute('aria-modal', 'true');
   viewer.setAttribute('aria-label', 'Handout');
   const title = el('div', 'handout-title');
+  const secretNote = el('div', 'handout-secret hidden', 'Only you can see this.');
   const stage = el('div', 'handout-stage');
   const img = el('img', 'handout-img');
   img.alt = '';
@@ -45,7 +46,7 @@ const Handouts = (() => {
   }, 'Keep a copy of this picture');
   const close = button('Close', 'handout-close primary', () => closeViewer());
   bar.append(save, close);
-  viewer.append(title, stage, bar);
+  viewer.append(title, secretNote, stage, bar);
   document.body.append(viewer);
 
   // Zoom and pan: scale around a point, kept so the picture can't be lost off screen.
@@ -120,7 +121,9 @@ const Handouts = (() => {
     zoom = { scale: 1, x: 0, y: 0 };
     applyZoom();
     img.src = item.src;
-    title.textContent = item.title || 'Handout';
+    title.textContent = `${item.secret ? '🔒 ' : ''}${item.title || 'Handout'}`;
+    title.title = item.secret ? 'Only you were sent this' : '';
+    secretNote.classList.toggle('hidden', !item.secret);
     // Locked to it: whatever else was open closes, and nothing behind can be reached.
     document.querySelectorAll('dialog[open]').forEach((d) => d.close());
     closeLog();
@@ -151,7 +154,7 @@ const Handouts = (() => {
       const pic = el('img');
       pic.src = item.src;
       pic.alt = '';
-      card.append(pic, el('span', null, item.title || 'Handout'));
+      card.append(pic, el('span', null, `${item.secret ? '🔒 ' : ''}${item.title || 'Handout'}`));
       grid.append(card);
     }
     logPanel.append(head, grid, el('p', 'muted small', 'Handouts are only kept until you leave the session. Open one and Save to keep a copy.'));
@@ -162,11 +165,13 @@ const Handouts = (() => {
   // A handout arrived: a new one (show) locks the window to it.
   function receive(handout) {
     if (!Live.listening()) return;
-    const item = { id: handout.id, title: handout.title || '', src: handout.src, at: handout.at };
+    const item = { id: handout.id, title: handout.title || '', src: handout.src, at: handout.at, secret: !!handout.secret };
     log = log.filter((h) => h.id !== item.id).concat(item);
     if (handout.show) {
       openViewer(item);
-      api.live.notify({ title: '🗺️ New handout', body: item.title || 'The broadcaster sent a picture.' });
+      api.live.notify(item.secret
+        ? { title: '🔒 A secret handout', body: item.title || 'Only you can see this one.' }
+        : { title: '🗺️ New handout', body: item.title || 'The broadcaster sent a picture.' });
     }
     if (!logPanel.classList.contains('hidden')) openLog();
     Live.refreshStage?.();
@@ -175,12 +180,15 @@ const Handouts = (() => {
   // ---- The broadcaster: send a picture ----
 
   let picked = null; // { data: Uint8Array, preview: data URL }
-  const sent = []; // [{ id, title, thumb }] this session
+  const sent = []; // [{ id, title, thumb, to: [names] | null }] this session
+  // Who it goes to: nobody picked is everyone; picking listeners makes it secret.
+  const sendTo = new Set();
 
   const input = el('input');
   input.type = 'file';
   input.accept = 'image/*';
   input.hidden = true;
+  input.className = 'handout-input';
   document.body.append(input);
 
   // Scales a picture down and turns it into a JPEG.
@@ -233,6 +241,7 @@ const Handouts = (() => {
       preview.append(choose);
     }
     $('#handout-send').disabled = !picked;
+    renderTo();
     const list = $('#handout-sent');
     list.textContent = '';
     list.classList.toggle('hidden', !sent.length);
@@ -243,19 +252,47 @@ const Handouts = (() => {
         const card = button('', 'handout-thumb', async () => {
           await api.live.handoutShow(item.id);
           toast(`Showing “${item.title || 'Handout'}” again.`);
-        }, 'Show it on everyone’s screen again');
+        }, item.to ? `Show it again to ${item.to.join(', ')}` : 'Show it on everyone’s screen again');
         const pic = el('img');
         pic.src = item.thumb;
         pic.alt = '';
-        card.append(pic, el('span', null, item.title || 'Handout'));
+        card.append(pic, el('span', null, `${item.to ? '🔒 ' : ''}${item.title || 'Handout'}`));
         row.append(card);
       }
       list.append(row);
     }
   }
 
+  // Everyone, or only the listeners picked (a secret handout).
+  function renderTo() {
+    const box = $('#handout-to');
+    box.textContent = '';
+    const peers = Live.peers();
+    for (const peer of [...sendTo]) if (!peers.some((p) => p.peer === peer)) sendTo.delete(peer);
+    box.append(el('div', 'handout-to-label', 'Send to'));
+    const row = el('div', 'handout-to-row');
+    const everyone = button('Everyone', `handout-to-chip${sendTo.size ? '' : ' on'}`, () => { sendTo.clear(); renderTo(); });
+    everyone.setAttribute('aria-pressed', String(!sendTo.size));
+    row.append(everyone);
+    for (const peer of peers) {
+      const on = sendTo.has(peer.peer);
+      const chip = button('', `handout-to-chip${on ? ' on' : ''}`, () => {
+        if (on) sendTo.delete(peer.peer); else sendTo.add(peer.peer);
+        renderTo();
+      }, `Only ${peer.name} (and anyone else you pick) sees it`);
+      chip.setAttribute('aria-pressed', String(on));
+      chip.append(Live.face(peer.peer, peer.name, 22), el('span', null, peer.name));
+      row.append(chip);
+    }
+    box.append(row);
+    if (sendTo.size) box.append(el('p', 'muted small', 'A secret handout: only they see it. No one else is told.'));
+    const names = peers.filter((p) => sendTo.has(p.peer)).map((p) => p.name);
+    $('#handout-send').textContent = names.length ? `Send to ${names.length === 1 ? names[0] : `${names.length} listeners`}` : 'Send to everyone';
+  }
+
   function openDialog() {
     picked = null;
+    sendTo.clear();
     $('#handout-title').value = '';
     renderDialog();
     $('#handout-dialog').showModal();
@@ -265,11 +302,13 @@ const Handouts = (() => {
     const dialog = $('#handout-dialog');
     if (dialog.returnValue !== 'send' || !picked) return;
     const name = $('#handout-title').value.trim().slice(0, 60);
+    const to = [...sendTo];
+    const names = Live.peers().filter((p) => sendTo.has(p.peer)).map((p) => p.name);
     try {
-      const { id } = await api.live.handoutSend(picked.data, name);
-      sent.push({ id, title: name, thumb: picked.preview });
+      const { id } = await api.live.handoutSend(picked.data, name, to.length ? to : null);
+      sent.push({ id, title: name, thumb: picked.preview, to: to.length ? names : null });
       const n = (await api.live.status()).peers?.length || 0;
-      toast(`Sent “${name || 'Handout'}” to ${n} listener${n === 1 ? '' : 's'}.`);
+      toast(to.length ? `Sent “${name || 'Handout'}” secretly to ${names.join(', ')}.` : `Sent “${name || 'Handout'}” to ${n} listener${n === 1 ? '' : 's'}.`);
     } catch (err) {
       toast(err.message || 'Couldn’t send the handout.', true);
     }

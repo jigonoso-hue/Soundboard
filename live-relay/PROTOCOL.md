@@ -57,6 +57,7 @@ On the local network the host assigns peer ids itself.
 | `roll {…}` / `rollResult {id, values}` | A dice roll on this listener's device (see Dice) |
 | `diceColor {color}` | Asks for a dice colour (see Dice) |
 | `gameInput {id, buzz: true, at}` / `gameInput {id, q, choice, at}` | A buzz or a quiz answer (see Games) |
+| `avatar {data}` | The listener's picture (see Pictures); `""` removes it |
 
 ### Host → listener
 
@@ -83,7 +84,8 @@ On the local network the host assigns peer ids itself.
 | `askClosed {id}` / `askResult {id, kind, label, …}` | A request ended; its results for everyone |
 | `turns {phase, round, current, order}` | The initiative order (`phase` `"off"` clears it) |
 | `game {…}` | The buzzer or quiz running; `phase` `"off"` when none (see Games) |
-| `handout {id, hash, ext, title, at}` | A picture for the listener's screen, now (see Handouts) |
+| `handout {id, hash, ext, title, at, secret?}` | A picture for the listener's screen, now (see Handouts) |
+| `avatar {peer, data}` | A listener's picture, for everyone (see Pictures); `""` when they removed it or left |
 | `handouts {list: [{id, hash, ext, title, at}]}` | Pictures shown before this listener joined, for their list |
 | `rules {playerSounds, limit}` | Whether listeners may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
 | `catalog {sounds: [{id, name, color}]}` | The broadcaster's sounds listeners may choose from (when `playerSounds` is `"gm"`) |
@@ -158,10 +160,25 @@ or through the relay alike. `title` is one line of up to 60 characters.
   screen, until they close it. Sending the same `id` again shows it again.
 - Listeners who join later get `handouts`: the list of the session's last 20
   handouts, without being locked to one.
+- A **secret** handout goes only to the listeners the broadcaster picked, with
+  `"secret": true` (the listener's screen says only they can see it). No one
+  else is sent it or told about it, it's left out of late joiners' lists, and
+  showing it again sends it to the same listeners. Only the listeners it was
+  sent to may fetch its file.
 
 Listeners keep handouts in a temporary folder of their own, not the sound
 cache, and delete it when they leave or the session ends. Saving a copy is
 up to them.
+
+## Pictures
+
+A listener can pick a picture, shown beside their name to the broadcaster and
+everyone else (the listener list, Whisper, handouts, games and dice). It's a
+small square JPEG (or PNG) of at most 32 KB, as base64. The listener sends
+`avatar {data}` once tuned in and whenever it changes; the host checks it (a
+JPEG or PNG under the limit, or it's ignored) and sends everyone
+`avatar {peer, data}`. A listener who joins later gets one `avatar` message per
+picture. When someone leaves, everyone gets their `avatar` with `data: ""`.
 
 ## Scene music
 

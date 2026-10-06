@@ -36,7 +36,7 @@ const Live = (() => {
 
   function loadSettings() {
     const defaults = {
-      sessionName: '', yourName: '', mode: 'local', code: '',
+      sessionName: '', yourName: '', yourAvatar: '', mode: 'local', code: '',
       volumes: { master: 1, music: 1, sfx: 1, ambience: 1 },
       // Which sounds players may play for everyone: 'off', 'own' or 'gm'.
       playerSounds: 'off',
@@ -64,6 +64,100 @@ const Live = (() => {
     if (text !== undefined) node.textContent = text;
     return node;
   };
+
+  // ---------------------------------------------------------------------
+  // Listeners' pictures: each listener can pick one, shown beside their name
+  // for the broadcaster and everyone else (the listener list, Whisper, games,
+  // dice). Pictures are small square JPEGs, sent as base64.
+
+  const avatars = new Map(); // peer -> base64 (listening; the host reads its peer list)
+  function avatarOf(peer) {
+    if (!peer) return '';
+    if (hosting()) return (status.peers || []).find((p) => p.peer === peer)?.avatar || '';
+    if (listening() && peer === you && settings.yourAvatar) return settings.yourAvatar;
+    return avatars.get(peer) || '';
+  }
+  // A round picture, or the name's first letter when there's none.
+  function face(peer, name, size = 28) {
+    const data = avatarOf(peer);
+    const node = el(data ? 'img' : 'span', 'face');
+    node.style.width = node.style.height = `${size}px`;
+    if (data) {
+      node.src = `data:image/jpeg;base64,${data}`;
+      node.alt = '';
+    } else {
+      node.textContent = (String(name || '?').trim()[0] || '?').toUpperCase();
+      node.style.fontSize = `${Math.round(size * 0.45)}px`;
+      node.setAttribute('aria-hidden', 'true');
+    }
+    return node;
+  }
+  // This listener's own picture (before tuning in too).
+  function ownFace(size) {
+    if (!settings.yourAvatar) return face(null, settings.yourName || '?', size);
+    const img = el('img', 'face');
+    img.src = `data:image/jpeg;base64,${settings.yourAvatar}`;
+    img.alt = 'Your picture';
+    img.style.width = img.style.height = `${size}px`;
+    return img;
+  }
+  api.live.onAvatars((list) => {
+    for (const { peer, data } of list) { if (data) avatars.set(peer, data); else avatars.delete(peer); }
+    refreshFaces();
+  });
+  function refreshFaces() {
+    if (listening()) Stage.render();
+    window.Games?.refresh?.();
+  }
+
+  // Choose a picture: cropped to a square from the middle and made small.
+  const avatarInput = el('input');
+  avatarInput.type = 'file';
+  avatarInput.accept = 'image/*';
+  avatarInput.hidden = true;
+  avatarInput.className = 'avatar-input';
+  document.body.append(avatarInput);
+  let avatarChosen = null;
+  function pickAvatar(then) {
+    avatarChosen = then;
+    avatarInput.click();
+  }
+  avatarInput.addEventListener('change', async () => {
+    const file = avatarInput.files && avatarInput.files[0];
+    avatarInput.value = '';
+    if (!file) return;
+    try {
+      const data = await squareJpeg(file, 192);
+      await setAvatar(data);
+      avatarChosen?.();
+    } catch {
+      toast('Couldn’t use that picture.', true);
+    }
+  });
+  async function squareJpeg(file, size) {
+    const bitmap = await createImageBitmap(file);
+    const side = Math.min(bitmap.width, bitmap.height);
+    const canvas = el('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, size, size);
+    bitmap.close();
+    // Small enough to send: lower the quality until it fits in 32 KB.
+    for (const quality of [0.82, 0.7, 0.55, 0.4]) {
+      const data = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+      if (data.length * 0.75 <= 32 * 1024) return data;
+    }
+    throw new Error('too big');
+  }
+  async function setAvatar(data) {
+    settings.yourAvatar = data || '';
+    saveSettings();
+    await api.live.setAvatar(settings.yourAvatar);
+    if ($('#live-dialog').open) renderDialog();
+    refreshFaces();
+  }
 
   // ---------------------------------------------------------------------
   // Host: what the board plays goes to listeners.
@@ -295,7 +389,7 @@ const Live = (() => {
         if (box.checked) whisper.set(peer.peer, peer.name); else whisper.delete(peer.peer);
         renderArmed();
       });
-      label.append(box, el('span', null, peer.name));
+      label.append(box, face(peer.peer, peer.name, 24), el('span', null, peer.name));
       menu.append(label);
     }
     const rect = $('#whisper-btn').getBoundingClientRect();
@@ -740,7 +834,14 @@ const Live = (() => {
         list.addEventListener('click', () => window.Handouts.openLog());
         top.append(list);
       }
-      top.append(dice, volumes);
+      // Your picture: tap to change it.
+      const me = el('button', 'stage-me');
+      me.type = 'button';
+      me.title = settings.yourAvatar ? 'Change your picture' : 'Add your picture (everyone sees it beside your name)';
+      me.setAttribute('aria-label', me.title);
+      me.append(ownFace(34));
+      me.addEventListener('click', () => pickAvatar());
+      top.append(dice, volumes, me);
 
       const center = el('div', 'stage-center');
       const emblem = el('div', 'stage-emblem');
@@ -1164,6 +1265,22 @@ const Live = (() => {
     };
     body.append(field('Your name (required)', textInput(settings.yourName, 'e.g. Sam', (v) => { settings.yourName = v; syncNamed(); }, 40)));
     body.append(nameHint);
+    // Your picture, shown beside your name (optional).
+    const pictureRow = el('div', 'live-picture-row');
+    const preview = ownFace(48);
+    const pictureText = el('div', 'live-picture-text');
+    pictureText.append(el('b', null, 'Your picture'), el('span', 'muted small', 'Optional. Shown beside your name to everyone.'));
+    const choose = el('button', null, settings.yourAvatar ? 'Change…' : 'Choose…');
+    choose.type = 'button';
+    choose.addEventListener('click', () => pickAvatar());
+    pictureRow.append(preview, pictureText, choose);
+    if (settings.yourAvatar) {
+      const remove = el('button', 'plain', 'Remove');
+      remove.type = 'button';
+      remove.addEventListener('click', () => setAvatar(''));
+      pictureRow.append(remove);
+    }
+    body.append(pictureRow);
     body.append(el('div', 'live-subhead', 'Sessions on this Wi-Fi'));
     const list = el('div', 'live-list');
     if (!sessions.length) list.append(el('p', 'muted small', 'Looking for sessions on this network…'));
@@ -1172,7 +1289,7 @@ const Live = (() => {
       row.append(el('span', null, session.name));
       const join = el('button', 'primary tune-in', 'Tune In');
       join.type = 'button';
-      join.addEventListener('click', () => { if (named()) run(() => api.live.listen({ url: session.url, name: settings.yourName.trim() })); });
+      join.addEventListener('click', () => { if (named()) run(() => api.live.listen({ url: session.url, name: settings.yourName.trim(), avatar: settings.yourAvatar })); });
       row.append(join);
       list.append(row);
     }
@@ -1183,7 +1300,7 @@ const Live = (() => {
     code.classList.add('live-code-input');
     const join = el('button', 'primary tune-in', 'Tune In');
     join.type = 'button';
-    join.addEventListener('click', () => { if (named()) run(() => api.live.listen({ code: settings.code, relay: relayAddress(), name: settings.yourName.trim() })); });
+    join.addEventListener('click', () => { if (named()) run(() => api.live.listen({ code: settings.code, relay: relayAddress(), name: settings.yourName.trim(), avatar: settings.yourAvatar })); });
     codeRow.append(code, join);
     body.append(codeRow);
     syncNamed();
@@ -1225,8 +1342,8 @@ const Live = (() => {
     const list = el('div', 'live-list');
     for (const peer of peers) {
       const row = el('div', 'live-row-item');
-      const who = el('span');
-      who.append(el('b', null, peer.name));
+      const who = el('span', 'live-who');
+      who.append(face(peer.peer, peer.name, 30), el('b', null, peer.name));
       if (peer.device) who.append(el('span', 'muted small', ` · ${peer.device}`));
       const whisperButton = el('button', whisper.has(peer.peer) ? 'active' : '', 'Whisper…');
       whisperButton.type = 'button';
@@ -1292,6 +1409,7 @@ const Live = (() => {
     shareCustomDice, tableSend,
     you: () => you,
     peers: () => status.peers || [],
+    face, avatarOf,
     // A "your turn" nudge: the window shakes and flashes, and a notification if it's behind.
     nudge: (title, body) => {
       document.body.classList.remove('live-buzz');
