@@ -524,6 +524,11 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         var values: [Int]
         let color: String
         let look: DieLook
+        /// Where it was at the last check, to see whether it has really stopped.
+        var lastPosition: SIMD3<Float>?
+        var lastOrientation: simd_quatf?
+        /// Hardly moved or turned since the last check (1/60 s).
+        var calm = false
 
         init(kind: DieKind, node: SCNNode, values: [Int], color: String, look: DieLook) {
             self.kind = kind
@@ -1042,9 +1047,23 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                 }
             }
             if !roll.local { land(roll, force: false) }
+            // Judged by how far each die moved and turned since the last check:
+            // resting against a wall, SceneKit still reports a little speed.
+            for die in roll.dice {
+                let p = die.node.presentation.simdPosition
+                let q = die.node.presentation.simdOrientation
+                if let lp = die.lastPosition, let lq = die.lastOrientation {
+                    let turned = 2 * acos(min(1, abs(simd_dot(q.vector, lq.vector))))
+                    die.calm = simd_distance(p, lp) < 0.012 && turned < 0.015
+                } else {
+                    die.calm = false
+                }
+                die.lastPosition = p
+                die.lastOrientation = q
+            }
             let still = roll.dice.allSatisfy { die in
                 guard let body = die.node.physicsBody else { return true }
-                if body.isResting { return true }
+                if body.isResting || die.calm { return true }
                 let speed = simd_length(SIMD3<Float>(body.velocity.x, body.velocity.y, body.velocity.z))
                 // Dice in SceneKit never quite stop jiggling: near enough counts.
                 return speed < 0.3 && abs(body.angularVelocity.w) < 0.5
@@ -1057,12 +1076,12 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                 // Spinning in place like a top doesn't count: only tipping over can change the face.
                 let w = body.angularVelocity
                 let tilt = abs(w.w) * hypot(w.x, w.z)
-                return speed < 0.8 && tilt < 1.5 && DiceGeometry.top(die.kind, rotation: rotation(die.node)).flat
+                return (die.calm || (speed < 0.8 && tilt < 1.5)) && DiceGeometry.top(die.kind, rotation: rotation(die.node)).flat
             }
             roll.flatFrames = flatAndSlow && (!roll.holdUntilStill || phoneStill) ? roll.flatFrames + 1 : 0
 
             let timedOut = Date().timeIntervalSince(roll.started) > (roll.holdUntilStill ? 60 : 6)
-            if roll.quietFrames < 15 && roll.flatFrames < 6 && !timedOut { continue }
+            if roll.quietFrames < 10 && roll.flatFrames < 6 && !timedOut { continue }
             if roll.local && !timedOut && roll.nudges < 4 {
                 // A die leaning on another or on a wall: give it a nudge.
                 let cocked = roll.dice.filter { !DiceGeometry.top($0.kind, rotation: rotation($0.node)).flat }
@@ -1070,7 +1089,10 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                     roll.nudges += 1
                     roll.quietFrames = 0
                     for die in cocked {
-                        die.node.physicsBody?.velocity = SCNVector3(Float.random(in: -1.5...1.5), 6, Float.random(in: -1.5...1.5))
+                        // Up and away from the wall it's leaning on, towards the middle.
+                        let p = die.node.presentation.simdPosition
+                        let away = simd_length(SIMD2(p.x, p.z)) > 0.5 ? -simd_normalize(SIMD2(p.x, p.z)) * 2.5 : .zero
+                        die.node.physicsBody?.velocity = SCNVector3(away.x + Float.random(in: -1...1), 6, away.y + Float.random(in: -1...1))
                         die.node.physicsBody?.angularVelocity = SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1), 10)
                     }
                     continue

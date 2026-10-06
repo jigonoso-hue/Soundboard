@@ -517,7 +517,12 @@ class DiceScene {
           roll.quietFrames = 0;
           for (const d of cocked) {
             d.body.wakeUp();
-            d.body.velocity.set((Math.random() - 0.5) * 3, 6, (Math.random() - 0.5) * 3);
+            // Up and away from the wall it's leaning on, towards the middle.
+            const { x, z } = d.body.position;
+            const len = Math.hypot(x, z);
+            const ax = len > 0.5 ? -x / len * 2.5 : 0;
+            const az = len > 0.5 ? -z / len * 2.5 : 0;
+            d.body.velocity.set(ax + (Math.random() - 0.5) * 2, 6, az + (Math.random() - 0.5) * 2);
             d.body.angularVelocity.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
           }
           continue;
