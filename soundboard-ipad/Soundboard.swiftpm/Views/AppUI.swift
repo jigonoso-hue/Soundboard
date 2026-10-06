@@ -262,11 +262,13 @@ extension AnyLayout {
     /// The layout's content, in a sideways ScrollView when `scrolls` (iPad),
     /// or as it is (an iPhone layout that wraps instead).
     @ViewBuilder
-    func wrappedInScroll<Content: View>(_ scrolls: Bool, @ViewBuilder content: () -> Content) -> some View {
+    /// inset: room around the content, inside the scroll view, so things that
+    /// stick out a little (count badges) aren't clipped by its edges.
+    func wrappedInScroll<Content: View>(_ scrolls: Bool, inset: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content) -> some View {
         if scrolls {
-            ScrollView(.horizontal, showsIndicators: false) { self { content() } }
+            ScrollView(.horizontal, showsIndicators: false) { self { content() }.padding(inset) }
         } else {
-            self { content() }
+            self { content() }.padding(inset)
         }
     }
 }

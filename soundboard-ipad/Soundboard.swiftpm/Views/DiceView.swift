@@ -2108,7 +2108,10 @@ struct DiceView: View {
         let compact = sizeClass == .compact
         return VStack(spacing: 10) {
             // iPhone: the dice wrap onto rows, all in view; iPad: one row that scrolls.
-            (compact ? AnyLayout(FlowLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))).wrappedInScroll(!compact) {
+            // The room above and beside the buttons is inside the scroll view, so
+            // the count badges on their corners aren't cut off.
+            (compact ? AnyLayout(FlowLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8)))
+                .wrappedInScroll(!compact, inset: EdgeInsets(top: 10, leading: 4, bottom: 2, trailing: 10)) {
                 ForEach(DiceGeometry.types, id: \.self) { type in dieButton(type, label: type == "coin" ? "Coin" : type) }
                 // Custom dice in the roll, with their counts.
                 ForEach(tray.allCustom.filter { (tray.counts["custom:\($0.id)"] ?? 0) > 0 }) { def in
@@ -2116,8 +2119,6 @@ struct DiceView: View {
                 }
                 pill("Clear") { tray.counts = [:] }
             }
-            .padding(.top, 8)
-            .padding(.horizontal, 4)
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     pill("−") { tray.modifier = max(-30, tray.modifier - 1) }
