@@ -310,6 +310,9 @@ class DiceScene {
     this.world.addContactMaterial(new CANNON.ContactMaterial(this.diceMaterial, surface, { friction: 0.25, restitution: 0.35 }));
     this.world.addContactMaterial(new CANNON.ContactMaterial(this.diceMaterial, this.diceMaterial, { friction: 0.12, restitution: 0.45 }));
     this.surface = surface;
+    // Walls are soft, like a felt-lined tray: dice don't come off one faster.
+    this.wallMaterial = new CANNON.Material('wall');
+    this.world.addContactMaterial(new CANNON.ContactMaterial(this.diceMaterial, this.wallMaterial, { friction: 0.3, restitution: 0.15 }));
     const ground = new CANNON.Body({ mass: 0, material: surface, shape: new CANNON.Plane() });
     ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
     this.world.addBody(ground);
@@ -354,7 +357,7 @@ class DiceScene {
     const { hx, hz } = this.extents();
     const inset = 1;
     const make = (x, z, rotY) => {
-      const wall = new CANNON.Body({ mass: 0, material: this.surface, shape: new CANNON.Plane() });
+      const wall = new CANNON.Body({ mass: 0, material: this.wallMaterial, shape: new CANNON.Plane() });
       wall.position.set(x, 0, z);
       wall.quaternion.setFromEuler(0, rotY, 0);
       this.world.addBody(wall);
@@ -517,13 +520,18 @@ class DiceScene {
           roll.quietFrames = 0;
           for (const d of cocked) {
             d.body.wakeUp();
-            // Up and away from the wall it's leaning on, towards the middle.
+            // Tipped the short way onto the face that's already mostly up (as a
+            // real die leaning on a wall falls), eased off the wall, no hop.
+            const q = d.body.quaternion;
+            const [nx, ny, nz] = G.upward(d.kind, [q.x, q.y, q.z, q.w]);
+            const angle = Math.acos(Math.max(-1, Math.min(1, ny)));
+            const ax = -nz; const az = nx; // n × up
+            const alen = Math.hypot(ax, az) || 1;
+            const rate = Math.min(9, angle * 7 + 1.5);
+            d.body.angularVelocity.set(ax / alen * rate, 0, az / alen * rate);
             const { x, z } = d.body.position;
             const len = Math.hypot(x, z);
-            const ax = len > 0.5 ? -x / len * 2.5 : 0;
-            const az = len > 0.5 ? -z / len * 2.5 : 0;
-            d.body.velocity.set(ax + (Math.random() - 0.5) * 2, 6, az + (Math.random() - 0.5) * 2);
-            d.body.angularVelocity.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
+            d.body.velocity.set(len > 0.5 ? -x / len * 1.2 : 0, 1.5, len > 0.5 ? -z / len * 1.2 : 0);
           }
           continue;
         }

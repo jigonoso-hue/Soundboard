@@ -290,6 +290,15 @@ enum DiceGeometry {
         return (index, best > 0.9)
     }
 
+    /// Where the top face (on a d4, the top corner) points, in the world. A die
+    /// leaning on something is tipped until this points straight up.
+    static func upward(_ kind: DieKind, rotation: simd_quatd) -> SIMD3<Double> {
+        let shape = build(kind)
+        let index = top(kind, rotation: rotation).index
+        let local = kind == .d4 ? shape.points[index] : shape.faces[index].normal
+        return simd_normalize(rotation.act(local))
+    }
+
     /// The numbers printed on a die as made: one per face, or per corner on a d4.
     static func defaultValues(_ kind: DieKind) -> [Int] {
         let shape = build(kind)

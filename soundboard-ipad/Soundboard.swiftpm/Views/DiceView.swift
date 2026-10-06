@@ -673,7 +673,8 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             node.position = SCNVector3(x, 6, z)
             node.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: SCNBox(width: width, height: 14, length: length, chamferRadius: 0)))
             node.physicsBody?.friction = 0.5
-            node.physicsBody?.restitution = 0.7
+            // Soft, like a felt-lined tray: dice don't come off a wall faster.
+            node.physicsBody?.restitution = 0.25
             node.physicsBody?.categoryBitMask = 1
             node.physicsBody?.collisionBitMask = -1
             scene.rootNode.addChildNode(node)
@@ -1089,11 +1090,19 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
                     roll.nudges += 1
                     roll.quietFrames = 0
                     for die in cocked {
-                        // Up and away from the wall it's leaning on, towards the middle.
+                        // Tipped the short way onto the face that's already mostly up
+                        // (as a real die leaning on a wall falls), eased off the wall, no hop.
+                        let n = DiceGeometry.upward(die.kind, rotation: rotation(die.node))
+                        let angle = acos(max(-1, min(1, n.y)))
+                        let axis = SIMD2(-n.z, n.x) // n × up (its x and z)
+                        let rate = Float(min(9, angle * 7 + 1.5))
+                        if simd_length(axis) > 0.0001 {
+                            let a = simd_normalize(axis)
+                            die.node.physicsBody?.angularVelocity = SCNVector4(Float(a.x), 0, Float(a.y), rate)
+                        }
                         let p = die.node.presentation.simdPosition
-                        let away = simd_length(SIMD2(p.x, p.z)) > 0.5 ? -simd_normalize(SIMD2(p.x, p.z)) * 2.5 : .zero
-                        die.node.physicsBody?.velocity = SCNVector3(away.x + Float.random(in: -1...1), 6, away.y + Float.random(in: -1...1))
-                        die.node.physicsBody?.angularVelocity = SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1), 10)
+                        let away = simd_length(SIMD2(p.x, p.z)) > 0.5 ? -simd_normalize(SIMD2(p.x, p.z)) * 1.2 : .zero
+                        die.node.physicsBody?.velocity = SCNVector3(away.x, 1.5, away.y)
                     }
                     continue
                 }

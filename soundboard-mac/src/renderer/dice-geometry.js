@@ -519,8 +519,19 @@
     return [...entries].sort((a, b) => b.total - a.total || (b.modifier || 0) - (a.modifier || 0) || a.name.localeCompare(b.name));
   }
 
+  // Where the top face (on a d4, the top corner) points, in the world. A die
+  // leaning on something is tipped until this points straight up.
+  function upward(kind, q) {
+    const die = build(kind);
+    const { index } = top(kind, q);
+    const local = kind === 'd4' ? die.points[index] : die.faces[index].normal;
+    const v = rotate(q, local);
+    const len = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / len, v[1] / len, v[2] / len];
+  }
+
   const api = {
-    build, faceUVs, top, read, relabel, defaultValues, range, rotate, score, label,
+    build, faceUVs, top, upward, read, relabel, defaultValues, range, rotate, score, label,
     plan, summarize, describe, diceFor, hull, TYPES, SIDES, KINDS,
     customLabel, faceNumber, cleanCustom, PRESETS, CUSTOM_SIDES,
     d20s, countedD20s, stats, rank, initiativeOrder,

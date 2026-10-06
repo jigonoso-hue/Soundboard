@@ -106,3 +106,27 @@ test('statistics, who wins and initiative order', () => {
   ]);
   assert.deepEqual(order.map((e) => e.name), ['Ana', 'Sam', 'Goblin']);
 });
+
+test('upward: tipping a leaning die about n × up lays it flat on the same face', () => {
+  const mul = (a, b) => [
+    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+  ];
+  for (const kind of ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'coin']) {
+    for (let i = 0; i < 100; i++) {
+      let q = [Math.sin(i * 1.7), Math.cos(i * 2.3), Math.sin(i * 0.9 + 1), Math.cos(i * 1.1 + 2)];
+      const l = Math.hypot(...q);
+      q = q.map((x) => x / l);
+      const n = G.upward(kind, q);
+      const angle = Math.acos(Math.max(-1, Math.min(1, n[1])));
+      const len = Math.hypot(n[2], n[0]);
+      if (len < 1e-6) continue;
+      const s = Math.sin(angle / 2) / len;
+      const tipped = mul([-n[2] * s, 0, n[0] * s, Math.cos(angle / 2)], q);
+      assert.equal(G.top(kind, tipped).index, G.top(kind, q).index, kind);
+      assert.ok(G.top(kind, tipped).flat, kind);
+    }
+  }
+});
