@@ -23,7 +23,7 @@ const SETTLE_FRAMES = 24;
 // Lying flat and barely moving: its face can't change, so the roll counts sooner.
 // Spinning in place like a top doesn't count: only tipping over can change the face.
 const FLAT_SETTLE_FRAMES = 6;
-const MAX_ROLL_MS = 9000;
+const MAX_ROLL_MS = 6000;
 const MAX_DICE = 40;
 // The same sixteen colours as the iPad. In a Live Session no two people share one.
 const DICE_COLORS = [
@@ -489,6 +489,11 @@ class DiceScene {
     const now = performance.now();
     for (const roll of this.rolls) {
       if (roll.done) continue;
+      // A second in, the dice are slowed hard so they come to rest quickly.
+      if (!roll.braked && now - roll.started > 1000) {
+        roll.braked = true;
+        for (const d of roll.dice) { d.body.linearDamping = 0.5; d.body.angularDamping = 0.6; }
+      }
       if (!roll.local) this.land(roll, false);
       const still = roll.dice.every((d) => d.body.sleepState === CANNON.Body.SLEEPING
         || (d.body.velocity.length() < 0.08 && d.body.angularVelocity.length() < 0.08));
@@ -519,13 +524,13 @@ class DiceScene {
         }
       }
       roll.done = true;
+      // Stopped where they lie, so the faces read now stay on top.
+      for (const d of roll.dice) {
+        d.body.velocity.set(0, 0, 0);
+        d.body.angularVelocity.set(0, 0, 0);
+        d.body.sleep();
+      }
       if (roll.local) {
-        // Held where they are, so the faces read now stay on top; a die spinning
-        // flat keeps spinning down.
-        for (const d of roll.dice) {
-          d.body.velocity.set(0, 0, 0);
-          d.body.angularVelocity.set(0, d.body.angularVelocity.y, 0);
-        }
         const values = roll.dice.map((d) => {
           const q = d.body.quaternion;
           return G.read(d.kind, [q.x, q.y, q.z, q.w], d.values).value;

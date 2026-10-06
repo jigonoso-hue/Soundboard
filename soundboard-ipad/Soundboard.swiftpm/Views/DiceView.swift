@@ -544,6 +544,8 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
         var quietFrames = 0
         var flatFrames = 0
         var nudges = 0
+        /// A second in, the dice are slowed hard so they come to rest quickly.
+        var braked = false
         /// Shake rolls wait for the phone to be still before they count.
         var holdUntilStill = false
         let started = Date()
@@ -587,7 +589,10 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
     override init() {
         super.init()
         scene.physicsWorld.gravity = SCNVector3(0, -Self.gravity, 0)
-        scene.physicsWorld.timeStep = 1.0 / 120
+        // One physics step per frame at 60 frames a second: a smaller step can
+        // leave the dice moving in slow motion. The thick table and continuous
+        // collision checks keep fast dice from passing through things.
+        scene.physicsWorld.timeStep = 1.0 / 60
         scene.physicsWorld.contactDelegate = self
         scene.background.contents = UIColor.clear
 
@@ -1029,6 +1034,13 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             }
         }
         for roll in rolls where !roll.done {
+            if !roll.braked && !roll.holdUntilStill && Date().timeIntervalSince(roll.started) > 1 {
+                roll.braked = true
+                for die in roll.dice {
+                    die.node.physicsBody?.damping = 0.5
+                    die.node.physicsBody?.angularDamping = 0.6
+                }
+            }
             if !roll.local { land(roll, force: false) }
             let still = roll.dice.allSatisfy { die in
                 guard let body = die.node.physicsBody else { return true }
@@ -1049,7 +1061,7 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             }
             roll.flatFrames = flatAndSlow && (!roll.holdUntilStill || phoneStill) ? roll.flatFrames + 1 : 0
 
-            let timedOut = Date().timeIntervalSince(roll.started) > (roll.holdUntilStill ? 60 : 9)
+            let timedOut = Date().timeIntervalSince(roll.started) > (roll.holdUntilStill ? 60 : 6)
             if roll.quietFrames < 15 && roll.flatFrames < 6 && !timedOut { continue }
             if roll.local && !timedOut && roll.nudges < 4 {
                 // A die leaning on another or on a wall: give it a nudge.
@@ -1066,16 +1078,16 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
             }
             roll.done = true
             let result: [Int]?
+            // Frozen where they lie, so the faces read now stay on top: nothing
+            // in the physics can move or turn them any more.
+            for die in roll.dice {
+                guard let body = die.node.physicsBody else { continue }
+                die.node.transform = die.node.presentation.transform
+                body.velocity = SCNVector3Zero
+                body.angularVelocity = SCNVector4Zero
+                body.type = .kinematic
+            }
             if roll.local {
-                // Held where they are, so the faces read now stay on top; a die
-                // spinning flat keeps spinning down.
-                for die in roll.dice {
-                    guard let body = die.node.physicsBody else { continue }
-                    let w = body.angularVelocity
-                    let yaw = w.y * w.w
-                    body.velocity = SCNVector3Zero
-                    body.angularVelocity = SCNVector4(0, yaw < 0 ? -1 : 1, 0, abs(yaw))
-                }
                 result = roll.dice.map { die in die.values[DiceGeometry.top(die.kind, rotation: rotation(die.node)).index] }
             } else {
                 land(roll, force: true)
