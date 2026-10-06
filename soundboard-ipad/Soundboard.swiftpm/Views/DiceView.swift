@@ -594,10 +594,9 @@ final class DiceScene: NSObject, SCNPhysicsContactDelegate, @unchecked Sendable 
     override init() {
         super.init()
         scene.physicsWorld.gravity = SCNVector3(0, -Self.gravity, 0)
-        // One physics step per frame at 60 frames a second: a smaller step can
-        // leave the dice moving in slow motion. The thick table and continuous
-        // collision checks keep fast dice from passing through things.
-        scene.physicsWorld.timeStep = 1.0 / 60
+        // Small steps: at least one per frame even on a 120 Hz screen, so the dice
+        // move smoothly instead of juddering, and they sink less into what they hit.
+        scene.physicsWorld.timeStep = 1.0 / 120
         scene.physicsWorld.contactDelegate = self
         scene.background.contents = UIColor.clear
 
@@ -1749,7 +1748,8 @@ struct DiceSceneView: UIViewRepresentable {
         view.layer.isOpaque = false
         view.antialiasingMode = .none
         view.rendersContinuously = true
-        view.preferredFramesPerSecond = 60
+        // As fast as the screen goes (120 on ProMotion iPads and iPhones).
+        view.preferredFramesPerSecond = UIScreen.main.maximumFramesPerSecond
         view.isUserInteractionEnabled = false
         view.scene = tray.scene.scene
         view.pointOfView = tray.scene.scene.rootNode.childNodes.first { $0.camera != nil }
@@ -1762,6 +1762,8 @@ struct DiceSceneView: UIViewRepresentable {
     func updateUIView(_ view: SCNView, context: Context) {
         if view.scene !== tray.scene.scene { view.scene = tray.scene.scene }
         view.antialiasingMode = tray.level == .full && !DiceScene.simulator ? .multisampling4X : .none
+        // Full: as fast as the screen goes; Reduced: 60, easier on the battery and heat.
+        view.preferredFramesPerSecond = tray.level == .full ? UIScreen.main.maximumFramesPerSecond : 60
         let size = view.bounds.size
         if size.width > 0, size.height > 0 { tray.scene.layout(aspect: Float(size.width / size.height)) }
     }
