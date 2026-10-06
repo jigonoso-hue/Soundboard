@@ -95,7 +95,7 @@ class KitStore {
     const index = this.kits.findIndex((k) => k.id === id);
     if (index < 0) throw new Error('Scene kit not found');
     const current = this.kits[index];
-    const next = normalize({ ...current, ...pick(changes, ['name', 'icon', 'color', 'iconColor', 'sections']), id: current.id, createdAt: current.createdAt });
+    const next = normalize({ ...current, ...pick(changes, ['name', 'icon', 'color', 'iconColor', 'sections', 'autoplay']), id: current.id, createdAt: current.createdAt });
     delete next.migrated;
     this.kits[index] = next;
     this._save();
@@ -133,7 +133,7 @@ class KitStore {
     if (!source) throw new Error('Scene kit not found');
     const copy = this.create({ name: `${source.name} copy` });
     const sections = source.sections.map((s) => ({ ...structuredClone(s), id: crypto.randomUUID() }));
-    return this.update(copy.id, { icon: source.icon, color: source.color, iconColor: source.iconColor, sections });
+    return this.update(copy.id, { icon: source.icon, color: source.color, iconColor: source.iconColor, sections, autoplay: !!source.autoplay });
   }
 
   remove(id) {
@@ -195,14 +195,25 @@ function cleanLayers(list) {
     if (seen.has(key)) continue;
     seen.add(key);
     const volume = Number(layer.volume);
+    const every = cleanEvery(layer.every);
     layers.push({
       id: typeof layer.id === 'string' && /^[\w-]{1,64}$/.test(layer.id) ? layer.id : crypto.randomUUID(),
       kind: layer.kind,
       ref: layer.ref,
       volume: Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 0.7,
+      // Plays now and then (seconds between plays) instead of looping.
+      ...(every ? { every } : {}),
+      // Was playing when you left the kit: comes back when it starts on opening.
+      ...(layer.on ? { on: true } : {}),
     });
   }
   return layers;
+}
+
+// "Now and then" ranges a layer can have, in seconds between plays.
+const EVERY = [[20, 60], [60, 180], [180, 480]];
+function cleanEvery(every) {
+  return Array.isArray(every) && EVERY.some(([lo, hi]) => every[0] === lo && every[1] === hi) ? [every[0], every[1]] : null;
 }
 
 const int = (value, min, max, fallback) => {
@@ -224,6 +235,9 @@ function normalizeSection(section, index) {
     size: SIZES.includes(section.size) ? section.size : 'm',
     items: section.kind === 'ambience' ? [] : cleanItems(section.items),
     layers: section.kind === 'ambience' ? cleanLayers(section.layers) : [],
+    // A playlist: its full sounds play one after another.
+    ...(section.kind !== 'ambience' && section.playlist ? { playlist: true } : {}),
+    ...(section.kind !== 'ambience' && section.playlist && section.playlistShuffle ? { playlistShuffle: true } : {}),
   };
 }
 
@@ -254,6 +268,8 @@ function normalize(kit) {
     color: cleanColor(kit.color, COLORS[0]),
     iconColor: cleanColor(kit.iconColor, '#ffffff'),
     sections,
+    // Opening the kit fades in its music and ambience, fading out what was playing.
+    ...(kit.autoplay ? { autoplay: true } : {}),
     createdAt: kit.createdAt || new Date().toISOString(),
   };
 }

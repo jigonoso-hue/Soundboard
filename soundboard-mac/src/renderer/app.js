@@ -39,29 +39,58 @@ function soundUrl(sound) {
   return `sound://local/${encodeURIComponent(sound.file)}`;
 }
 
-function play(id) {
+// Fades an audio element's volume to `to` over `seconds`, then calls `then`.
+function rampVolume(audio, to, seconds, then) {
+  clearInterval(audio.rampTimer);
+  audio.rampTimer = null;
+  if (!(seconds > 0)) { audio.volume = Math.max(0, Math.min(1, to)); if (then) then(); return; }
+  const from = audio.volume;
+  const started = performance.now();
+  audio.rampTimer = setInterval(() => {
+    const t = Math.min(1, (performance.now() - started) / (seconds * 1000));
+    audio.volume = Math.max(0, Math.min(1, from + (to - from) * t));
+    if (t >= 1) { clearInterval(audio.rampTimer); audio.rampTimer = null; if (then) then(); }
+  }, 40);
+}
+
+// Plays a sound. options:
+//   fresh: always start another copy (a playlist's next song), never toggle off
+//   fadeIn: seconds to fade in over
+//   group: what Live Session listeners stop it by (default "s:<id>")
+//   nearEnd: { seconds, fn }: calls fn once when that much of it is left
+//   onEnded: called when it finishes by itself
+// Returns the audio element, or null.
+function play(id, options = {}) {
   const sound = sounds.find((s) => s.id === id);
-  if (!sound) return;
+  if (!sound) return null;
   // Full sounds and repeating sounds toggle: pressing again stops them instead of stacking another copy.
-  if ((sound.repeat || isFull(sound)) && playing.has(id)) { stop(id); return; }
-  if (prefs.noOverlap) stop(id);
+  if (!options.fresh && (sound.repeat || isFull(sound)) && playing.has(id)) { stop(id); return null; }
+  if (prefs.noOverlap && !options.fresh) stop(id);
   const audio = new Audio(soundUrl(sound));
-  audio.volume = Math.min(1, sound.volume * prefs.master);
+  audio.group = options.group || `s:${id}`;
+  const target = Math.min(1, sound.volume * prefs.master);
+  audio.volume = options.fadeIn ? 0 : target;
   if (prefs.outputDevice && audio.setSinkId) audio.setSinkId(prefs.outputDevice).catch(() => {});
-  if (sound.repeat && sound.repeat.gap === 0) audio.loop = true; // replay immediately
+  if (sound.repeat && sound.repeat.gap === 0 && !options.fresh) audio.loop = true; // replay immediately
   let set = playing.get(id);
   if (!set) playing.set(id, (set = new Set()));
   set.add(audio);
   const done = () => {
     clearTimeout(audio.repeatTimer);
+    clearInterval(audio.rampTimer);
     set.delete(audio);
-    if (!set.size) playing.delete(id);
+    if (!set.size && playing.get(id) === set) playing.delete(id);
     updateTile(id);
   };
   audio.addEventListener('ended', () => {
     // Use the latest settings, in case the sound was edited while playing.
     const current = sounds.find((s) => s.id === id);
-    if (!current || !current.repeat || !set.has(audio)) { done(); return; }
+    if (options.fresh || !current || !current.repeat || !set.has(audio)) {
+      const mine = set.has(audio);
+      done();
+      if (mine && options.onEnded) options.onEnded();
+      return;
+    }
     const tile = document.querySelector(`.tile[data-id="${id}"]`);
     if (tile) tile.classList.add('waiting');
     audio.repeatTimer = setTimeout(() => {
@@ -75,20 +104,41 @@ function play(id) {
     if (audio.stopped) return; // clearing the source on stop also fires 'error'
     done();
     toast(`Couldn't play “${sound.name}”.`, true);
+    if (options.onEnded) options.onEnded();
   });
-  audio.addEventListener('timeupdate', () => updateTile(id, audio));
-  audio.play().catch(done);
+  audio.addEventListener('timeupdate', () => {
+    updateTile(id, audio);
+    const near = options.nearEnd;
+    if (near && !audio.nearFired && set.has(audio) && Number.isFinite(audio.duration) && audio.duration - audio.currentTime <= near.seconds) {
+      audio.nearFired = true;
+      near.fn();
+    }
+  });
+  audio.play().then(() => { if (options.fadeIn) rampVolume(audio, target, options.fadeIn); }).catch(done);
   updateTile(id, audio);
-  if (typeof Live !== 'undefined') Live.soundPlayed(sound);
+  if (typeof Live !== 'undefined') Live.soundPlayed(sound, { group: audio.group, fadeIn: options.fadeIn || 0 });
+  return audio;
 }
 
-function stop(id) {
+// Stops one playing copy of a sound, fading it out over `fade` seconds.
+function release(id, audio, fade = 0) {
+  const set = playing.get(id);
+  if (set) { set.delete(audio); if (!set.size) playing.delete(id); }
+  audio.stopped = true;
+  clearTimeout(audio.repeatTimer);
+  const end = () => { audio.pause(); audio.removeAttribute('src'); audio.load(); };
+  if (fade > 0) rampVolume(audio, 0, fade, end); else { clearInterval(audio.rampTimer); end(); }
+  updateTile(id);
+  if (typeof Live !== 'undefined') Live.groupStopped(audio.group, fade);
+  // Lets a playlist know its song was stopped from elsewhere.
+  if (audio.onRelease) { const fn = audio.onRelease; audio.onRelease = null; fn(); }
+}
+
+// Stops every copy of a sound, fading out over `fade` seconds (a scene change).
+function stop(id, { fade = 0 } = {}) {
   const set = playing.get(id);
   if (!set) return;
-  for (const audio of set) { audio.stopped = true; clearTimeout(audio.repeatTimer); audio.pause(); audio.removeAttribute('src'); audio.load(); }
-  playing.delete(id);
-  updateTile(id);
-  if (typeof Live !== 'undefined') Live.soundStopped(id);
+  for (const audio of [...set]) release(id, audio, fade);
 }
 
 function stopAll() {
@@ -325,7 +375,9 @@ function tagLine(sound, max) {
 }
 
 // Full sounds: a row with play button, name, tags, timer and progress.
-function makeTrack(sound, { reorder = true } = {}) {
+// onPlay: what clicking it does instead of playing it (a playlist starts from it).
+function makeTrack(sound, { reorder = true, onPlay = null } = {}) {
+  const go = () => (onPlay ? onPlay() : play(sound.id));
   const row = document.createElement('div');
   row.className = 'track';
   row.dataset.soundId = sound.id;
@@ -336,7 +388,7 @@ function makeTrack(sound, { reorder = true } = {}) {
   playBtn.className = 'track-play';
   Icons.set(playBtn, 'play');
   playBtn.title = 'Play / stop';
-  playBtn.addEventListener('click', (e) => { e.stopPropagation(); play(sound.id); });
+  playBtn.addEventListener('click', (e) => { e.stopPropagation(); go(); });
 
   const info = document.createElement('div');
   info.className = 'track-info';
@@ -375,8 +427,8 @@ function makeTrack(sound, { reorder = true } = {}) {
   progress.className = 'tile-progress';
 
   row.append(playBtn, info, meta, edit, progress);
-  row.addEventListener('click', () => play(sound.id));
-  row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id); } });
+  row.addEventListener('click', go);
+  row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
   if (reorder) addReorder(row, sound);
   if (playing.has(sound.id)) {
@@ -573,8 +625,12 @@ master.addEventListener('input', () => {
   savePrefs();
   for (const [id, set] of playing) {
     const sound = sounds.find((s) => s.id === id);
-    for (const audio of set) audio.volume = Math.min(1, (sound ? sound.volume : 1) * prefs.master);
-    if (typeof Live !== 'undefined') Live.soundVolume(id, Math.min(1, (sound ? sound.volume : 1) * prefs.master));
+    const level = Math.min(1, (sound ? sound.volume : 1) * prefs.master);
+    for (const audio of set) {
+      if (audio.rampTimer) continue; // fading in or out: it ends where it was going
+      audio.volume = level;
+      if (typeof Live !== 'undefined') Live.groupVolume(audio.group, level);
+    }
   }
 });
 

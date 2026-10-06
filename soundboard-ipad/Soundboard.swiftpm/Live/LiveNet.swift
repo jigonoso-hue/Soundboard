@@ -59,6 +59,17 @@ enum LiveNet {
     }
 
     static func bool(_ value: Any?) -> Bool { (value as? NSNumber)?.boolValue ?? false }
+
+    /// A fade length in seconds from a message: 0 (none) up to 10.
+    static func fadeSeconds(_ value: Any?) -> Double {
+        guard let n = (value as? Double) ?? number(value), n.isFinite, n > 0 else { return 0 }
+        return min(10, n)
+    }
+
+    /// A built-in sound's file name (like "rain.wav"), and nothing else.
+    static func isBuiltinName(_ name: String) -> Bool {
+        name.range(of: "^[a-z0-9-]+\\.wav$", options: .regularExpression) != nil
+    }
 }
 
 // MARK: - Sockets

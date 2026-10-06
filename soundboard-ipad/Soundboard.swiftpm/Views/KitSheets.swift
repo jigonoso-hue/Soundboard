@@ -13,6 +13,7 @@ struct KitEditView: View {
     @State private var icon = "mug"
     @State private var color = "#f5a742"
     @State private var iconColor = "#ffffff"
+    @State private var autoplay = false
     @State private var loaded = false
 
     var body: some View {
@@ -29,6 +30,14 @@ struct KitEditView: View {
                         }
                     }
                     IconPickerView(icon: $icon, color: $color, iconColor: $iconColor, backgrounds: KitStore.colors + ["#1f6f4a", "#7a1f2b"])
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Start its music and ambience when opened", isOn: $autoplay)
+                            .font(.headline)
+                        Text("Opening the kit fades out the music and ambience that's playing, then fades in its first playlist and the ambience layers you had on there.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding()
             }
@@ -54,6 +63,7 @@ struct KitEditView: View {
             icon = kit.icon
             color = kit.color
             iconColor = kit.iconColor
+            autoplay = kit.autoplay == true
         } else {
             let index = kits.kits.count
             icon = KitStore.icons[index % KitStore.icons.count]
@@ -67,10 +77,15 @@ struct KitEditView: View {
             kit.icon = icon
             kit.color = color
             kit.iconColor = iconColor
+            kit.autoplay = autoplay ? true : nil
             kits.update(kit)
             onSaved(kit)
         } else {
-            let kit = kits.create(name: name, icon: icon, color: color, iconColor: iconColor)
+            var kit = kits.create(name: name, icon: icon, color: color, iconColor: iconColor)
+            if autoplay {
+                kit.autoplay = true
+                kits.update(kit)
+            }
             if let item = request.thenAdd {
                 let isFull = item.type == .sound && (store.sound(item.id)?.isFull ?? false)
                 kits.add(item, to: kit.id, isFull: isFull)

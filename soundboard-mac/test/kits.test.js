@@ -119,3 +119,40 @@ test('ambience sections hold layers, not items', () => {
   saved = store.get(kit.id).sections.find((s) => s.kind === 'ambience');
   assert.deepEqual(saved.layers.map((l) => l.ref), ['rain.wav']);
 });
+
+test('scene music: autoplay kits, playlist sections, now-and-then layers', () => {
+  const dir = tmp();
+  const store = new KitStore(dir);
+  const kit = store.create({ name: 'Tavern' });
+  const [, , music, ambience] = kit.sections;
+  store.update(kit.id, {
+    autoplay: true,
+    sections: kit.sections.map((s) => {
+      if (s.id === music.id) return { ...s, playlist: true, playlistShuffle: true };
+      if (s.id === ambience.id) {
+        return { ...s, playlist: true, layers: [
+          { id: 'rain', kind: 'builtin', ref: 'rain.wav', volume: 0.6, on: true },
+          { id: 'thunder', kind: 'builtin', ref: 'thunderstorm.wav', volume: 0.8, every: [60, 180] },
+          { id: 'odd', kind: 'builtin', ref: 'wind.wav', volume: 0.5, every: [1, 2] },
+        ] };
+      }
+      return s;
+    }),
+  });
+  const saved = new KitStore(dir).get(kit.id);
+  assert.equal(saved.autoplay, true);
+  const savedMusic = saved.sections.find((s) => s.id === music.id);
+  assert.equal(savedMusic.playlist, true);
+  assert.equal(savedMusic.playlistShuffle, true);
+  const savedAmbience = saved.sections.find((s) => s.id === ambience.id);
+  assert.equal(savedAmbience.playlist, undefined, 'ambience sections are never playlists');
+  const [rain, thunder, odd] = savedAmbience.layers;
+  assert.equal(rain.on, true);
+  assert.equal(rain.every, undefined);
+  assert.deepEqual(thunder.every, [60, 180]);
+  assert.equal(thunder.on, undefined);
+  assert.equal(odd.every, undefined, 'only the offered ranges are kept');
+  // Duplicates keep the setting; turning it off removes it.
+  assert.equal(store.get(store.duplicate(kit.id).id).autoplay, true);
+  assert.equal(store.update(kit.id, { autoplay: false }).autoplay, undefined);
+});

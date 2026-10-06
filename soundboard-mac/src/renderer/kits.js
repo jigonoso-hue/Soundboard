@@ -1,4 +1,4 @@
-/* global api, $, Icons, IconPicker, Ambience, sounds, prefs, savePrefs, render, toast, isFull, editingId, AudioUtils, Tags, Bashes, makeTile, makeTrack, matchesFilters */
+/* global api, $, Icons, IconPicker, Ambience, Music, sounds, prefs, savePrefs, render, toast, isFull, editingId, AudioUtils, Tags, Bashes, makeTile, makeTrack, matchesFilters */
 // Scene Kits: customizable boards of sections holding sounds and bashes
 // from the whole library. Sections live on a 12-column grid and can be
 // moved and resized in "Customize Layout" mode. Ambience sections hold
@@ -109,9 +109,13 @@ const Kits = (() => {
   }
 
   function open(id) {
-    if (activeId() !== id) { editing = false; closeDrawer(false); }
+    const changed = activeId() !== id;
+    if (changed) { editing = false; closeDrawer(false); }
     prefs.view = `kit:${id}`;
     savePrefs();
+    // A kit set to start its music and ambience: the scene changes.
+    const kit = activeKit();
+    if (changed && kit && kit.autoplay) Music.sceneOpened(kit, voiceId);
     render();
     $('#content').scrollTop = 0;
   }
@@ -197,14 +201,32 @@ const Kits = (() => {
     Icons.set(more, 'more', '', { size: 14 });
     more.title = 'Section options';
     more.addEventListener('click', (e) => { e.stopPropagation(); openSectionMenu(kit, section, more); });
-    if (isAmbience(section)) {
+    if (!isAmbience(section) && section.playlist) {
+      title.prepend(Icons.el('note', { size: 14, className: 'section-kind-icon' }));
+      const on = Music.isPlaying(section.id);
+      const songs = Music.songsIn(section).length;
+      const toggle = document.createElement('button');
+      toggle.className = 'mini section-playlist' + (on ? ' on' : '');
+      Icons.set(toggle, on ? 'stop' : 'play', on ? 'Stop' : 'Play', { size: 11 });
+      toggle.title = on ? 'Fade out the playlist' : (section.playlistShuffle ? 'Play the songs in a random order, one after another' : 'Play the songs in order, one after another');
+      toggle.disabled = !songs;
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (Music.isPlaying(section.id)) Music.stop(section.id, 2); else Music.start(kit, section);
+      });
+      head.append(title, count, toggle, add, more);
+    } else if (isAmbience(section)) {
       title.prepend(Icons.el('layers', { size: 14, className: 'section-kind-icon' }));
       const stop = document.createElement('button');
       stop.className = 'mini section-stop';
       Icons.set(stop, 'stop', 'Stop', { size: 11 });
       stop.title = 'Fade out every layer in this section';
       stop.disabled = !section.layers.some((l) => Ambience.isPlaying(voiceId(section, l)));
-      stop.addEventListener('click', (e) => { e.stopPropagation(); for (const l of section.layers) Ambience.stop(voiceId(section, l)); });
+      stop.addEventListener('click', (e) => {
+        e.stopPropagation();
+        for (const l of section.layers) { Ambience.stop(voiceId(section, l)); delete l.on; }
+        saveSections(kit);
+      });
       head.append(title, count, stop, add, more);
     } else {
       head.append(title, count, add, more);
@@ -304,7 +326,16 @@ const Kits = (() => {
     if (fullItems.length) {
       const rows = document.createElement('div');
       rows.className = 'section-full';
-      for (const { item, sound } of fullItems) rows.appendChild(decorate(makeTrack(sound, { reorder: false }), kit, section, item));
+      for (const { item, sound } of fullItems) {
+        // In a playlist, a song starts the playlist from it (or stops it, if it's the one playing).
+        const onPlay = section.playlist ? () => {
+          if (Music.current(section.id) === sound.id) Music.stop(section.id, 2);
+          else Music.start(kit, section, sound.id);
+        } : null;
+        const row = makeTrack(sound, { reorder: false, onPlay });
+        if (section.playlist && Music.current(section.id) === sound.id) row.classList.add('playlist-current');
+        rows.appendChild(decorate(row, kit, section, item));
+      }
       body.appendChild(rows);
     }
   }
@@ -408,15 +439,27 @@ const Kits = (() => {
       name.textContent = Ambience.layerName(layer);
       const status = document.createElement('span');
       status.className = 'kit-layer-status';
-      status.textContent = on ? 'Playing' : 'Off';
+      status.textContent = on ? (layer.every ? 'Now and then' : 'Playing') : 'Off';
+      if (layer.every) status.append(Ambience.everyBadge(layer.every));
       const text = document.createElement('span');
       text.className = 'kit-layer-text';
       text.append(name, status);
       toggle.append(text);
       toggle.addEventListener('click', () => {
-        if (Ambience.isPlaying(id)) Ambience.stop(id);
-        else Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume });
+        // Remembered, so the kit can bring back the same layers when it opens.
+        if (Ambience.isPlaying(id)) { Ambience.stop(id); delete layer.on; } else { Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every }); layer.on = true; }
+        saveSections(kit);
       });
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        Ambience.cueMenu(layer.every, e, (every) => {
+          if (every) layer.every = every; else delete layer.every;
+          saveSections(kit, true);
+          if (Ambience.isPlaying(id)) { Ambience.stop(id); Ambience.start(id, { kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every }); }
+          render();
+        });
+      });
+      toggle.title += '. Right-click: loop or now and then.';
 
       const volume = document.createElement('input');
       volume.type = 'range';
@@ -442,6 +485,16 @@ const Kits = (() => {
     }
     body.appendChild(wrap);
   }
+
+  // A playlist started, moved on or stopped: refresh its section.
+  Music.onChange(() => {
+    const kit = activeKit();
+    if (!kit) return;
+    for (const section of kit.sections.filter((s) => s.playlist)) {
+      const node = $('#kit-board').querySelector(`.kit-section[data-id="${section.id}"]`);
+      if (node) node.replaceWith(makeSection(kit, section));
+    }
+  });
 
   // Playing state changes (from here, the dock, or a failed load).
   if (typeof Ambience !== 'undefined') {
@@ -573,12 +626,26 @@ const Kits = (() => {
       for (const kind of ['clips', 'full', 'bashes', 'mixed']) {
         add(KINDS[kind][1], () => { section.kind = kind; saveSections(kit, true); }, section.kind === kind ? 'checked' : '', KINDS[kind][0]);
       }
+      heading('Playlist');
+      add('Play songs one after another', () => {
+        if (section.playlist) { delete section.playlist; delete section.playlistShuffle; Music.stop(section.id, 2); } else section.playlist = true;
+        saveSections(kit, true);
+        renderBoard();
+      }, section.playlist ? 'checked' : '');
+      if (section.playlist) {
+        add('Shuffle', () => {
+          if (section.playlistShuffle) delete section.playlistShuffle; else section.playlistShuffle = true;
+          saveSections(kit, true);
+          renderBoard();
+        }, section.playlistShuffle ? 'checked' : '');
+      }
     }
     add('Remove section', () => {
       const n = isAmbience(section) ? section.layers.length : section.items.length;
       const what = isAmbience(section) ? 'layer(s)' : 'item(s)';
       if (n && !confirm(`Remove the “${section.title}” section and its ${n} ${what} from this kit? Your library isn't changed.`)) return;
       if (isAmbience(section)) for (const l of section.layers) Ambience.stop(voiceId(section, l));
+      Music.stop(section.id, 1);
       kit.sections = kit.sections.filter((s) => s !== section);
       compact(kit.sections, null);
       saveSections(kit, true);
@@ -590,8 +657,10 @@ const Kits = (() => {
   function showMenuAt(menu, anchor) {
     const rect = anchor.getBoundingClientRect();
     menu.style.left = `${Math.min(window.innerWidth - 220, rect.left)}px`;
-    menu.style.top = `${Math.max(8, Math.min(window.innerHeight - 360, rect.bottom + 4))}px`;
     menu.classList.remove('hidden');
+    // Kept on screen: it scrolls if it's taller than the window.
+    const height = menu.offsetHeight;
+    menu.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, rect.bottom + 4))}px`;
   }
 
   // "+ Section": a sound section or an ambience section.
@@ -844,6 +913,7 @@ const Kits = (() => {
     $('#kit-dialog-title').textContent = kit ? 'Edit Scene Kit' : 'New Scene Kit';
     $('#kit-name').value = kit ? kit.name : '';
     $('#kit-name').placeholder = 'e.g. Tavern Brawl, Dragon’s Lair, Haunted Forest';
+    $('#kit-autoplay').checked = !!(kit && kit.autoplay);
     const preview = () => $('#kit-preview').replaceChildren(badge(choice, 'large'));
     const picker = IconPicker.create(choice, { backgrounds: colors, onChange: (value) => { choice = value; preview(); } });
     $('#kit-icon-picker').replaceChildren(picker.element);
@@ -855,9 +925,10 @@ const Kits = (() => {
     if (dialog.returnValue !== 'save') return null;
     const name = $('#kit-name').value.trim() || (kit ? kit.name : undefined);
     const { icon, color, iconColor } = choice;
+    const autoplay = $('#kit-autoplay').checked;
     const saved = kit
-      ? await api.kits.update(kit.id, { name, icon, color, iconColor })
-      : await api.kits.update((await api.kits.create({ name })).id, { icon, color, iconColor });
+      ? await api.kits.update(kit.id, { name, icon, color, iconColor, autoplay })
+      : await api.kits.update((await api.kits.create({ name })).id, { icon, color, iconColor, autoplay });
     await refreshKits();
     return saved;
   }

@@ -19,7 +19,24 @@ final class SoundPlayer: ObservableObject {
         didSet { UserDefaults.standard.set(restartInsteadOfOverlap, forKey: "restartInsteadOfOverlap") }
     }
 
+    /// How to play a sound, beyond tapping it.
+    struct PlayOptions {
+        /// Always start another copy (a playlist's next song); never toggle it off.
+        var fresh = false
+        /// Seconds to fade in over.
+        var fadeIn: Double = 0
+        /// What Live Session listeners stop it by (default "s:<id>").
+        var group: String? = nil
+        /// Called once when this many seconds of it are left.
+        var nearEnd: (seconds: Double, action: () -> Void)? = nil
+        /// Called when it finishes by itself.
+        var onEnded: (() -> Void)? = nil
+        /// Called when it's stopped from elsewhere (Stop All, its tile).
+        var onRelease: (() -> Void)? = nil
+    }
+
     private final class Voice {
+        let token = UUID()
         let player: AVAudioPlayer
         var volume: Double
         /// Extra level from where it was played, such as a scene kit section's volume slider.
@@ -28,12 +45,21 @@ final class SoundPlayer: ObservableObject {
         let repeatGap: Double?
         /// When a repeating voice finished and is waiting to replay.
         var resumeAt: Date?
+        let group: String
+        var options: PlayOptions
+        var nearFired = false
+        /// While fading in or out, volume changes don't cut across the fade.
+        var fadingUntil: Date?
 
-        init(player: AVAudioPlayer, volume: Double, repeatGap: Double?) {
+        init(player: AVAudioPlayer, volume: Double, repeatGap: Double?, group: String, options: PlayOptions) {
             self.player = player
             self.volume = volume
             self.repeatGap = repeatGap
+            self.group = group
+            self.options = options
         }
+
+        var fading: Bool { fadingUntil.map { Date() < $0 } ?? false }
     }
 
     private var players: [UUID: [Voice]] = [:]
@@ -49,36 +75,84 @@ final class SoundPlayer: ObservableObject {
         BackgroundAudio.shared.configure()
     }
 
-    func play(_ sound: Sound, url: URL, gain: Double = 1) throws {
+    /// Plays a sound. Returns the copy's token (to stop just that copy later), or nil.
+    @discardableResult
+    func play(_ sound: Sound, url: URL, gain: Double = 1, options: PlayOptions = PlayOptions()) throws -> UUID? {
         // A repeating sound toggles: tapping it again stops it instead of stacking another copy.
-        if sound.repeatGap != nil && progress[sound.id] != nil {
+        if !options.fresh && sound.repeatGap != nil && progress[sound.id] != nil {
             stop(sound.id)
-            return
+            return nil
         }
-        if restartInsteadOfOverlap { stop(sound.id) }
+        if restartInsteadOfOverlap && !options.fresh { stop(sound.id) }
         let player = try AVAudioPlayer(contentsOf: url)
         let volume = volumes[sound.id] ?? sound.volume
-        player.volume = Float(min(1, volume * gain * masterVolume))
-        if sound.repeatGap == 0 { player.numberOfLoops = -1 } // replay immediately, gaplessly
+        let level = Float(min(1, volume * gain * masterVolume))
+        player.volume = options.fadeIn > 0 ? 0 : level
+        let repeatGap = options.fresh ? nil : sound.repeatGap
+        if repeatGap == 0 { player.numberOfLoops = -1 } // replay immediately, gaplessly
         player.prepareToPlay()
         player.play()
-        let voice = Voice(player: player, volume: volume, repeatGap: sound.repeatGap)
+        let voice = Voice(player: player, volume: volume, repeatGap: repeatGap,
+                          group: options.group ?? "s:\(sound.id.uuidString)", options: options)
         voice.gain = gain
+        if options.fadeIn > 0 {
+            player.setVolume(level, fadeDuration: options.fadeIn)
+            voice.fadingUntil = Date().addingTimeInterval(options.fadeIn)
+        }
         players[sound.id, default: []].append(voice)
         progress[sound.id] = 0
         volumes[sound.id] = volume
         startTicker()
-        live?.soundPlayed(sound, volume: min(1, volume * gain * masterVolume))
+        live?.soundPlayed(sound, volume: min(1, volume * gain * masterVolume), group: voice.group, fadeIn: options.fadeIn)
+        return voice.token
     }
 
-    func stop(_ id: UUID) {
-        let wasPlaying = players[id] != nil
-        players[id]?.forEach { $0.player.stop() }
-        players[id] = nil
+    /// Stops one copy of a sound, fading it out over `fade` seconds.
+    func release(_ id: UUID, token: UUID, fade: Double = 0) {
+        guard var list = players[id], let index = list.firstIndex(where: { $0.token == token }) else { return }
+        let voice = list.remove(at: index)
+        players[id] = list.isEmpty ? nil : list
+        if list.isEmpty {
+            progress[id] = nil
+            volumes[id] = nil
+        }
+        end(voice, fade: fade)
+    }
+
+    /// Whether that copy of a sound is still playing (not finished or stopped).
+    func isPlaying(_ id: UUID, token: UUID) -> Bool {
+        players[id]?.contains { $0.token == token } ?? false
+    }
+
+    private func end(_ voice: Voice, fade: Double) {
+        let player = voice.player
+        if fade > 0 && player.isPlaying {
+            player.setVolume(0, fadeDuration: fade)
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(fade * 1_000_000_000) + 50_000_000)
+                player.stop()
+            }
+        } else {
+            player.stop()
+        }
+        live?.groupStopped(voice.group, fade: fade)
+        // Lets a playlist know its song was stopped from elsewhere.
+        if let onRelease = voice.options.onRelease {
+            voice.options.onRelease = nil
+            onRelease()
+        }
+    }
+
+    /// Stops every copy of a sound, fading out over `fade` seconds (a scene change).
+    func stop(_ id: UUID, fade: Double = 0) {
+        guard let list = players.removeValue(forKey: id) else { return }
         progress[id] = nil
         volumes[id] = nil
-        if wasPlaying { live?.soundStopped(id) }
+        for voice in list { end(voice, fade: fade) }
     }
+
+    /// The full sounds playing, for a scene change to fade out.
+    var playingIds: [UUID] { Array(players.keys) }
 
     func stopAll() {
         for id in Array(players.keys) { stop(id) }
@@ -86,9 +160,11 @@ final class SoundPlayer: ObservableObject {
     }
 
     private func applyVolumes() {
-        for (id, list) in players {
-            for entry in list { entry.player.volume = Float(min(1, entry.volume * entry.gain * masterVolume)) }
-            if let entry = list.last { live?.soundVolume(id, volume: min(1, entry.volume * entry.gain * masterVolume)) }
+        for list in players.values {
+            for entry in list where !entry.fading {
+                entry.player.volume = Float(min(1, entry.volume * entry.gain * masterVolume))
+                live?.groupVolume(entry.group, volume: min(1, entry.volume * entry.gain * masterVolume))
+            }
         }
     }
 
@@ -99,9 +175,10 @@ final class SoundPlayer: ObservableObject {
         volumes[id] = value
         for voice in list {
             voice.volume = value
+            if voice.fading { continue }
             voice.player.volume = Float(min(1, value * voice.gain * masterVolume))
+            live?.groupVolume(voice.group, volume: min(1, value * voice.gain * masterVolume))
         }
-        if let voice = list.last { live?.soundVolume(id, volume: min(1, value * voice.gain * masterVolume)) }
     }
 
     /// Changes the extra level of playing sounds (a scene kit section's volume slider).
@@ -109,9 +186,10 @@ final class SoundPlayer: ObservableObject {
         for id in ids {
             for voice in players[id] ?? [] {
                 voice.gain = gain
+                if voice.fading { continue }
                 voice.player.volume = Float(min(1, voice.volume * gain * masterVolume))
+                live?.groupVolume(voice.group, volume: min(1, voice.volume * gain * masterVolume))
             }
-            if let voice = players[id]?.last { live?.soundVolume(id, volume: min(1, voice.volume * gain * masterVolume)) }
         }
     }
 
@@ -134,11 +212,18 @@ final class SoundPlayer: ObservableObject {
     private func tick() -> Bool {
         var next: [UUID: Double] = [:]
         let now = Date()
+        // Callbacks run after the sweep, since they may start or stop sounds.
+        var callbacks: [() -> Void] = []
         for (id, list) in players {
             var alive: [Voice] = []
             for voice in list {
                 if voice.player.isPlaying {
                     alive.append(voice)
+                    if let near = voice.options.nearEnd, !voice.nearFired,
+                       voice.player.duration > 0, voice.player.duration - voice.player.currentTime <= near.seconds {
+                        voice.nearFired = true
+                        callbacks.append(near.action)
+                    }
                 } else if let gap = voice.repeatGap {
                     if voice.resumeAt == nil { voice.resumeAt = now.addingTimeInterval(gap) }
                     if let resumeAt = voice.resumeAt, now >= resumeAt {
@@ -147,6 +232,9 @@ final class SoundPlayer: ObservableObject {
                         voice.player.play()
                     }
                     alive.append(voice)
+                } else {
+                    // Finished by itself.
+                    if let onEnded = voice.options.onEnded { callbacks.append(onEnded) }
                 }
             }
             guard let latest = alive.last?.player else {
@@ -157,6 +245,7 @@ final class SoundPlayer: ObservableObject {
             next[id] = latest.isPlaying && latest.duration > 0 ? latest.currentTime / latest.duration : 0
         }
         progress = next
+        for callback in callbacks { callback() }
         return !players.isEmpty
     }
 }

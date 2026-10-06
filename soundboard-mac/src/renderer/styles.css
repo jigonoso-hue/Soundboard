@@ -1665,3 +1665,13 @@ body.game-locked { overflow: hidden; }
 /* While your dice roll in the tray, the roll controls step aside. */
 .dice-ui { transition: opacity 0.2s ease, visibility 0.2s; }
 .dice-layer.rolling .dice-ui { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* ---- Playlists, scene autoplay, now-and-then layers ---- */
+.section-playlist.on { background: var(--accent); color: #fff; border-color: transparent; }
+.track.playlist-current { box-shadow: inset 3px 0 0 var(--accent); }
+.layer-every { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; opacity: 0.85; background: rgba(255,255,255,0.12); vertical-align: middle; white-space: nowrap; }
+.menu-note { max-width: 240px; padding: 6px 10px 8px; line-height: 1.35; }
+.kit-autoplay { margin-top: 14px; }
+.kit-autoplay-hint { margin: 4px 0 0 24px; max-width: 520px; }
+#section-menu { max-height: calc(100vh - 16px); overflow-y: auto; }
+.layer > .layer-every { grid-column: 1 / -1; justify-self: start; margin-left: 0; }

@@ -304,6 +304,8 @@ final class LiveHostEngine {
     enum Source {
         case library(UUID)
         case file(hash: String, ext: String, url: URL)
+        /// A built-in sound: every copy of the app has it, so nothing to send.
+        case builtin(String)
     }
 
     /// A play for the host to send. `to` makes it a whisper to those listeners.
@@ -322,6 +324,8 @@ final class LiveHostEngine {
         var to: [String]? = nil
         /// The player who played it, for sounds players add.
         var by: String? = nil
+        /// Seconds it fades in over (a playlist's next song, a scene change).
+        var fadeIn: Double = 0
     }
 
     /// A sound a player asked to play for everyone.
@@ -760,21 +764,27 @@ final class LiveHostEngine {
     func play(_ event: PlayEvent) {
         enqueue { [weak self] in
             guard let self else { return }
-            let file: (hash: String, ext: String)
-            switch event.source {
-            case .library(let id):
-                guard let found = await self.file(for: id) else { return }
-                file = found
-            case .file(let hash, let ext, let url):
-                self.files[hash] = url
-                file = (hash, ext)
-            }
             var message: LiveJSON = [
-                "t": "play", "pid": event.pid, "group": event.group, "hash": file.hash, "ext": file.ext,
+                "t": "play", "pid": event.pid, "group": event.group,
                 "name": event.name, "at": event.at, "volume": clamp01(event.volume), "cat": event.cat,
                 "loop": event.loop, "buzz": event.buzz, "whisper": event.to != nil,
             ]
+            switch event.source {
+            case .library(let id):
+                guard let found = await self.file(for: id) else { return }
+                message["hash"] = found.hash
+                message["ext"] = found.ext
+            case .file(let hash, let ext, let url):
+                self.files[hash] = url
+                message["hash"] = hash
+                message["ext"] = ext
+            case .builtin(let name):
+                guard LiveNet.isBuiltinName(name) else { return }
+                message["builtin"] = name
+            }
             if event.gap > 0 { message["gap"] = event.gap }
+            let fadeIn = LiveNet.fadeSeconds(event.fadeIn)
+            if fadeIn > 0 { message["fadeIn"] = fadeIn }
             if let by = event.by { message["by"] = by }
             if let targets = event.to {
                 for peer in targets where self.peers[peer] != nil { self.send(message, to: peer) }
@@ -787,11 +797,15 @@ final class LiveHostEngine {
         }
     }
 
-    func stop(group: String) {
+    /// fade: seconds listeners fade it out over (0: at once).
+    func stop(group: String, fade: Double = 0) {
         enqueue { [weak self] in
             guard let self else { return }
             self.active = self.active.filter { $0.value.group != group }
-            self.broadcast(["t": "stop", "group": group])
+            var message: LiveJSON = ["t": "stop", "group": group]
+            let seconds = LiveNet.fadeSeconds(fade)
+            if seconds > 0 { message["fade"] = seconds }
+            self.broadcast(message)
         }
     }
 
@@ -813,7 +827,8 @@ final class LiveHostEngine {
     }
 
     /// The ambience layers playing now: built-in loops by file name, library sounds by id.
-    func setAmbience(_ layers: [AmbienceLayer], names: [String: String]) {
+    /// fade: seconds listeners fade layers in and out over, for this change only (a scene change).
+    func setAmbience(_ layers: [AmbienceLayer], names: [String: String], fade: Double = 0) {
         enqueue { [weak self] in
             guard let self else { return }
             var out: [LiveJSON] = []
@@ -830,7 +845,10 @@ final class LiveHostEngine {
                 out.append(item)
             }
             self.ambience = ["t": "ambience", "layers": out]
-            self.broadcast(self.ambience)
+            var message = self.ambience
+            let seconds = LiveNet.fadeSeconds(fade)
+            if seconds > 0 { message["fade"] = seconds }
+            self.broadcast(message)
         }
     }
 
@@ -920,10 +938,12 @@ final class LiveListenerEngine {
     /// A command with local times and file URLs, for the MirrorPlayer.
     enum Command {
         case play(MirrorPlay)
-        case stop(group: String)
+        /// fade: seconds to fade it out over (0: at once).
+        case stop(group: String, fade: Double)
         case volume(group: String, volume: Double)
         case stopAll(ambienceToo: Bool)
-        case ambience([MirrorLayer])
+        /// fade: seconds layers fade in and out over (longer on a scene change).
+        case ambience([MirrorLayer], fade: Double)
     }
 
     var onState: ((State) -> Void)?
@@ -1068,7 +1088,7 @@ final class LiveListenerEngine {
         case "stop":
             let group = LiveNet.string(message["group"]) ?? ""
             for (hash, plays) in pendingPlays { pendingPlays[hash] = plays.filter { LiveNet.string($0["group"]) != group } }
-            onCommand?(.stop(group: group))
+            onCommand?(.stop(group: group, fade: LiveNet.fadeSeconds(message["fade"])))
         case "volume":
             onCommand?(.volume(group: LiveNet.string(message["group"]) ?? "", volume: clamp01(LiveNet.number(message["volume"]))))
         case "stopAll":
@@ -1079,7 +1099,7 @@ final class LiveListenerEngine {
             for layer in ambienceLayers {
                 if let hash = LiveNet.string(layer["hash"]) { fetcher.want(hash, ext: LiveNet.string(layer["ext"]) ?? "", urgent: true) }
             }
-            emitAmbience()
+            emitAmbience(fade: LiveNet.fadeSeconds(message["fade"]))
         case "chunk": fetcher.handleChunk(message)
         case "missing": fetcher.handleMissing(LiveNet.string(message["hash"]) ?? "")
         case "need":
@@ -1137,6 +1157,11 @@ final class LiveListenerEngine {
     }
 
     private func onPlay(_ message: LiveJSON) {
+        // A built-in sound (a now-and-then ambience layer): nothing to fetch.
+        if let builtin = LiveNet.string(message["builtin"]) {
+            if LiveNet.isBuiltinName(builtin), let url = builtinURL(builtin) { emitPlay(message, url: url) }
+            return
+        }
         let hash = LiveNet.string(message["hash"]) ?? ""
         let ext = LiveNet.string(message["ext"]) ?? ""
         if let url = LiveFiles.cached(hash, ext) {
@@ -1163,11 +1188,12 @@ final class LiveListenerEngine {
             gap: max(0, LiveNet.number(message["gap"]) ?? 0),
             buzz: LiveNet.bool(message["buzz"]),
             whisper: LiveNet.bool(message["whisper"]),
-            by: LiveNet.string(message["by"])
+            by: LiveNet.string(message["by"]),
+            fadeIn: LiveNet.fadeSeconds(message["fadeIn"])
         )))
     }
 
-    private func emitAmbience() {
+    private func emitAmbience(fade: Double = 0) {
         var layers: [MirrorLayer] = []
         for layer in ambienceLayers {
             let key = LiveNet.string(layer["key"]) ?? UUID().uuidString
@@ -1179,6 +1205,6 @@ final class LiveListenerEngine {
                 layers.append(MirrorLayer(key: key, url: url, name: name, volume: volume))
             }
         }
-        onCommand?(.ambience(layers))
+        onCommand?(.ambience(layers, fade: fade))
     }
 }

@@ -120,6 +120,46 @@ test('local session: listeners get files, plays, whispers and ambience', async (
   }
 });
 
+test('scene music: crossfades, built-in cues and scene-change fades', async () => {
+  const library = makeLibrary();
+  const transport = new LanHostTransport({ name: 'Scenes' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Scenes', transport, resolveSound: library.resolveSound });
+  const sam = new LiveListener({ cacheDir: tempDir('sam'), name: 'Sam' });
+  const cmds = watch(sam);
+  try {
+    sam.connect(`ws://127.0.0.1:${transport.port}`);
+    await waitFor(host, 'peers', (list) => list.length === 1);
+    // A playlist's next song fades in; the one before fades out.
+    await host.play({ pid: 'p1', group: 'pl:music:2', soundId: 'song', name: 'Song', at: Date.now(), volume: 0.7, cat: 'music', fadeIn: 4 });
+    const song = await cmds.next('play', 5000);
+    assert.equal(song.fadeIn, 4);
+    await host.stop('pl:music:1', 4);
+    assert.deepEqual(await cmds.next('stop'), { t: 'stop', group: 'pl:music:1', fade: 4 });
+    // A now-and-then layer on a built-in loop: played with nothing to fetch.
+    await host.play({ pid: 'p2', group: 'a:thunder', builtin: 'thunderstorm.wav', name: 'Thunderstorm', at: Date.now(), volume: 0.5, cat: 'ambience' });
+    const cue = await cmds.next('play');
+    assert.equal(cue.builtin, 'thunderstorm.wav');
+    assert.equal(cue.file, undefined);
+    assert.equal(cue.cat, 'ambience');
+    // A built-in name that isn't one is dropped.
+    await host.play({ pid: 'p3', group: 'a:x', builtin: '../secret.wav', name: 'X', at: Date.now(), volume: 0.5, cat: 'ambience' });
+    // A scene change fades the ambience over its own time; fades are capped at 10 s.
+    await host.setAmbience([{ key: 'kit:rain', kind: 'builtin', ref: 'rain.wav', name: 'Rain', volume: 0.5 }], 3);
+    let amb = await cmds.next('ambience');
+    for (let i = 0; i < 4 && !amb.layers.length; i++) amb = await cmds.next('ambience'); // the empty one from joining
+    assert.equal(amb.fade, 3);
+    assert.equal(amb.layers[0].builtin, 'rain.wav');
+    await host.stop('pl:music:2', 99);
+    assert.equal((await cmds.next('stop')).fade, 10);
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(cmds.seen.filter((c) => c.t === 'play').length, 0, 'the bad built-in name never played');
+  } finally {
+    sam.leave();
+    transport.close();
+  }
+});
+
 test('late joiners pick up what is already playing', async () => {
   const library = makeLibrary();
   const transport = new LanHostTransport({ name: 'Late' });

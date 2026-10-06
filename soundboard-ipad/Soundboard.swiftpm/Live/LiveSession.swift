@@ -299,6 +299,9 @@ final class LiveSession: ObservableObject {
     func attach(store: SoundStore, ambience: AmbienceMixer, kits: KitStore, bashes: BashStore, player: SoundPlayer) {
         self.store = store
         self.ambience = ambience
+        // Now-and-then ambience layers reach listeners one play at a time.
+        ambience.onCue = { [weak self] layer, name in self?.ambienceCue(layer, name: name) }
+        ambience.onCueStop = { [weak self] id, fade in self?.groupStopped("a:\(id)", fade: fade) }
         self.kits = kits
         self.bashes = bashes
         self.player = player
@@ -455,16 +458,18 @@ final class LiveSession: ObservableObject {
         emphasis = false
     }
 
-    /// A sound started on the board (tile, row or scene kit).
-    func soundPlayed(_ sound: Sound, volume: Double) {
+    /// A sound started on the board (tile, row, scene kit or playlist).
+    /// group: what listeners stop it by; fadeIn: seconds it fades in over.
+    func soundPlayed(_ sound: Sound, volume: Double, group: String? = nil, fadeIn: Double = 0) {
         guard role == .host, let host else { return }
         if sound.gmOnly == true {
             if !whisperTargets.isEmpty { notice = "Broadcaster-only sounds can't be whispered." }
             return
         }
         var event = LiveHostEngine.PlayEvent(
-            pid: pid(), group: "s:\(sound.id.uuidString)", source: .library(sound.id), name: sound.name,
+            pid: pid(), group: group ?? "s:\(sound.id.uuidString)", source: .library(sound.id), name: sound.name,
             at: LiveNet.now, volume: volume, cat: sound.isFull ? "music" : "sfx")
+        event.fadeIn = fadeIn
         event.loop = sound.repeatGap == 0
         event.gap = sound.repeatGap ?? 0
         event.buzz = sound.buzz == true || emphasis
@@ -479,12 +484,36 @@ final class LiveSession: ObservableObject {
         host.play(event)
     }
 
-    func soundStopped(_ id: UUID) {
-        host?.stop(group: "s:\(id.uuidString)")
+    /// A playing sound stopped (fading out over `fade` seconds) or changed volume.
+    func groupStopped(_ group: String, fade: Double = 0) {
+        host?.stop(group: group, fade: fade)
     }
 
-    func soundVolume(_ id: UUID, volume: Double) {
-        host?.volume(group: "s:\(id.uuidString)", volume: volume)
+    func groupVolume(_ group: String, volume: Double) {
+        host?.volume(group: group, volume: volume)
+    }
+
+    /// A now-and-then ambience layer played once: listeners play it too.
+    func ambienceCue(_ layer: AmbienceLayer, name: String) {
+        guard role == .host, let host else { return }
+        if layer.kind == .sound, let id = UUID(uuidString: layer.ref), store?.sound(id)?.gmOnly == true { return }
+        let source: LiveHostEngine.Source
+        switch layer.kind {
+        case .builtin: source = .builtin(layer.ref)
+        case .sound:
+            guard let id = UUID(uuidString: layer.ref) else { return }
+            source = .library(id)
+        }
+        host.play(LiveHostEngine.PlayEvent(pid: pid(), group: "a:\(layer.id)", source: source, name: name,
+                                           at: LiveNet.now, volume: layer.volume, cat: "ambience"))
+    }
+
+    /// A scene change: ambience sent in the next moment fades this long for listeners.
+    private var sceneFade: (seconds: Double, until: Date)?
+
+    func sceneChanged(fade: Double) {
+        sceneFade = (fade, Date().addingTimeInterval(1.5))
+        syncHostState()
     }
 
     func stoppedAll() {
@@ -581,7 +610,8 @@ final class LiveSession: ObservableObject {
             lastAmbience = layers
             var names: [String: String] = [:]
             for layer in layers { names[layer.id] = ambience.name(of: layer) }
-            host.setAmbience(layers, names: names)
+            let fade = sceneFade.map { Date() < $0.until ? $0.seconds : 0 } ?? 0
+            host.setAmbience(layers, names: names, fade: fade)
         }
         let kit = currentKitId.flatMap { kits?.kit($0) }
         let sceneName: String? = kit?.name
@@ -683,10 +713,10 @@ final class LiveSession: ObservableObject {
             guard let self else { return }
             switch command {
             case .play(let play): self.mirror.play(play)
-            case .stop(let group): self.mirror.stop(group: group)
+            case .stop(let group, let fade): self.mirror.stop(group: group, fade: fade)
             case .volume(let group, let volume): self.mirror.setVolume(volume, group: group)
             case .stopAll(let ambienceToo): self.mirror.stopAll(ambienceToo: ambienceToo)
-            case .ambience(let layers): self.mirror.setAmbience(layers)
+            case .ambience(let layers, let fade): self.mirror.setAmbience(layers, fade: fade > 0 ? fade : AmbienceMixer.fade)
             }
         }
         engine.onScene = { [weak self] name in self?.scene = name }

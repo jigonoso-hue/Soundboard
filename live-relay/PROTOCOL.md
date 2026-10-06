@@ -69,10 +69,10 @@ On the local network the host assigns peer ids itself.
 | `scene {name}` | The scene kit the host has open (`null` for the library) |
 | `prefetch {files: [{hash, ext}]}` | Files the listener should fetch ahead of time |
 | `play {…}` | Play a sound (below) |
-| `stop {group}` | Stop everything in a group |
+| `stop {group, fade?}` | Stop everything in a group; `fade` (seconds, up to 10) fades it out instead |
 | `volume {group, volume}` | Change the volume of a group |
 | `stopAll {}` | Stop all sounds (not ambience) |
-| `ambience {layers: […]}` | The full ambience state (below) |
+| `ambience {layers: […], fade?}` | The full ambience state (below) |
 | `bye {}` | The host ended the session |
 | `kicked {}` | The host removed this listener; it disconnects and doesn't reconnect |
 | `roll {…}` / `rollResult {id, values}` | Someone's dice roll, for everyone to see (see Dice) |
@@ -97,7 +97,7 @@ and converts host times to its own clock.
 {
   "t": "play",
   "pid": "p42",            // unique per play
-  "group": "s:<sound id>", // stop/volume target: "s:<sound id>" or "b:<bash run id>"
+  "group": "s:<sound id>", // stop/volume target (see Groups below)
   "hash": "<sha256>", "ext": "mp3", "name": "Dragon Roar",
   "at": 1767000000000,     // host clock (ms) when the sound's start plays
   "volume": 0.8,           // 0…1, already including the host's master volume
@@ -106,9 +106,20 @@ and converts host times to its own clock.
   "gap": 3,                // optional: repeat after this many seconds
   "buzz": false,           // vibrate phones when it starts
   "whisper": false,        // sent only to some listeners
-  "by": "Sam"              // optional: the listener who played it
+  "by": "Sam",             // optional: the listener who played it
+  "fadeIn": 4              // optional: seconds to fade in over (up to 10)
 }
 ```
+
+Instead of `hash` and `ext`, a play can name a built-in sound with
+`"builtin": "thunderstorm.wav"` (a file name of lowercase letters, digits and
+dashes, ending `.wav`). Every copy of the app has those, so nothing is fetched.
+
+**Groups.** `s:<sound id>` is a sound tile or row; `b:<bash run id>` a bash;
+`pl:<section id>:<n>` one song of a playlist (each song has its own group, so the
+next can fade in while this one fades out); `a:<layer id>` a now-and-then
+ambience layer (each time it plays is a `play` with `cat: "ambience"`); and
+`p:<peer>:<pid>` a listener's own sound.
 
 If `at` is in the past (a late joiner, or a file that arrived late), the
 listener starts part-way through. If the file isn't cached, it requests it and
@@ -124,8 +135,26 @@ plays once it arrives, still in sync with `at`.
 ```
 
 The listener fades in layers it isn't playing, fades out layers that are gone,
-and adjusts volumes. Built-in loops ship with every copy of the app, so they
+and adjusts volumes. Fades take 1.5 s, or `fade` seconds when the message has
+one: a scene change sends `"fade": 3` so the old scene's ambience fades out as
+the new one's fades in. Late joiners get the layers without a fade.
+
+Now-and-then layers (thunder every few minutes) aren't in `layers`: each time
+one plays, the host sends a `play` for it (group `a:<layer id>`), and a `stop`
+when it's switched off. Built-in loops ship with every copy of the app, so they
 need no transfer.
+
+## Scene music
+
+The host's app runs playlists and scene changes; listeners only see plays,
+stops and ambience:
+
+- **Playlists.** A few seconds before a song ends, the host sends the next
+  song's `play` with `fadeIn` and a `stop` with `fade` for the one ending, so
+  they crossfade (4 s, or a third of a short song).
+- **Scene changes.** Opening a kit set to start its music and ambience sends
+  `stop` with `fade: 3` for the songs playing, `play` with `fadeIn: 3` for the
+  kit's playlist and `ambience` with `fade: 3`.
 
 ## Listeners' sounds
 

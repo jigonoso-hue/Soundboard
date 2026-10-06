@@ -72,8 +72,8 @@ const Live = (() => {
   const pid = () => `${Date.now().toString(36)}-${nextPid++}`;
   const category = (sound) => (isFull(sound) ? 'music' : 'sfx');
 
-  // A sound tile or row started playing.
-  function soundPlayed(sound) {
+  // A sound tile or row started playing. options: { group, fadeIn }.
+  function soundPlayed(sound, options = {}) {
     if (!hosting() || !sound || sound.gmOnly) {
       if (hosting() && sound && sound.gmOnly && whisper.size) toast('Broadcaster-only sounds can’t be whispered.', true);
       return;
@@ -81,10 +81,11 @@ const Live = (() => {
     const event = {
       t: 'play',
       pid: pid(),
-      group: `s:${sound.id}`,
+      group: options.group || `s:${sound.id}`,
       soundId: sound.id,
       name: sound.name,
       at: Date.now(),
+      ...(options.fadeIn > 0 ? { fadeIn: options.fadeIn } : {}),
       volume: Math.min(1, (sound.volume ?? 1) * prefs.master),
       cat: category(sound),
       loop: !!sound.repeat && !sound.repeat.gap,
@@ -102,12 +103,13 @@ const Live = (() => {
     api.live.hostEvent(event);
   }
 
-  function soundStopped(soundId) {
-    if (hosting()) api.live.hostEvent({ t: 'stop', group: `s:${soundId}` });
+  // A playing sound stopped (fading out over `fade` seconds) or changed volume.
+  function groupStopped(group, fade = 0) {
+    if (hosting()) api.live.hostEvent({ t: 'stop', group, ...(fade > 0 ? { fade } : {}) });
   }
 
-  function soundVolume(soundId, volume) {
-    if (hosting()) api.live.hostEvent({ t: 'volume', group: `s:${soundId}`, volume });
+  function groupVolume(group, volume) {
+    if (hosting()) api.live.hostEvent({ t: 'volume', group, volume });
   }
 
   function stoppedAll() {
@@ -138,20 +140,35 @@ const Live = (() => {
     if (hosting()) api.live.hostEvent({ t: 'stop', group: `b:${runId}` });
   };
 
+  // Now-and-then ambience layers: each time one plays, listeners play it too.
+  Ambience.onCue(({ key, kind, ref, name, volume }) => {
+    if (!hosting()) return;
+    if (kind === 'sound' && sounds.find((s) => s.id === ref)?.gmOnly) return;
+    api.live.hostEvent({
+      t: 'play', pid: pid(), group: `a:${key}`, name, at: Date.now(), volume: Math.min(1, volume), cat: 'ambience',
+      ...(kind === 'builtin' ? { builtin: ref } : { soundId: ref }),
+    });
+  });
+  Ambience.onCueStop((key, fade) => groupStopped(`a:${key}`, fade));
+
   // Ambience, the open scene kit and what listeners should fetch ahead of
   // time are checked twice a second and sent when they change.
   let lastAmbience = '';
   let lastScene;
   let lastPrefetch = '';
   let lastCatalog = '';
-  function syncHostState(force = false) {
+  // A scene change in progress: ambience sent in the next moment fades this long.
+  let sceneFade = null;
+  // fade: seconds for listeners to fade layers in and out (a scene change).
+  function syncHostState(force = false, fade = 0) {
     if (!hosting()) return;
+    if (!fade && sceneFade && Date.now() < sceneFade.until) fade = sceneFade.fade;
     const gmOnly = new Set(sounds.filter((s) => s.gmOnly).map((s) => s.id));
     const layers = Ambience.snapshot().filter((l) => l.kind === 'builtin' || !gmOnly.has(l.ref));
     const ambience = JSON.stringify(layers);
     if (force || ambience !== lastAmbience) {
       lastAmbience = ambience;
-      api.live.hostEvent({ t: 'ambience', layers });
+      api.live.hostEvent({ t: 'ambience', layers, ...(fade > 0 ? { fade } : {}) });
     }
     const kit = typeof Kits !== 'undefined' ? Kits.activeKit() : null;
     const scene = kit ? kit.name : null;
@@ -311,12 +328,17 @@ const Live = (() => {
       sink(audio);
       const entry = { audio, group: cmd.group, cat: cmd.cat, volume: cmd.volume, timer: null, name: cmd.name, whisper: cmd.whisper, by: cmd.by || null, at: cmd.at };
       plays.set(cmd.pid, entry);
-      audio.volume = Math.min(1, cmd.volume * level(cmd.cat));
+      audio.volume = cmd.fadeIn > 0 ? 0 : Math.min(1, cmd.volume * level(cmd.cat));
       if (cmd.loop) audio.loop = true;
       const finish = () => { clearTimeout(entry.timer); if (plays.get(cmd.pid) === entry) { plays.delete(cmd.pid); renderNowPlaying(); } };
       const startAt = (position) => {
         audio.currentTime = position;
         audio.play().catch(finish);
+        // A song crossfading in: what's left of the fade, if it started late.
+        if (cmd.fadeIn > 0) {
+          const left = Math.max(0, cmd.fadeIn - position);
+          rampTo(entry, Math.min(1, entry.volume * level(entry.cat)), left);
+        }
         if (cmd.whisper) Stage.whisper();
         if (cmd.buzz) buzz(cmd);
         renderNowPlaying();
@@ -345,18 +367,31 @@ const Live = (() => {
       }, { once: true });
     }
 
-    function stopPlay(id) {
+    // Fades a playing sound's volume to `target` over `seconds`.
+    function rampTo(entry, target, seconds, then) {
+      clearInterval(entry.ramp);
+      if (!(seconds > 0)) { entry.audio.volume = target; if (then) then(); return; }
+      const from = entry.audio.volume;
+      const started = Date.now();
+      entry.ramp = setInterval(() => {
+        const t = Math.min(1, (Date.now() - started) / (seconds * 1000));
+        entry.audio.volume = Math.max(0, Math.min(1, from + (target - from) * t));
+        if (t >= 1) { clearInterval(entry.ramp); entry.ramp = null; if (then) then(); }
+      }, 40);
+    }
+
+    function stopPlay(id, fade = 0) {
       const entry = plays.get(id);
       if (!entry) return;
       clearTimeout(entry.timer);
-      entry.audio.pause();
-      entry.audio.removeAttribute('src');
-      entry.audio.load();
       plays.delete(id);
+      const end = () => { entry.audio.pause(); entry.audio.removeAttribute('src'); entry.audio.load(); };
+      if (fade > 0 && !entry.audio.paused) rampTo(entry, 0, fade, end);
+      else { clearInterval(entry.ramp); end(); }
     }
 
-    function stopGroup(group) {
-      for (const [id, entry] of plays) if (entry.group === group) stopPlay(id);
+    function stopGroup(group, fade = 0) {
+      for (const [id, entry] of plays) if (entry.group === group) stopPlay(id, fade);
       renderNowPlaying();
     }
 
@@ -364,28 +399,29 @@ const Live = (() => {
       for (const entry of plays.values()) {
         if (entry.group !== group) continue;
         entry.volume = volume;
-        entry.audio.volume = Math.min(1, volume * level(entry.cat));
+        if (!entry.ramp) entry.audio.volume = Math.min(1, volume * level(entry.cat));
       }
     }
 
-    // Fades a looping layer to `target` over a second and a half.
-    function fade(layer, target, then) {
+    // Fades a looping layer to `target` over a second and a half (or `seconds`).
+    function fade(layer, target, then, seconds = 1.5) {
       clearInterval(layer.fade);
       const from = layer.audio.volume;
       const started = Date.now();
       layer.fade = setInterval(() => {
-        const t = Math.min(1, (Date.now() - started) / 1500);
+        const t = Math.min(1, (Date.now() - started) / (seconds * 1000));
         layer.audio.volume = Math.max(0, Math.min(1, from + (target - from) * t));
         if (t >= 1) { clearInterval(layer.fade); if (then) then(); }
       }, 50);
     }
 
-    function setAmbience(list) {
+    // seconds: how long layers fade in and out (longer on a scene change).
+    function setAmbience(list, seconds = 1.5) {
       const keep = new Set(list.map((l) => l.key));
       for (const [key, layer] of layers) {
         if (keep.has(key)) continue;
         layers.delete(key);
-        fade(layer, 0, () => { layer.audio.pause(); layer.audio.removeAttribute('src'); layer.audio.load(); });
+        fade(layer, 0, () => { layer.audio.pause(); layer.audio.removeAttribute('src'); layer.audio.load(); }, seconds);
       }
       for (const item of list) {
         const existing = layers.get(item.key);
@@ -400,7 +436,7 @@ const Live = (() => {
         sink(audio);
         const layer = { audio, volume: item.volume, fade: null, name: item.name };
         layers.set(item.key, layer);
-        audio.play().then(() => fade(layer, Math.min(1, item.volume * level('ambience')))).catch(() => layers.delete(item.key));
+        audio.play().then(() => fade(layer, Math.min(1, item.volume * level('ambience')), null, seconds)).catch(() => layers.delete(item.key));
       }
       renderNowPlaying();
     }
@@ -412,7 +448,7 @@ const Live = (() => {
     }
 
     function applyVolumes() {
-      for (const entry of plays.values()) entry.audio.volume = Math.min(1, entry.volume * level(entry.cat));
+      for (const entry of plays.values()) if (!entry.ramp) entry.audio.volume = Math.min(1, entry.volume * level(entry.cat));
       for (const layer of layers.values()) { clearInterval(layer.fade); layer.audio.volume = Math.min(1, layer.volume * level('ambience')); }
     }
 
@@ -422,7 +458,8 @@ const Live = (() => {
       const seen = new Set();
       for (const [id, entry] of [...plays].sort((a, b) => a[1].at - b[1].at)) {
         if (entry.whisper || !entry.name) continue;
-        const kind = entry.cat === 'music' ? 'music' : 'sound';
+        // A now-and-then ambience sound (thunder) shows with the ambience.
+        const kind = entry.cat === 'music' ? 'music' : entry.cat === 'ambience' ? 'ambience' : 'sound';
         const key = `${kind}-${entry.name}-${entry.by || ''}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -455,10 +492,10 @@ const Live = (() => {
     if (!listening()) return;
     switch (cmd.t) {
       case 'play': Mirror.play(cmd); break;
-      case 'stop': Mirror.stopGroup(cmd.group); break;
+      case 'stop': Mirror.stopGroup(cmd.group, cmd.fade || 0); break;
       case 'volume': Mirror.setGroupVolume(cmd.group, cmd.volume); break;
       case 'stopAll': Mirror.stopAll(!!cmd.ambienceToo); break;
-      case 'ambience': Mirror.setAmbience(cmd.layers || []); break;
+      case 'ambience': Mirror.setAmbience(cmd.layers || [], cmd.fade > 0 ? cmd.fade : 1.5); break;
       default: break;
     }
   });
@@ -1214,7 +1251,9 @@ const Live = (() => {
   api.live.status().then((current) => { bonjour = current.bonjour !== false; setStatus(current); });
 
   return {
-    soundPlayed, soundStopped, soundVolume, stoppedAll, hosting, listening, myName, rollStart, rollResult, claimColor,
+    soundPlayed, groupStopped, groupVolume, stoppedAll,
+    // A scene change: send the new ambience now, fading over `fade` seconds.
+    sceneChanged: (fade) => { sceneFade = { fade, until: Date.now() + 1500 }; syncHostState(false, fade); }, hosting, listening, myName, rollStart, rollResult, claimColor,
     shareCustomDice, tableSend,
     you: () => you,
     peers: () => status.peers || [],

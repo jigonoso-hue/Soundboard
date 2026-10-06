@@ -131,7 +131,10 @@ struct AmbienceStrip: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint(isOn ? "Fades this layer out" : "Fades this layer in")
+            .accessibilityHint((isOn ? "Fades this layer out" : "Fades this layer in") + ". Touch and hold to make it play now and then.")
+
+            // On its own line, so a long name doesn't hide it.
+            if let every = layer.every { EveryBadge(every: every) }
 
             Slider(
                 value: Binding(get: { layer.volume }, set: { mixer.setVolume($0, for: layer) }),
@@ -152,6 +155,7 @@ struct AmbienceStrip: View {
                 .strokeBorder(isOn ? activeColor : theme.cardStroke, lineWidth: 1)
         )
         .contextMenu {
+            EveryMenu(every: layer.every) { mixer.setEvery($0, for: layer) }
             Button(role: .destructive) {
                 mixer.remove(layer)
             } label: {

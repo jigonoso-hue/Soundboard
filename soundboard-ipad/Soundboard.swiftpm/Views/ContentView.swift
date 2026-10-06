@@ -11,6 +11,7 @@ struct ContentView: View {
     @StateObject private var ui = AppUI()
     @StateObject private var themes = ThemeSettings()
     @StateObject private var live = LiveSession()
+    @StateObject private var music = MusicDirector()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showBrowser = false
     @State private var selection: Destination? = .all
@@ -116,6 +117,7 @@ struct ContentView: View {
         .environmentObject(youtube)
         .environmentObject(themes)
         .environmentObject(live)
+        .environmentObject(music)
         .overlay(alignment: .top) {
             if let notice = live.notice {
                 Text(notice)
@@ -144,13 +146,18 @@ struct ContentView: View {
             live.attach(store: store, ambience: ambience, kits: kits, bashes: bashes, player: player)
             player.live = live
             bashPlayer.live = live
+            music.attach(store: store, player: player, ambience: ambience, live: live)
             youtube.onCaptured = { file, name, source in
                 _ = try store.addFile(at: file, name: name, source: source)
             }
         }
         .onChange(of: store.sounds) { _, _ in ambience.syncWithLibrary() }
-        .onChange(of: selection) { _, destination in
+        .onChange(of: selection) { old, destination in
             if case .kit(let id)? = destination { live.currentKitId = id } else { live.currentKitId = nil }
+            // A kit set to start its music and ambience: the scene changes.
+            if case .kit(let id)? = destination, destination != old, let kit = kits.kit(id), kit.autoplay == true {
+                music.sceneOpened(kit)
+            }
         }
         .onChange(of: store.recentlyAdded) { _, _ in showTaggingIfNeeded() }
         .onChange(of: showBrowser) { _, open in

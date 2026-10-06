@@ -432,10 +432,10 @@ function registerLiveIpc() {
         break;
       case 'gameControl': host.gameControl(event); break;
       case 'catalog': host.setCatalog(event.items); break;
-      case 'stop': host.stop(event.group); break;
+      case 'stop': host.stop(event.group, event.fade); break;
       case 'volume': host.volume(event.group, event.volume); break;
       case 'stopAll': host.stopAll(); break;
-      case 'ambience': host.setAmbience(event.layers); break;
+      case 'ambience': host.setAmbience(event.layers, event.fade); break;
       case 'scene': host.setScene(event.name); break;
       case 'prefetch': host.setPrefetch(event.ids); break;
       default: break;
@@ -467,6 +467,7 @@ function registerLiveIpc() {
     listener.on('catalog', (items) => { if (live === session) sendToMain('live:catalog', items); });
     listener.on('command', (command) => {
       if (command.file) command.url = `sound://live/${encodeURIComponent(path.basename(command.file))}`;
+      else if (command.builtin) command.url = `sound://builtin/${encodeURIComponent(command.builtin)}`;
       if (command.layers) {
         for (const layer of command.layers) {
           layer.url = layer.builtin ? `sound://builtin/${encodeURIComponent(layer.builtin)}` : `sound://live/${encodeURIComponent(path.basename(layer.file))}`;

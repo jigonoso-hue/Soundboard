@@ -29,6 +29,8 @@ Where the code lives, side by side:
 | Roll requests, initiative, who wins | `src/renderer/table.js` | `Views/TableView.swift` |
 | Games: buzzer and quiz (rules) | `src/game.js` | `Live/LiveGame.swift` (keep in step) |
 | Games: screens | `src/renderer/games.js`, `styles.css` | `Views/GamesView.swift` |
+| Playlists and scene changes | `src/renderer/music.js` | `Audio/MusicDirector.swift` (keep in step) |
+| Ambience (loops, now-and-then layers) | `src/renderer/ambience.js` | `Audio/AmbienceMixer.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
 
 ## Design for iPhone first

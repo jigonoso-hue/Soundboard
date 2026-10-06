@@ -17,6 +17,8 @@ struct MirrorPlay {
     var whisper: Bool
     /// The player who played it, for sounds players add.
     var by: String? = nil
+    /// Seconds it fades in over (a playlist's next song, a scene change).
+    var fadeIn: Double = 0
 }
 
 /// One thing playing, for the stage's now-playing list.
@@ -71,13 +73,23 @@ final class MirrorPlayer {
         stopVoice(play.pid)
         guard let player = try? AVAudioPlayer(contentsOf: play.url) else { return }
         let voice = Voice(player: player, play: play)
-        player.volume = Float(min(1, play.volume * level(play.category)))
+        let target = Float(min(1, play.volume * level(play.category)))
+        player.volume = play.fadeIn > 0 ? 0 : target
         if play.loop { player.numberOfLoops = -1 }
         player.prepareToPlay()
         voices[play.pid] = voice
 
         let wait = play.at.timeIntervalSinceNow
         let length = player.duration
+        if play.fadeIn > 0 {
+            // Fades in from when it starts; if it started a while ago, for what's left of the fade.
+            let fadeIn = play.fadeIn
+            Task { @MainActor [weak self] in
+                if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) }
+                guard self?.voices[play.pid] === voice else { return }
+                player.setVolume(target, fadeDuration: max(0.05, fadeIn + min(0, wait)))
+            }
+        }
         if wait > 0 {
             player.play(atTime: player.deviceCurrentTime + wait)
             announce(play, after: wait)
@@ -120,8 +132,9 @@ final class MirrorPlayer {
         }
     }
 
-    func stop(group: String) {
-        for (pid, voice) in voices where voice.play.group == group { stopVoice(pid) }
+    /// fade: seconds to fade out over (0: at once).
+    func stop(group: String, fade: Double = 0) {
+        for (pid, voice) in voices where voice.play.group == group { stopVoice(pid, fade: fade) }
         onChange?()
     }
 
@@ -138,18 +151,26 @@ final class MirrorPlayer {
         onChange?()
     }
 
-    private func stopVoice(_ pid: String) {
-        voices.removeValue(forKey: pid)?.player.stop()
+    private func stopVoice(_ pid: String, fade: Double = 0) {
+        guard let voice = voices.removeValue(forKey: pid) else { return }
+        let player = voice.player
+        guard fade > 0, player.isPlaying else { player.stop(); return }
+        player.setVolume(0, fadeDuration: fade)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(fade * 1_000_000_000) + 50_000_000)
+            player.stop()
+        }
     }
 
-    func setAmbience(_ list: [MirrorLayer]) {
+    /// fade: seconds layers fade in and out over (longer on a scene change).
+    func setAmbience(_ list: [MirrorLayer], fade: Double = AmbienceMixer.fade) {
         let keep = Set(list.map(\.key))
         for (key, entry) in layers where !keep.contains(key) {
             layers[key] = nil
-            entry.player.setVolume(0, fadeDuration: AmbienceMixer.fade)
+            entry.player.setVolume(0, fadeDuration: fade)
             let player = entry.player
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(AmbienceMixer.fade * 1_000_000_000) + 50_000_000)
+                try? await Task.sleep(nanoseconds: UInt64(fade * 1_000_000_000) + 50_000_000)
                 player.stop()
             }
         }
@@ -165,7 +186,7 @@ final class MirrorPlayer {
             player.volume = 0
             player.prepareToPlay()
             player.play()
-            player.setVolume(target, fadeDuration: AmbienceMixer.fade)
+            player.setVolume(target, fadeDuration: fade)
             layers[layer.key] = (player, layer)
         }
         onChange?()
@@ -183,7 +204,8 @@ final class MirrorPlayer {
         for (pid, voice) in voices.sorted(by: { $0.value.play.at < $1.value.play.at }) {
             let play = voice.play
             guard !play.whisper, !play.name.isEmpty else { continue }
-            let kind: NowPlayingItem.Kind = play.category == "music" ? .music : .sound
+            // A now-and-then ambience sound (thunder) shows with the ambience.
+            let kind: NowPlayingItem.Kind = play.category == "music" ? .music : play.category == "ambience" ? .ambience : .sound
             let key = "\(kind)-\(play.name)-\(play.by ?? "")"
             guard !seen.contains(key) else { continue }
             seen.insert(key)

@@ -21,6 +21,8 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
   - Drag items between sections, or long-press an item → **Move to Section**.
   - **Ambience sections** hold looping layers (built-in loops or your own sounds), each with its own on/off and volume.
   - **+ Section** asks for a name and type. It can also add a **volume slider** for the section, which adjusts everything played from it, and a **shuffle button**, which plays a random sound or bash from it. You can turn both on or off later in the section's **⋯** menu.
+  - **Playlists.** In a sound section's **⋯** menu, turn on **Play Songs One After Another**. Its songs (full sounds) then play in order, each crossfading into the next a few seconds before it ends, and start again from the top after the last. **Play** / **Stop** sits in the section's title bar; tapping a song starts the playlist from it. **Shuffle** (in the same menu) plays them in a random order, a new one each time round. **Stop All** stops the playlist too.
+  - **Start its music and ambience when opened** (in **Edit** for the kit): opening the kit is a scene change. The music and ambience that are playing fade out over 3 seconds while the kit's first playlist and its ambience layers fade in: the layers you had on when you last left the kit (the first time, all of them). Listeners hear the same fades.
   - While a kit is open, the toolbar only has the master volume and **Stop All**.
 - **Full sounds** show a volume slider while they play, like ambience layers. The level you set is kept for next time.
 - **Options** (in the sidebar):
@@ -91,6 +93,8 @@ The online (YouTube) browser always blocks ads, using the same blocker as the Ma
 
 The **Ambience** strip at the top of the board lists the built-in loops. Tap a layer to fade it in or out, and use its slider to set its volume. The slider next to the title sets all layers at once. **Stop All** stops only soundboard effects, while **Stop Ambience** fades out the background. To add a layer, tap **Add Layer**, or long-press any sound and choose **Add to Ambience**. Long-press a layer to remove it.
 
+**Now and then.** Long-press a layer (in the strip or in a scene kit) and pick **Now and Then: Every 20 s–1 min**, **1–3 min** or **3–8 min**: instead of looping, it plays once at a random moment in that range, again and again, until you switch it off. Use it for thunder, a wolf howling or a distant bell. The card shows the range; **Always (Loops)** turns it back into a loop. Listeners hear each one as it plays.
+
 ## Live Session
 
 Play to your listeners' own devices, or tune in to your broadcaster's. Tap the **Live** button (the radio waves) in the toolbar.
@@ -146,7 +150,8 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Audio/BashPlayer.swift` | Bash playback, timed on the audio clock |
 | `Audio/SoundPlayer.swift` | Playback, volumes, progress |
 | `Audio/AudioFiles.swift` | Streaming .m4a encoding of captures and trimming audio out of videos |
-| `Audio/AmbienceMixer.swift` | Ambience layers |
+| `Audio/AmbienceMixer.swift` | Ambience layers (looping, or now and then) |
+| `Audio/MusicDirector.swift` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |
 | `Audio/BackgroundAudio.swift` | Audio session, interruptions, and staying alive in the background during Live Sessions |
 | `BackgroundAudio.plist` | Declares background audio (merged into the app's Info.plist) |
 | `Resources/Ambience/` | Built-in loops (made by `tools/generate-ambience.py`) |

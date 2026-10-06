@@ -23,6 +23,7 @@ const MAX_MESSAGE = 1024 * 1024;
 const CHUNKS_IN_FLIGHT = 4;
 const HASH_RE = /^[0-9a-f]{64}$/;
 const EXT_RE = /^[a-z0-9]{1,5}$/;
+const BUILTIN_RE = /^[a-z0-9-]+\.wav$/;
 
 let Bonjour = null;
 try { ({ Bonjour } = require('bonjour-service')); } catch { /* local sessions unavailable */ }
@@ -775,7 +776,11 @@ class LiveHost extends EventEmitter {
 
   async doPlay(event) {
     let file;
-    if (event.file) {
+    if (event.builtin) {
+      // A built-in sound: every copy of the app has it, so nothing to send.
+      if (!BUILTIN_RE.test(String(event.builtin))) return;
+      file = { builtin: String(event.builtin) };
+    } else if (event.file) {
       const { hash, ext } = event.file;
       if (!HASH_RE.test(String(hash)) || !EXT_RE.test(String(ext)) || !event.file.file) return;
       this.files.set(hash, { file: event.file.file, ext });
@@ -788,8 +793,7 @@ class LiveHost extends EventEmitter {
       t: 'play',
       pid: String(event.pid),
       group: String(event.group),
-      hash: file.hash,
-      ext: file.ext,
+      ...(file.builtin ? { builtin: file.builtin } : { hash: file.hash, ext: file.ext }),
       name: String(event.name || ''),
       at: Number(event.at) || Date.now(),
       volume: clamp01(event.volume),
@@ -799,6 +803,8 @@ class LiveHost extends EventEmitter {
       whisper: Array.isArray(event.to) ? event.to.length > 0 : !!event.to,
     };
     if (Number(event.gap) > 0) message.gap = Number(event.gap);
+    const fadeIn = fadeSeconds(event.fadeIn);
+    if (fadeIn) message.fadeIn = fadeIn;
     if (event.by) message.by = String(event.by).slice(0, 40);
     const targets = Array.isArray(event.to) ? event.to : (event.to ? [event.to] : null);
     if (targets) {
@@ -815,11 +821,12 @@ class LiveHost extends EventEmitter {
     this.broadcast(message);
   }
 
-  stop(group) { return this.enqueue(() => this.doStop(group)); }
+  stop(group, fade) { return this.enqueue(() => this.doStop(group, fade)); }
 
-  doStop(group) {
+  doStop(group, fade) {
     for (const [pid, entry] of this.active) if (entry.group === group) this.active.delete(pid);
-    this.broadcast({ t: 'stop', group: String(group) });
+    const seconds = fadeSeconds(fade);
+    this.broadcast({ t: 'stop', group: String(group), ...(seconds ? { fade: seconds } : {}) });
   }
 
   volume(group, volume) { return this.enqueue(() => this.doVolume(group, volume)); }
@@ -837,9 +844,9 @@ class LiveHost extends EventEmitter {
   }
 
   // layers: [{ key, kind: 'builtin'|'sound', ref, name, volume }]
-  setAmbience(layers) { return this.enqueue(() => this.doSetAmbience(layers)); }
+  setAmbience(layers, fade) { return this.enqueue(() => this.doSetAmbience(layers, fade)); }
 
-  async doSetAmbience(layers) {
+  async doSetAmbience(layers, fade) {
     const out = [];
     for (const layer of layers || []) {
       const base = { key: String(layer.key), name: String(layer.name || ''), volume: clamp01(layer.volume) };
@@ -849,7 +856,9 @@ class LiveHost extends EventEmitter {
       }
     }
     this.ambience = { t: 'ambience', layers: out };
-    this.broadcast(this.ambience);
+    const seconds = fadeSeconds(fade);
+    // The fade is for this change only (a scene change); late joiners just get the layers.
+    this.broadcast(seconds ? { ...this.ambience, fade: seconds } : this.ambience);
   }
 
   setScene(name) { return this.enqueue(() => this.doSetScene(name)); }
@@ -894,6 +903,12 @@ function hashesIn(message) {
   if (message.t === 'prefetch') return message.files.map((f) => f.hash);
   if (message.t === 'ambience') return message.layers.filter((l) => l.hash).map((l) => l.hash);
   return [];
+}
+
+// A fade length in seconds from a message: 0 (none) up to 10.
+function fadeSeconds(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.min(10, n) : 0;
 }
 
 function clamp01(value) {
@@ -1011,13 +1026,18 @@ class LiveListener extends EventEmitter {
         for (const f of message.files || []) this.want(f.hash, f.ext, false);
         break;
       case 'play': this.onPlay(message); break;
-      case 'stop': this.dropPending(message.group); this.emit('command', { t: 'stop', group: String(message.group) }); break;
+      case 'stop': {
+        this.dropPending(message.group);
+        const fade = fadeSeconds(message.fade);
+        this.emit('command', { t: 'stop', group: String(message.group), ...(fade ? { fade } : {}) });
+        break;
+      }
       case 'volume': this.emit('command', { t: 'volume', group: String(message.group), volume: clamp01(message.volume) }); break;
       case 'stopAll': this.pendingPlays.clear(); this.emit('command', { t: 'stopAll' }); break;
       case 'ambience':
         this.ambienceLayers = Array.isArray(message.layers) ? message.layers : [];
         for (const layer of this.ambienceLayers) if (layer.hash) this.want(layer.hash, layer.ext, true);
-        this.emitAmbience();
+        this.emitAmbience(fadeSeconds(message.fade));
         break;
       case 'chunk': this.fetcher.onChunk(message); break;
       case 'missing': this.fetcher.onMissing(String(message.hash)); break;
@@ -1107,6 +1127,10 @@ class LiveListener extends EventEmitter {
   // ---- Commands ----
 
   onPlay(message) {
+    if (message.builtin) {
+      if (BUILTIN_RE.test(String(message.builtin))) this.emitPlay(message, null);
+      return;
+    }
     const hash = String(message.hash);
     const ext = String(message.ext);
     const file = this.cached(hash, ext);
@@ -1123,7 +1147,7 @@ class LiveListener extends EventEmitter {
       t: 'play',
       pid: String(message.pid),
       group: String(message.group),
-      file,
+      ...(file ? { file } : { builtin: String(message.builtin) }),
       name: String(message.name || ''),
       at: this.localTime(Number(message.at) || Date.now()),
       volume: clamp01(message.volume),
@@ -1133,10 +1157,11 @@ class LiveListener extends EventEmitter {
       buzz: !!message.buzz,
       whisper: !!message.whisper,
       by: message.by ? String(message.by).slice(0, 40) : null,
+      ...(fadeSeconds(message.fadeIn) ? { fadeIn: fadeSeconds(message.fadeIn) } : {}),
     });
   }
 
-  emitAmbience() {
+  emitAmbience(fade = 0) {
     const layers = [];
     for (const layer of this.ambienceLayers) {
       const base = { key: String(layer.key), name: String(layer.name || ''), volume: clamp01(layer.volume) };
@@ -1146,7 +1171,7 @@ class LiveListener extends EventEmitter {
         if (file) layers.push({ ...base, file });
       }
     }
-    this.emit('command', { t: 'ambience', layers });
+    this.emit('command', { t: 'ambience', layers, ...(fade ? { fade } : {}) });
   }
 
   leave() {

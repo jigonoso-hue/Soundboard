@@ -9,6 +9,8 @@ struct AmbienceLayer: Identifiable, Codable, Equatable {
     /// Built-in file name, or a library sound's UUID string.
     var ref: String
     var volume: Double
+    /// Plays now and then (seconds between plays, [shortest, longest]) instead of looping.
+    var every: [Double]? = nil
 }
 
 struct BuiltinLoop: Identifiable, Equatable {
@@ -24,6 +26,22 @@ struct BuiltinLoop: Identifiable, Equatable {
 @MainActor
 final class AmbienceMixer: ObservableObject {
     static let fade: TimeInterval = 1.5
+    /// "Now and then" choices for a layer: seconds between plays, [shortest, longest].
+    static let everyChoices: [[Double]] = [[20, 60], [60, 180], [180, 480]]
+
+    static func everyLabel(_ every: [Double]) -> String {
+        every[1] <= 60 ? "\(Int(every[0])) s–1 min" : "\(Int(every[0] / 60))–\(Int(every[1] / 60)) min"
+    }
+
+    /// A layer's "now and then" range, if it's one of the choices.
+    static func cleanEvery(_ every: [Double]?) -> [Double]? {
+        guard let every, everyChoices.contains(every) else { return nil }
+        return every
+    }
+
+    /// Live Session hooks for "now and then" layers: each play, and the layer stopping.
+    var onCue: ((AmbienceLayer, String) -> Void)?
+    var onCueStop: ((String, TimeInterval) -> Void)?
 
     @Published private(set) var layers: [AmbienceLayer] = []
     @Published private(set) var playing: Set<String> = []
@@ -34,6 +52,9 @@ final class AmbienceMixer: ObservableObject {
     let builtins: [BuiltinLoop]
     private weak var store: SoundStore?
     private var players: [String: AVAudioPlayer] = [:]
+    /// Now-and-then layers: their timers, and what each is playing right now.
+    private var occasional: [String: Task<Void, Never>] = [:]
+    private var cuePlayers: [String: [AVAudioPlayer]] = [:]
     /// Layers playing from scene kits, by voice id.
     private var external: [String: AmbienceLayer] = [:]
     private var stateURL: URL?
@@ -87,7 +108,11 @@ final class AmbienceMixer: ObservableObject {
         if let url = stateURL,
            let data = try? Data(contentsOf: url),
            let saved = try? JSONDecoder().decode(SavedState.self, from: data) {
-            layers = saved.layers
+            layers = saved.layers.map { layer in
+                var l = layer
+                l.every = Self.cleanEvery(layer.every)
+                return l
+            }
             masterVolume = saved.masterVolume
             // Loops added in an app update show up in the strip; ones the user removed stay removed.
             let known = saved.knownBuiltins.map(Set.init) ?? Self.originalBuiltins
@@ -126,6 +151,17 @@ final class AmbienceMixer: ObservableObject {
         guard let index = layers.firstIndex(where: { $0.id == layer.id }) else { return }
         layers[index].volume = volume
         players[layer.id]?.volume = Float(volume * masterVolume)
+        cuePlayers[layer.id]?.forEach { $0.volume = Float(volume * masterVolume) }
+        save()
+    }
+
+    /// Switches a strip layer between looping and now and then.
+    func setEvery(_ every: [Double]?, for layer: AmbienceLayer) {
+        guard let index = layers.firstIndex(where: { $0.id == layer.id }) else { return }
+        let wasPlaying = playing.contains(layer.id)
+        if wasPlaying { stop(layer.id, fade: 0.3) }
+        layers[index].every = Self.cleanEvery(every)
+        if wasPlaying { start(layers[index]) }
         save()
     }
 
@@ -153,6 +189,15 @@ final class AmbienceMixer: ObservableObject {
         external.removeAll()
     }
 
+    /// A scene change: fades out every layer playing (the strip's and other
+    /// kits') except the voice ids in `keep`, over `fade` seconds.
+    func fadeOutAll(keep: Set<String>, fade: TimeInterval) {
+        for id in playing where !keep.contains(id) {
+            external[id] = nil
+            stop(id, fade: fade)
+        }
+    }
+
     /// Whether any of the strip's own layers is playing.
     var stripPlaying: Bool {
         layers.contains { playing.contains($0.id) }
@@ -169,11 +214,11 @@ final class AmbienceMixer: ObservableObject {
         playing.contains(id)
     }
 
-    func startVoice(_ id: String, kind: AmbienceLayer.Kind, ref: String, volume: Double) {
+    func startVoice(_ id: String, kind: AmbienceLayer.Kind, ref: String, volume: Double, every: [Double]? = nil, fade: TimeInterval = AmbienceMixer.fade) {
         guard !playing.contains(id) else { return }
-        let layer = AmbienceLayer(id: id, kind: kind, ref: ref, volume: volume)
+        let layer = AmbienceLayer(id: id, kind: kind, ref: ref, volume: volume, every: Self.cleanEvery(every))
         external[id] = layer
-        start(layer)
+        start(layer, fade: fade)
     }
 
     func stopVoice(_ id: String) {
@@ -181,8 +226,8 @@ final class AmbienceMixer: ObservableObject {
         stop(id)
     }
 
-    func toggleVoice(_ id: String, kind: AmbienceLayer.Kind, ref: String, volume: Double) {
-        if playing.contains(id) { stopVoice(id) } else { startVoice(id, kind: kind, ref: ref, volume: volume) }
+    func toggleVoice(_ id: String, kind: AmbienceLayer.Kind, ref: String, volume: Double, every: [Double]? = nil) {
+        if playing.contains(id) { stopVoice(id) } else { startVoice(id, kind: kind, ref: ref, volume: volume, every: every) }
     }
 
     func setVoiceVolume(_ id: String, volume: Double) {
@@ -190,12 +235,14 @@ final class AmbienceMixer: ObservableObject {
         layer.volume = volume
         external[id] = layer
         players[id]?.volume = Float(volume * masterVolume)
+        cuePlayers[id]?.forEach { $0.volume = Float(volume * masterVolume) }
     }
 
     /// Every layer playing right now, with the ambience volume applied, for Live Session listeners.
     func liveSnapshot() -> [AmbienceLayer] {
         (layers + Array(external.values))
-            .filter { playing.contains($0.id) }
+            // Now-and-then layers reach listeners one play at a time instead.
+            .filter { playing.contains($0.id) && occasional[$0.id] == nil }
             .map { AmbienceLayer(id: $0.id, kind: $0.kind, ref: $0.ref, volume: $0.volume * masterVolume) }
             .sorted { $0.id < $1.id }
     }
@@ -236,7 +283,11 @@ final class AmbienceMixer: ObservableObject {
         }
     }
 
-    private func start(_ layer: AmbienceLayer) {
+    private func start(_ layer: AmbienceLayer, fade: TimeInterval = AmbienceMixer.fade) {
+        if layer.every != nil {
+            startOccasional(layer)
+            return
+        }
         guard let url = url(for: layer), let player = try? AVAudioPlayer(contentsOf: url) else { return }
         player.numberOfLoops = -1
         player.volume = 0
@@ -244,13 +295,55 @@ final class AmbienceMixer: ObservableObject {
         if layer.kind == .builtin { player.currentTime = Double.random(in: 0..<max(player.duration, 0.1)) }
         player.prepareToPlay()
         player.play()
-        player.setVolume(Float(layer.volume * masterVolume), fadeDuration: Self.fade)
+        player.setVolume(Float(layer.volume * masterVolume), fadeDuration: fade)
         players[layer.id]?.stop()
         players[layer.id] = player
         playing.insert(layer.id)
     }
 
+    /// A now-and-then layer: plays once at a random moment in its range, again
+    /// and again, until it's switched off.
+    private func startOccasional(_ layer: AmbienceLayer) {
+        guard let every = layer.every, let url = url(for: layer), occasional[layer.id] == nil else { return }
+        playing.insert(layer.id)
+        let id = layer.id
+        occasional[id] = Task { @MainActor [weak self] in
+            // The first one comes sooner, so you hear that it's working.
+            var wait = Double.random(in: min(3, every[0])...min(12, every[0]))
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                guard !Task.isCancelled, let self, self.occasional[id] != nil else { return }
+                // The latest volume (its slider may have moved).
+                let current = self.layers.first { $0.id == id } ?? self.external[id] ?? layer
+                if let player = try? AVAudioPlayer(contentsOf: url) {
+                    player.volume = Float(current.volume * self.masterVolume)
+                    player.prepareToPlay()
+                    player.play()
+                    self.cuePlayers[id, default: []].append(player)
+                    self.cuePlayers[id]?.removeAll { !$0.isPlaying && $0 !== player }
+                    var played = current
+                    played.volume = current.volume * self.masterVolume
+                    self.onCue?(played, self.name(of: current))
+                }
+                wait = Double.random(in: every[0]...every[1])
+            }
+        }
+    }
+
     private func stop(_ id: String, fade: TimeInterval = 1.5) {
+        if let task = occasional.removeValue(forKey: id) {
+            task.cancel()
+            playing.remove(id)
+            for player in cuePlayers.removeValue(forKey: id) ?? [] {
+                player.setVolume(0, fadeDuration: fade)
+                Task {
+                    try? await Task.sleep(nanoseconds: UInt64(fade * 1_000_000_000) + 50_000_000)
+                    player.stop()
+                }
+            }
+            onCueStop?(id, fade)
+            return
+        }
         guard let player = players.removeValue(forKey: id) else { return }
         playing.remove(id)
         player.setVolume(0, fadeDuration: fade)
@@ -263,6 +356,7 @@ final class AmbienceMixer: ObservableObject {
     private func applyVolumes() {
         for layer in layers + Array(external.values) {
             players[layer.id]?.volume = Float(layer.volume * masterVolume)
+            cuePlayers[layer.id]?.forEach { $0.volume = Float(layer.volume * masterVolume) }
         }
     }
 

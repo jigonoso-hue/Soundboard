@@ -2,6 +2,7 @@ import SwiftUI
 
 /// A scene kit's page: a header and a board of movable, resizable sections.
 struct KitView: View {
+    @EnvironmentObject private var music: MusicDirector
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var kits: KitStore
@@ -381,6 +382,7 @@ struct KitView: View {
 
     private func removeSection(_ section: KitSection, from kit: SoundKit) {
         stopLayers([section])
+        music.stop(section.id, fade: 1)
         change(kit) { k in
             k.sections.removeAll { $0.id == section.id }
             KitStore.compact(&k.sections)
@@ -449,6 +451,7 @@ struct KitSectionView: View {
     @EnvironmentObject private var player: SoundPlayer
     @EnvironmentObject private var bashPlayer: BashPlayer
     @EnvironmentObject private var ui: AppUI
+    @EnvironmentObject private var music: MusicDirector
     let kit: SoundKit
     let section: KitSection
     let editing: Bool
@@ -527,6 +530,8 @@ struct KitSectionView: View {
         HStack(spacing: 8) {
             if section.isAmbience {
                 AppIcon(id: "layers", size: 15).foregroundStyle(ambienceColor)
+            } else if section.isPlaylist {
+                AppIcon(id: "note", size: 15).foregroundStyle(Color.accentColor)
             }
             Text(section.title.uppercased())
                 .font(.caption.weight(.bold))
@@ -539,11 +544,32 @@ struct KitSectionView: View {
                 let anyOn = section.layers.contains { ambience.isPlaying(voice: section.voiceId($0)) }
                 Button {
                     for layer in section.layers { ambience.stopVoice(section.voiceId(layer)) }
+                    var s = section
+                    for i in s.layers.indices { s.layers[i].on = nil }
+                    onChange(s)
                 } label: {
                     IconLabel("Stop", icon: "stop", size: 10).font(.caption2.weight(.semibold))
                 }
                 .buttonStyle(.borderless)
                 .disabled(!anyOn)
+            }
+            if section.isPlaylist {
+                let on = music.isPlaying(section.id)
+                Button {
+                    if on { music.stop(section.id, fade: 2) } else { music.start(kit: kit, section: section) }
+                } label: {
+                    IconLabel(on ? "Stop" : "Play", icon: on ? "stop" : "play", size: 10)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .foregroundStyle(on ? Color.white : Color.accentColor)
+                        .background(on ? Color.accentColor : Color.accentColor.opacity(0.14), in: Capsule())
+                        .frame(minHeight: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(music.songs(in: section).isEmpty)
+                .accessibilityLabel(on ? "Stop the playlist" : "Play the playlist")
             }
             Spacer(minLength: 4)
             if section.hasShuffle {
@@ -579,6 +605,24 @@ struct KitSectionView: View {
                         s.shuffle = on ? true : nil
                         onChange(s)
                     }))
+                    Section("Playlist") {
+                        Toggle("Play Songs One After Another", isOn: Binding(get: { section.isPlaylist }, set: { on in
+                            var s = section
+                            s.playlist = on ? true : nil
+                            if !on {
+                                s.playlistShuffle = nil
+                                music.stop(section.id, fade: 2)
+                            }
+                            onChange(s)
+                        }))
+                        if section.isPlaylist {
+                            Toggle("Shuffle", isOn: Binding(get: { section.playlistShuffle == true }, set: { on in
+                                var s = section
+                                s.playlistShuffle = on ? true : nil
+                                onChange(s)
+                            }))
+                        }
+                    }
                 }
                 if !section.isAmbience {
                     Picker("Item size", selection: Binding(get: { section.size }, set: { size in
@@ -734,11 +778,29 @@ struct KitSectionView: View {
             if !fullItems.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(fullItems) { entry in
-                        TrackRow(sound: entry.value, size: section.size, gain: section.gain)
+                        // In a playlist, a song starts the playlist from it (or stops it, if it's the one playing).
+                        TrackRow(sound: entry.value, size: section.size, gain: section.gain,
+                                 onPlay: playlistAction(for: entry.value.id),
+                                 current: section.isPlaylist && music.current[section.id] == entry.value.id)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
                             .contextMenu { itemMenu(entry.item) }
                     }
                 }
+            }
+        }
+    }
+
+    /// In a playlist, a song starts the playlist from it (or stops it, if it's the one playing).
+    private func playlistAction(for songId: UUID) -> (() -> Void)? {
+        guard section.isPlaylist else { return nil }
+        let music = self.music
+        let kit = self.kit
+        let section = self.section
+        return {
+            if music.current[section.id] == songId {
+                music.stop(section.id, fade: 2)
+            } else {
+                music.start(kit: kit, section: section, from: songId)
             }
         }
     }
@@ -815,7 +877,12 @@ struct KitSectionView: View {
         let isOn = ambience.isPlaying(voice: voice)
         return VStack(alignment: .leading, spacing: 8) {
             Button {
-                ambience.toggleVoice(voice, kind: layer.kind, ref: layer.ref, volume: layer.volume * section.gain)
+                // Remembered, so the kit can bring back the same layers when it opens.
+                let starting = !ambience.isPlaying(voice: voice)
+                ambience.toggleVoice(voice, kind: layer.kind, ref: layer.ref, volume: layer.volume * section.gain, every: layer.every)
+                var s = section
+                if let i = s.layers.firstIndex(where: { $0.id == layer.id }) { s.layers[i].on = starting ? true : nil }
+                onChange(s)
             } label: {
                 HStack(spacing: 10) {
                     AppIcon(id: Self.layerIcon(layer), size: 20)
@@ -826,9 +893,12 @@ struct KitSectionView: View {
                         Text(ambience.name(kind: layer.kind, ref: layer.ref))
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        Text(isOn ? "Playing" : "Off")
-                            .font(.caption2)
-                            .foregroundStyle(isOn ? ambienceColor : theme.secondaryInk)
+                        HStack(spacing: 6) {
+                            Text(isOn ? (layer.every != nil ? "Now and then" : "Playing") : "Off")
+                                .font(.caption2)
+                                .foregroundStyle(isOn ? ambienceColor : theme.secondaryInk)
+                            if let every = layer.every { EveryBadge(every: every) }
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -857,6 +927,16 @@ struct KitSectionView: View {
                 .strokeBorder(isOn ? ambienceColor : theme.cardStroke, lineWidth: 1)
         )
         .contextMenu {
+            EveryMenu(every: layer.every) { every in
+                var s = section
+                guard let i = s.layers.firstIndex(where: { $0.id == layer.id }) else { return }
+                s.layers[i].every = every
+                onChange(s)
+                if ambience.isPlaying(voice: voice) {
+                    ambience.stopVoice(voice)
+                    ambience.startVoice(voice, kind: layer.kind, ref: layer.ref, volume: layer.volume * section.gain, every: every)
+                }
+            }
             Button(role: .destructive) {
                 ambience.stopVoice(voice)
                 var s = section
@@ -880,6 +960,48 @@ struct KitSectionView: View {
             ("campfire", "campfire"), ("fire", "flame"), ("cave", "cave"), ("night", "moon"), ("forest", "pine"), ("drone", "eye"),
         ]
         return matches.first { ref.contains($0.0) }?.1 ?? "layers"
+    }
+}
+
+/// A small "every 1–3 min" tag on a now-and-then ambience layer.
+struct EveryBadge: View {
+    let every: [Double]
+
+    var body: some View {
+        HStack(spacing: 3) {
+            AppIcon(id: "repeat", size: 9)
+            Text(AmbienceMixer.everyLabel(every))
+        }
+        .font(.caption2.weight(.bold))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 1)
+        .background(Color.secondary.opacity(0.18), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Plays now and then, every \(AmbienceMixer.everyLabel(every))")
+    }
+}
+
+/// How an ambience layer plays: looping, or now and then (a menu section).
+struct EveryMenu: View {
+    let every: [Double]?
+    let choose: ([Double]?) -> Void
+
+    var body: some View {
+        Section("Plays") {
+            Button {
+                choose(nil)
+            } label: {
+                if every == nil { Label("Always (Loops)", systemImage: "checkmark") } else { Text("Always (Loops)") }
+            }
+            ForEach(AmbienceMixer.everyChoices, id: \.self) { choice in
+                Button {
+                    choose(choice)
+                } label: {
+                    let title = "Now and Then: Every \(AmbienceMixer.everyLabel(choice))"
+                    if every == choice { Label(title, systemImage: "checkmark") } else { Text(title) }
+                }
+            }
+        }
     }
 }
 

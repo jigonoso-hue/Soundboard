@@ -154,6 +154,10 @@ struct TrackRow: View {
     var size: ItemSize = .m
     /// Extra level, such as a scene kit section's volume slider.
     var gain: Double = 1
+    /// What tapping it does instead of playing it (a playlist starts from it).
+    var onPlay: (() -> Void)? = nil
+    /// The song a playlist is on: marked with an accent edge.
+    var current = false
 
     var body: some View {
         let progress = player.progress[sound.id]
@@ -162,7 +166,7 @@ struct TrackRow: View {
         let total = sound.duration ?? 0
         VStack(spacing: 0) {
             Button {
-                playSound(sound, store: store, player: player, ui: ui, gain: gain)
+                if let onPlay { onPlay() } else { playSound(sound, store: store, player: player, ui: ui, gain: gain) }
             } label: {
                 HStack(spacing: 12) {
                     ZStack {
@@ -245,7 +249,7 @@ struct TrackRow: View {
                 .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop ? 1 : 0)
         )
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3).padding(.vertical, 8)
+            RoundedRectangle(cornerRadius: 2).fill(current ? Color.accentColor : color).frame(width: current ? 4 : 3).padding(.vertical, current ? 0 : 8)
         }
         .overlay(alignment: .bottomLeading) {
             GeometryReader { geo in

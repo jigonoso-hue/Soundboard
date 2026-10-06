@@ -282,6 +282,8 @@
         <label>Name <input id="kit-name" maxlength="60"></label>
       </div>
       <div id="kit-icon-picker"></div>
+      <label class="inline kit-autoplay"><input type="checkbox" id="kit-autoplay"> Start its music and ambience when opened</label>
+      <p class="muted small kit-autoplay-hint">Opening the kit fades out the music and ambience that's playing, then fades in its first playlist and the ambience layers you had on there.</p>
       <div class="dialog-actions">
         <span class="spacer"></span>
         <button value="cancel" formnovalidate>Cancel</button>
@@ -372,6 +374,7 @@
   <script src="tags.js"></script>
   <script src="app.js"></script>
   <script src="ambience.js"></script>
+  <script src="music.js"></script>
   <script src="bash-common.js"></script>
   <script src="kits.js"></script>
   <script src="bashes-board.js"></script>

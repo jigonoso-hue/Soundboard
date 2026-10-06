@@ -51,6 +51,10 @@ struct KitLayer: Identifiable, Codable, Equatable {
     /// Built-in file name, or a library sound's UUID string.
     var ref: String
     var volume: Double
+    /// Plays now and then (seconds between plays) instead of looping.
+    var every: [Double]? = nil
+    /// Was playing when you left the kit: comes back when the kit starts on opening.
+    var on: Bool? = nil
 }
 
 /// A box on the kit's 12-column board. x and w are columns; y and h are rows.
@@ -69,11 +73,16 @@ struct KitSection: Identifiable, Codable, Equatable {
     var volume: Double? = nil
     /// Shows a shuffle button that plays a random item from the section.
     var shuffle: Bool? = nil
+    /// A playlist: its full sounds play one after another, crossfading.
+    var playlist: Bool? = nil
+    /// The playlist plays in a random order.
+    var playlistShuffle: Bool? = nil
 
     var isAmbience: Bool { kind == .ambience }
     /// Level applied to everything played from this section.
     var gain: Double { volume ?? 1 }
     var hasShuffle: Bool { shuffle == true && !isAmbience }
+    var isPlaylist: Bool { playlist == true && !isAmbience }
     var count: Int { isAmbience ? layers.count : items.count }
 
     /// Voice name for one of this section's layers in the ambience mixer.
@@ -89,6 +98,8 @@ struct SoundKit: Identifiable, Codable, Equatable {
     var iconColor: String
     var sections: [KitSection]
     var createdAt: Date
+    /// Opening the kit fades in its music and ambience, fading out what was playing.
+    var autoplay: Bool? = nil
 
     var hasAmbience: Bool { sections.contains { $0.isAmbience } }
     var allItems: [KitItem] { sections.flatMap(\.items) }
@@ -172,6 +183,7 @@ final class KitStore: ObservableObject {
             }
             return s
         }
+        copy.autoplay = source.autoplay
         update(copy)
         return kit(copy.id)
     }
@@ -291,16 +303,23 @@ final class KitStore: ObservableObject {
                 s.layers = section.layers.filter { keys.insert("\($0.kind.rawValue):\($0.ref)").inserted }.map { layer in
                     var l = layer
                     l.volume = min(1, max(0, layer.volume))
+                    l.every = AmbienceMixer.cleanEvery(layer.every)
+                    l.on = layer.on == true ? true : nil
                     return l
                 }
+                s.playlist = nil
+                s.playlistShuffle = nil
             } else {
                 s.layers = []
+                s.playlist = section.playlist == true ? true : nil
+                s.playlistShuffle = s.playlist == true && section.playlistShuffle == true ? true : nil
                 var items: [KitItem] = []
                 for item in section.items where !items.contains(item) { items.append(item) }
                 s.items = items
             }
             return s
         }
+        k.autoplay = kit.autoplay == true ? true : nil
         return k
     }
 }
