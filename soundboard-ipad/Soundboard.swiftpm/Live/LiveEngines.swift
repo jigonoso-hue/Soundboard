@@ -126,13 +126,24 @@ final class FileFetcher {
     }
     private var jobs: [String: Job] = [:]
     private var queue: [String] = []
+    /// Where finished files go: the sound cache, or (handouts) a temporary folder.
+    private let folder: URL?
 
-    init(send: @escaping (LiveJSON) -> Void) {
+    init(folder: URL? = nil, send: @escaping (LiveJSON) -> Void) {
+        self.folder = folder
         self.send = send
     }
 
+    /// A file already fetched into this fetcher's folder.
+    func cached(_ hash: String, _ ext: String) -> URL? {
+        guard let folder else { return LiveFiles.cached(hash, ext) }
+        guard LiveFiles.isHash(hash), LiveFiles.isExt(ext) else { return nil }
+        let url = folder.appendingPathComponent("\(hash).\(ext)")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     func want(_ hash: String, ext: String, urgent: Bool) {
-        guard LiveFiles.isHash(hash), LiveFiles.isExt(ext), LiveFiles.cached(hash, ext) == nil else { return }
+        guard LiveFiles.isHash(hash), LiveFiles.isExt(ext), cached(hash, ext) == nil else { return }
         if jobs[hash] == nil { jobs[hash] = Job(ext: ext) }
         if let index = queue.firstIndex(of: hash) {
             guard urgent else { return }
@@ -178,7 +189,7 @@ final class FileFetcher {
         queue.removeAll { $0 == hash }
         let actual = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         if actual == hash {
-            let url = LiveFiles.cacheDir.appendingPathComponent("\(hash).\(job.ext)")
+            let url = (folder ?? LiveFiles.cacheDir).appendingPathComponent("\(hash).\(job.ext)")
             try? bytes.write(to: url, options: .atomic)
             onArrived?(hash, url)
         } else {
@@ -365,6 +376,8 @@ final class LiveHostEngine {
     var onGame: ((LiveJSON) -> Void)?
     /// The buzzer or quiz running (locks listeners' screens to it), or nil.
     private var game: LiveGame?
+    /// Pictures sent this session, newest last: listeners who join later get the list.
+    private var handouts: [LiveJSON] = []
     private var gameTimer: Task<Void, Never>?
 
     private struct PeerInfo {
@@ -448,6 +461,7 @@ final class LiveHostEngine {
             for id in tableAskOrder { if let ask = tableAsks[id], ask["to"] == nil { transport.send(ask, to: peer) } }
             if let tableTurns { transport.send(tableTurns, to: peer) }
             if game != nil { transport.send(LiveGame.publicView(game), to: peer) }
+            if !handouts.isEmpty { send(["t": "handouts", "list": handouts], to: peer) }
             send(ambience, to: peer)
             send(await prefetchMessage(), to: peer)
             let now = LiveNet.now
@@ -740,6 +754,8 @@ final class LiveHostEngine {
         case "play": return [LiveNet.string(message["hash"])].compactMap { $0 }
         case "prefetch": return ((message["files"] as? [LiveJSON]) ?? []).compactMap { LiveNet.string($0["hash"]) }
         case "ambience": return ((message["layers"] as? [LiveJSON]) ?? []).compactMap { LiveNet.string($0["hash"]) }
+        case "handout": return [LiveNet.string(message["hash"])].compactMap { $0 }
+        case "handouts": return ((message["list"] as? [LiveJSON]) ?? []).compactMap { LiveNet.string($0["hash"]) }
         default: return []
         }
     }
@@ -824,6 +840,26 @@ final class LiveHostEngine {
             self?.active.removeAll()
             self?.broadcast(["t": "stopAll"])
         }
+    }
+
+    /// A picture for every listener's screen: `url` on disk, `hash` its SHA-256.
+    /// Showing one again (same id) moves it to the end of the list.
+    func handout(id: String, url: URL, hash: String, title: String) {
+        enqueue { [weak self] in
+            guard let self, LiveFiles.isHash(hash) else { return }
+            self.files[hash] = url
+            let item: LiveJSON = ["id": id, "hash": hash, "ext": "jpg", "title": Handout.cleanTitle(title), "at": LiveNet.now]
+            self.handouts = Array((self.handouts.filter { LiveNet.string($0["id"]) != id } + [item]).suffix(20))
+            var message = item
+            message["t"] = "handout"
+            self.broadcast(message)
+        }
+    }
+
+    func showHandout(id: String) {
+        guard let item = handouts.first(where: { LiveNet.string($0["id"]) == id }),
+              let hash = LiveNet.string(item["hash"]), let url = files[hash] else { return }
+        handout(id: id, url: url, hash: hash, title: LiveNet.string(item["title"]) ?? "")
     }
 
     /// The ambience layers playing now: built-in loops by file name, library sounds by id.
@@ -972,6 +1008,13 @@ final class LiveListenerEngine {
     private var ambienceLayers: [LiveJSON] = []
     /// This player's own sounds on offer to the host: hash → file.
     private var offered: [String: URL] = [:]
+    /// A handout arrived (`show`: lock the screen to it now).
+    var onHandout: ((Handout) -> Void)?
+    /// Handouts go to a folder of their own that's deleted when the session
+    /// ends: they're never kept on this device.
+    private(set) var handoutDir: URL?
+    private var handoutFetcher: FileFetcher?
+    private var waitingHandouts: [String: [Handout]] = [:]
 
     init(socket: LiveSocket, name: String, device: String) {
         self.socket = socket
@@ -998,6 +1041,7 @@ final class LiveListenerEngine {
                 self.onState?(.failed("Couldn't connect\(reason.map { " (\($0))" } ?? "")."))
             } else {
                 self.onCommand?(.stopAll(ambienceToo: true))
+                self.dropHandouts()
                 self.onState?(.ended("The session ended."))
             }
         }
@@ -1009,6 +1053,54 @@ final class LiveListenerEngine {
         pingTask?.cancel()
         socket.close()
         onCommand?(.stopAll(ambienceToo: true))
+        dropHandouts()
+    }
+
+    // MARK: Handouts
+
+    private func handoutFiles() -> FileFetcher {
+        if let handoutFetcher { return handoutFetcher }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("handouts-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        handoutDir = dir
+        let fetcher = FileFetcher(folder: dir) { [weak socket] message in socket?.send(message) }
+        fetcher.onArrived = { [weak self] hash, url in self?.handoutArrived(hash, url) }
+        fetcher.onFailed = { [weak self] hash in self?.waitingHandouts[hash] = nil }
+        handoutFetcher = fetcher
+        return fetcher
+    }
+
+    /// show: lock the screen to it now (a new handout), or just add it to the list.
+    private func receiveHandout(_ message: LiveJSON, show: Bool) {
+        guard let hash = LiveNet.string(message["hash"]), LiveFiles.isHash(hash),
+              let ext = LiveNet.string(message["ext"]), ["jpg", "png"].contains(ext) else { return }
+        let item = Handout(id: String((LiveNet.string(message["id"]) ?? hash).prefix(80)),
+                           title: Handout.cleanTitle(LiveNet.string(message["title"]) ?? ""),
+                           url: nil, show: show)
+        let fetcher = handoutFiles()
+        if let url = fetcher.cached(hash, ext) {
+            var ready = item
+            ready.url = url
+            onHandout?(ready)
+            return
+        }
+        waitingHandouts[hash, default: []].append(item)
+        fetcher.want(hash, ext: ext, urgent: show)
+    }
+
+    private func handoutArrived(_ hash: String, _ url: URL) {
+        for var item in waitingHandouts.removeValue(forKey: hash) ?? [] {
+            item.url = url
+            onHandout?(item)
+        }
+    }
+
+    /// Deletes the session's handouts from this device.
+    private func dropHandouts() {
+        if let handoutDir { try? FileManager.default.removeItem(at: handoutDir) }
+        handoutDir = nil
+        handoutFetcher = nil
+        waitingHandouts = [:]
     }
 
     // MARK: Player sounds
@@ -1060,6 +1152,7 @@ final class LiveListenerEngine {
             closed = true
             pingTask?.cancel()
             onCommand?(.stopAll(ambienceToo: true))
+            dropHandouts()
             let kicked = LiveNet.string(message["t"]) == "kicked"
             onState?(.ended(kicked ? "The broadcaster removed you from the session." : "The broadcaster ended the session."))
             socket.close()
@@ -1100,8 +1193,15 @@ final class LiveListenerEngine {
                 if let hash = LiveNet.string(layer["hash"]) { fetcher.want(hash, ext: LiveNet.string(layer["ext"]) ?? "", urgent: true) }
             }
             emitAmbience(fade: LiveNet.fadeSeconds(message["fade"]))
-        case "chunk": fetcher.handleChunk(message)
-        case "missing": fetcher.handleMissing(LiveNet.string(message["hash"]) ?? "")
+        case "chunk":
+            fetcher.handleChunk(message)
+            handoutFetcher?.handleChunk(message)
+        case "missing":
+            fetcher.handleMissing(LiveNet.string(message["hash"]) ?? "")
+            handoutFetcher?.handleMissing(LiveNet.string(message["hash"]) ?? "")
+        case "handout": receiveHandout(message, show: true)
+        case "handouts":
+            for item in ((message["list"] as? [LiveJSON]) ?? []).suffix(20) { receiveHandout(item, show: false) }
         case "need":
             // The host fetching one of this player's own sounds.
             let hash = LiveNet.string(message["hash"]) ?? ""

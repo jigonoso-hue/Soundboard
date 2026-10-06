@@ -730,7 +730,17 @@ const Live = (() => {
       dice.type = 'button';
       dice.title = 'Roll dice: everyone in the session sees them';
       dice.addEventListener('click', () => window.DiceTray?.open());
-      top.append(live, el('span', 'spacer'), dice, volumes);
+      top.append(live, el('span', 'spacer'));
+      // The session's handouts, once there are any.
+      const handouts = window.Handouts?.count() || 0;
+      if (handouts) {
+        const list = el('button', 'stage-pill stage-button stage-handouts', `Handouts · ${handouts}`);
+        list.type = 'button';
+        list.title = 'Pictures the broadcaster has shown this session';
+        list.addEventListener('click', () => window.Handouts.openLog());
+        top.append(list);
+      }
+      top.append(dice, volumes);
 
       const center = el('div', 'stage-center');
       const emblem = el('div', 'stage-emblem');
@@ -1002,6 +1012,7 @@ const Live = (() => {
     }
     window.Table?.statusChanged();
     window.Games?.statusChanged();
+    window.Handouts?.statusChanged();
     // Tuning in: the dialog closes and the stage takes over the window until you leave.
     if (status.role === 'listen') { if ($('#live-dialog').open) $('#live-dialog').close(); Stage.show(); } else Stage.hide();
     // No need to add sounds while broadcasting.
@@ -1252,6 +1263,8 @@ const Live = (() => {
 
   return {
     soundPlayed, groupStopped, groupVolume, stoppedAll,
+    // Redraws the listener's stage (a handout arrived).
+    refreshStage: () => Stage.render(),
     // A scene change: send the new ambience now, fading over `fade` seconds.
     sceneChanged: (fade) => { sceneFade = { fade, until: Date.now() + 1500 }; syncHostState(false, fade); }, hosting, listening, myName, rollStart, rollResult, claimColor,
     shareCustomDice, tableSend,

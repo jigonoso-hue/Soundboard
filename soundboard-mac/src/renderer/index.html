@@ -68,6 +68,7 @@
         <button id="toggle-yt" title="Show/hide the YouTube browser"><i data-icon="video"></i> YouTube</button>
         <button id="whisper-btn" class="hidden" title="Whisper: the next sound goes only to the listeners you tick"><i data-icon="speech"></i> <span id="whisper-label">Whisper</span></button>
         <button id="emphasis-btn" class="hidden" title="Emphasis: the next sound vibrates listeners' phones"><i data-icon="bolt"></i> Emphasis</button>
+        <button id="handout-btn" class="hidden" title="Handout: show a picture on every listener's screen (a map, a wanted poster, a monster)"><i data-icon="map"></i> Handout</button>
         <button id="games-btn" class="hidden" title="Games: a buzzer or a quiz for everyone (locks listeners' screens to it)"><i data-icon="bell"></i> Games</button>
         <button id="dice-btn" title="Roll dice"><i data-icon="d20"></i> Dice</button>
         <button id="live-btn" title="Live Session: play to your listeners' devices"><i data-icon="speaker"></i> <span id="live-label">Live</span></button>
@@ -262,6 +263,21 @@
   <div id="section-menu" class="popup-menu hidden" role="menu"></div>
   <div id="whisper-menu" class="popup-menu whisper-menu hidden"></div>
 
+  <dialog id="handout-dialog" class="handout-dialog">
+    <form method="dialog">
+      <h2>Send a handout</h2>
+      <p class="muted small">It fills every listener's screen until they close it. They can zoom in and save a copy.</p>
+      <div id="handout-preview" class="handout-preview"></div>
+      <label>Title <input id="handout-title" maxlength="60" placeholder="e.g. Wanted: The Red Fox (optional)"></label>
+      <div id="handout-sent" class="handout-sent hidden"></div>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button id="handout-send" value="send" class="primary">Send to everyone</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="text-dialog">
     <form method="dialog">
       <h2 id="text-dialog-title">Name</h2>
@@ -381,6 +397,7 @@
   <script src="live.js"></script>
   <script src="recorder.js"></script>
   <script src="games.js"></script>
+  <script src="handouts.js"></script>
   <script src="dice-geometry.js"></script>
   <script type="module" src="dice.js"></script>
   <script type="module" src="table.js"></script>

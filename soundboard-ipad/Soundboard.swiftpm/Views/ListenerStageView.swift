@@ -11,6 +11,7 @@ struct ListenerStageView: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showVolumes = false
+    @State private var showHandouts = false
     @State private var choosingSounds = false
     @State private var whisperGlow = false
     @State private var buzzFlash = false
@@ -130,6 +131,24 @@ struct ListenerStageView: View {
             .padding(.vertical, 6)
             .background(style.chipFill, in: Capsule())
             Spacer()
+            // The session's handouts, once there are any.
+            if !live.handouts.isEmpty {
+                Button {
+                    showHandouts = true
+                } label: {
+                    Label("Handouts · \(live.handouts.count)", systemImage: "map")
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(style.chipFill, in: Capsule())
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .sheet(isPresented: $showHandouts) {
+                    HandoutLogView().environmentObject(live)
+                }
+                .accessibilityLabel("Handouts: \(live.handouts.count)")
+            }
             // iPhone: Dice is at the bottom instead, in thumb reach.
             if sizeClass != .compact {
                 Button {

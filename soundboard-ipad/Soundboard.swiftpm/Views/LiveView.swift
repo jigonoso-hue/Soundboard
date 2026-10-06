@@ -357,6 +357,7 @@ struct LiveControls: View {
     @Binding var showLive: Bool
     @State private var choosingWhisper = false
     @State private var showGames = false
+    @State private var showHandout = false
 
     /// iPhone while broadcasting: the tools are in the bar at the bottom instead.
     private var toolsBelow: Bool { sizeClass == .compact && live.role == .host }
@@ -398,6 +399,16 @@ struct LiveControls: View {
                 .sheet(isPresented: $showGames) {
                     GameHostView().environmentObject(live)
                 }
+                // A picture on every listener's screen.
+                Button {
+                    showHandout = true
+                } label: {
+                    Label("Handout", systemImage: "map")
+                }
+                .accessibilityLabel("Handout: show a picture on every listener's screen")
+                .sheet(isPresented: $showHandout) {
+                    HandoutSendView().environmentObject(live)
+                }
             }
             if !toolsBelow {
                 Button {
@@ -434,6 +445,7 @@ struct BroadcastBar: View {
     @EnvironmentObject private var live: LiveSession
     @State private var choosingWhisper = false
     @State private var showGames = false
+    @State private var showHandout = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -458,6 +470,11 @@ struct BroadcastBar: View {
                 GameHostView().environmentObject(live)
             }
             .accessibilityLabel("Games: a buzzer or a quiz for everyone")
+            tool("Handout", "map", on: false, color: .accentColor) { showHandout = true }
+                .sheet(isPresented: $showHandout) {
+                    HandoutSendView().environmentObject(live)
+                }
+                .accessibilityLabel("Handout: show a picture on every listener's screen")
             tool("Dice", "dice", on: false, color: .accentColor) { live.dice.open() }
                 .accessibilityLabel("Roll dice")
         }

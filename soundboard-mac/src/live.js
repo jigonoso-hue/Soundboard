@@ -424,6 +424,8 @@ class LiveHost extends EventEmitter {
     this.tableState = { customDice: null, asks: new Map(), turns: null };
     // The buzzer or quiz running (locks listeners' screens to it), or null.
     this.game = null;
+    // Pictures sent this session, newest last: listeners who join later get the list.
+    this.handouts = [];
     this.gameTimer = null;
     this.peers = new Map(); // peer -> { name, device, allowed: Set<hash>, cued, lastCue, offers, fetcher, waitingCues }
     this.files = new Map(); // hash -> { file, ext }
@@ -476,6 +478,7 @@ class LiveHost extends EventEmitter {
       for (const ask of this.tableState.asks.values()) if (!ask.to) this.transport.send(peer, ask);
       if (this.tableState.turns) this.transport.send(peer, this.tableState.turns);
       if (this.game) this.transport.send(peer, Game.publicView(this.game));
+      if (this.handouts.length) await this.sendTo(peer, { t: 'handouts', list: this.handouts });
       await this.sendTo(peer, this.ambience);
       const prefetch = await this.prefetchMessage();
       await this.sendTo(peer, prefetch);
@@ -891,6 +894,24 @@ class LiveHost extends EventEmitter {
     });
   }
 
+  // A picture for every listener's screen: `file` on disk, `hash` its SHA-256.
+  // Showing one again (same id) moves it to the end of the list.
+  handout({ id, file, hash, ext, title }) {
+    return this.enqueue(() => {
+      const item = cleanHandout({ id, hash, ext, title, at: Date.now() });
+      if (!item || !file) return;
+      this.files.set(item.hash, { file, ext: item.ext });
+      this.handouts = this.handouts.filter((h) => h.id !== item.id).concat(item).slice(-20);
+      this.broadcast({ t: 'handout', ...item });
+    });
+  }
+
+  showHandout(id) {
+    const item = this.handouts.find((h) => h.id === id);
+    const entry = item && this.files.get(item.hash);
+    return entry ? this.handout({ ...item, file: entry.file }) : Promise.resolve();
+  }
+
   end() {
     clearTimeout(this.gameTimer);
     this.transport.send(null, { t: 'bye' });
@@ -902,7 +923,20 @@ function hashesIn(message) {
   if (message.t === 'play' && message.hash) return [message.hash];
   if (message.t === 'prefetch') return message.files.map((f) => f.hash);
   if (message.t === 'ambience') return message.layers.filter((l) => l.hash).map((l) => l.hash);
+  if (message.t === 'handout' && message.hash) return [message.hash];
+  if (message.t === 'handouts') return message.list.map((h) => h.hash);
   return [];
+}
+
+// A handout's title: one line, up to 60 characters.
+function cleanTitle(value) {
+  return String(value || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60);
+}
+
+// A handout from a message, or null.
+function cleanHandout(h) {
+  if (!h || !HASH_RE.test(String(h.hash)) || !['jpg', 'png'].includes(String(h.ext))) return null;
+  return { id: String(h.id || h.hash).slice(0, 80), hash: String(h.hash), ext: String(h.ext), title: cleanTitle(h.title), at: Number(h.at) || Date.now() };
 }
 
 // A fade length in seconds from a message: 0 (none) up to 10.
@@ -943,6 +977,48 @@ class LiveListener extends EventEmitter {
     this.fetcher = new FileFetcher({ cacheDir, send: (m) => sendJSON(this.socket, m) });
     this.fetcher.on('arrived', (hash, file) => this.fileArrived(hash, file));
     this.fetcher.on('failed', (hash) => this.pendingPlays.delete(hash));
+    // Handouts go to a folder of their own that's deleted when the session ends:
+    // they're never kept on this device.
+    this.handoutDir = null;
+    this.handoutFetcher = null;
+    this.handouts = new Map(); // hash -> [{ id, title, at, show }] waiting for the file
+  }
+
+  handoutFiles() {
+    if (!this.handoutFetcher) {
+      this.handoutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dungeon-radio-handouts-'));
+      this.handoutFetcher = new FileFetcher({ cacheDir: this.handoutDir, send: (m) => sendJSON(this.socket, m) });
+      this.handoutFetcher.on('arrived', (hash, file) => this.handoutArrived(hash, file));
+      this.handoutFetcher.on('failed', (hash) => this.handouts.delete(hash));
+    }
+    return this.handoutFetcher;
+  }
+
+  // show: lock the screen to it now (a new handout), or just add it to the list.
+  onHandout(message, show) {
+    const item = cleanHandout(message);
+    if (!item) return;
+    const fetcher = this.handoutFiles();
+    const file = fetcher.cached(item.hash, item.ext);
+    if (file) { this.emit('handout', { ...item, file, show }); return; }
+    const waiting = this.handouts.get(item.hash) || [];
+    waiting.push({ ...item, show });
+    this.handouts.set(item.hash, waiting);
+    fetcher.want(item.hash, item.ext, show);
+  }
+
+  handoutArrived(hash, file) {
+    const waiting = this.handouts.get(hash) || [];
+    this.handouts.delete(hash);
+    for (const item of waiting) this.emit('handout', { ...item, file });
+  }
+
+  // Deletes the session's handouts from this device.
+  dropHandouts() {
+    if (this.handoutDir) fs.rmSync(this.handoutDir, { recursive: true, force: true });
+    this.handoutDir = null;
+    this.handoutFetcher = null;
+    this.handouts.clear();
   }
 
   connect(url) {
@@ -982,6 +1058,7 @@ class LiveListener extends EventEmitter {
       case 'full': this.setState('error', 'That session is full.'); break;
       case 'kicked':
         this.emit('command', { t: 'stopAll', ambienceToo: true });
+        this.dropHandouts();
         this.setState('ended', 'The broadcaster removed you from the session.');
         this.closed = true;
         this.socket?.close();
@@ -989,6 +1066,7 @@ class LiveListener extends EventEmitter {
       case 'ended':
       case 'bye':
         this.emit('command', { t: 'stopAll', ambienceToo: true });
+        this.dropHandouts();
         this.setState('ended', 'The broadcaster ended the session.');
         this.closed = true;
         this.socket?.close();
@@ -1039,8 +1117,18 @@ class LiveListener extends EventEmitter {
         for (const layer of this.ambienceLayers) if (layer.hash) this.want(layer.hash, layer.ext, true);
         this.emitAmbience(fadeSeconds(message.fade));
         break;
-      case 'chunk': this.fetcher.onChunk(message); break;
-      case 'missing': this.fetcher.onMissing(String(message.hash)); break;
+      case 'chunk':
+        this.fetcher.onChunk(message);
+        this.handoutFetcher?.onChunk(message);
+        break;
+      case 'missing':
+        this.fetcher.onMissing(String(message.hash));
+        this.handoutFetcher?.onMissing(String(message.hash));
+        break;
+      case 'handout': this.onHandout(message, true); break;
+      case 'handouts':
+        for (const item of Array.isArray(message.list) ? message.list.slice(-20) : []) this.onHandout(item, false);
+        break;
       case 'need': this.serveOffered(String(message.hash || ''), Number(message.i) || 0); break;
       default: break;
     }
@@ -1179,6 +1267,7 @@ class LiveListener extends EventEmitter {
     clearInterval(this.pingTimer);
     try { this.socket?.close(1000, 'left'); } catch { /* ignore */ }
     this.emit('command', { t: 'stopAll', ambienceToo: true });
+    this.dropHandouts();
     this.setState('idle');
   }
 

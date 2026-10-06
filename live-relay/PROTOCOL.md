@@ -83,6 +83,8 @@ On the local network the host assigns peer ids itself.
 | `askClosed {id}` / `askResult {id, kind, label, …}` | A request ended; its results for everyone |
 | `turns {phase, round, current, order}` | The initiative order (`phase` `"off"` clears it) |
 | `game {…}` | The buzzer or quiz running; `phase` `"off"` when none (see Games) |
+| `handout {id, hash, ext, title, at}` | A picture for the listener's screen, now (see Handouts) |
+| `handouts {list: [{id, hash, ext, title, at}]}` | Pictures shown before this listener joined, for their list |
 | `rules {playerSounds, limit}` | Whether listeners may play sounds: `"off"`, `"own"` or `"gm"`; `limit` is 5 |
 | `catalog {sounds: [{id, name, color}]}` | The broadcaster's sounds listeners may choose from (when `playerSounds` is `"gm"`) |
 | `need {hash, i}` | Request chunk `i` of a sound the listener offered |
@@ -143,6 +145,23 @@ Now-and-then layers (thunder every few minutes) aren't in `layers`: each time
 one plays, the host sends a `play` for it (group `a:<layer id>`), and a `stop`
 when it's switched off. Built-in loops ship with every copy of the app, so they
 need no transfer.
+
+## Handouts
+
+The broadcaster shows a picture (a map, a wanted poster, a monster) on every
+listener's screen. The host scales it down to at most 2048 pixels on its
+longest side and sends it as a JPEG (`ext` is `"jpg"`; `"png"` is also
+accepted), fetched like any other file with `need` and `chunk`, at the table
+or through the relay alike. `title` is one line of up to 60 characters.
+
+- `handout` locks the listener's screen to the picture, fitted to the
+  screen, until they close it. Sending the same `id` again shows it again.
+- Listeners who join later get `handouts`: the list of the session's last 20
+  handouts, without being locked to one.
+
+Listeners keep handouts in a temporary folder of their own, not the sound
+cache, and delete it when they leave or the session ends. Saving a copy is
+up to them.
 
 ## Scene music
 

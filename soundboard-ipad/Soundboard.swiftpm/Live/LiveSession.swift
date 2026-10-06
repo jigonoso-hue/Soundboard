@@ -64,6 +64,11 @@ final class LiveSession: ObservableObject {
     /// The buzzer or quiz running, as this device may see it (all of it for the
     /// broadcaster), or nil. While a listener has one, their screen is locked to it.
     @Published private(set) var game: GameState?
+    /// Pictures shown this session (a listener's: received; the broadcaster's:
+    /// sent), oldest first. Only kept until the session ends.
+    @Published private(set) var handouts: [Handout] = []
+    /// The handout filling a listener's screen, or nil.
+    @Published private(set) var viewingHandout: Handout?
     /// This device's id in the session ("host" for the broadcaster).
     private(set) var myPeer = ""
     /// Buzzer rounds this device buzzed in, and its quiz answers (question → choice).
@@ -418,6 +423,8 @@ final class LiveSession: ObservableObject {
         dice.table.reset()
         game = nil
         GameLock.shared.update(self)
+        handouts = []
+        Handout.dropSent()
         // The end-of-session recap.
         if was { dice.recap() }
         host = nil
@@ -720,6 +727,7 @@ final class LiveSession: ObservableObject {
             }
         }
         engine.onScene = { [weak self] name in self?.scene = name }
+        engine.onHandout = { [weak self] handout in self?.receiveHandout(handout) }
         engine.onRoll = { [weak self] message in self?.receiveRoll(message) }
         dice.resetLog()
         engine.onRules = { [weak self] rules in
@@ -783,6 +791,9 @@ final class LiveSession: ObservableObject {
         buzzedRounds = []
         myAnswers = [:]
         GameLock.shared.update(self)
+        handouts = []
+        viewingHandout = nil
+        HandoutLock.shared.update(self)
         if was { dice.recap() }
         mirror.stopAll(ambienceToo: true)
         role = .idle
@@ -863,6 +874,52 @@ final class LiveSession: ObservableObject {
             }
             self.listener?.offer(offers)
         }
+    }
+
+    // MARK: Handouts
+
+    /// A handout arrived: a new one locks the screen to it.
+    private func receiveHandout(_ handout: Handout) {
+        guard role == .listener, handout.url != nil else { return }
+        handouts.removeAll { $0.id == handout.id }
+        handouts.append(handout)
+        if handout.show {
+            viewingHandout = handout
+            HandoutLock.shared.update(self)
+            nudge(title: "🗺️ New handout", body: handout.title.isEmpty ? "The broadcaster sent a picture." : handout.title)
+        }
+    }
+
+    /// Opens one of the session's handouts (from the stage's list).
+    func openHandout(_ handout: Handout) {
+        viewingHandout = handout
+        HandoutLock.shared.update(self)
+    }
+
+    func closeHandout() {
+        viewingHandout = nil
+        HandoutLock.shared.update(self)
+    }
+
+    /// The broadcaster sends a picture to every listener's screen.
+    func sendHandout(_ image: UIImage, title: String) {
+        guard role == .host, let host, let prepared = Handout.prepare(image) else {
+            notice = "Couldn't send that picture."
+            return
+        }
+        let id = "h-\(Int(Date().timeIntervalSince1970 * 1000))-\(prepared.hash.prefix(6))"
+        let clean = Handout.cleanTitle(title)
+        host.handout(id: id, url: prepared.url, hash: prepared.hash, title: clean)
+        handouts.removeAll { $0.id == id }
+        handouts.append(Handout(id: id, title: clean, url: prepared.url, show: false))
+        let n = peers.count
+        notice = "Sent “\(clean.isEmpty ? "Handout" : clean)” to \(n) listener\(n == 1 ? "" : "s")."
+    }
+
+    /// The broadcaster puts a handout back on everyone's screen.
+    func showHandoutAgain(_ handout: Handout) {
+        host?.showHandout(id: handout.id)
+        notice = "Showing “\(handout.title.isEmpty ? "Handout" : handout.title)” again."
     }
 
     // MARK: Buzz

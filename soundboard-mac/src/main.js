@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, protocol, shell, globalShortcut, na
 const path = require('path');
 const { Readable } = require('stream');
 const fs = require('fs');
+const crypto = require('crypto');
 const { Library, AUDIO_EXTENSIONS } = require('./library');
 const { YtDlp } = require('./ytdlp');
 const { BashStore, COVER_TYPES } = require('./bashes');
@@ -354,7 +355,21 @@ function endLive() {
   if (live.role === 'host') live.host.end();
   else live.listener.leave();
   live = null;
+  dropHostHandouts();
 }
+
+// Handouts the broadcaster sends wait in a temporary folder until the session ends.
+const HANDOUT_MAX_BYTES = 8 * 1024 * 1024;
+function hostHandoutDir() {
+  const dir = path.join(app.getPath('temp'), `dungeon-radio-handouts-host-${process.pid}`);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function dropHostHandouts() {
+  fs.rmSync(path.join(app.getPath('temp'), `dungeon-radio-handouts-host-${process.pid}`), { recursive: true, force: true });
+}
+
+const HANDOUT_TYPES = { jpg: 'image/jpeg', png: 'image/png' };
 
 function registerLiveIpc() {
   ipcMain.handle('live:status', () => ({ ...liveStatus(), bonjour: Live.hasBonjour() }));
@@ -465,6 +480,19 @@ function registerLiveIpc() {
     listener.on('roll', (message) => { if (live === session) sendToMain('live:roll', message); });
     listener.on('rules', (mode) => { if (live === session) sendToMain('live:rules', mode); });
     listener.on('catalog', (items) => { if (live === session) sendToMain('live:catalog', items); });
+    // A handout arrived: shown as image data (the window only loads images it's given).
+    const handoutFiles = new Map(); // id -> { file, title, ext }
+    session.handoutFiles = handoutFiles;
+    listener.on('handout', (h) => {
+      if (live !== session) return;
+      let bytes;
+      try { bytes = fs.readFileSync(h.file); } catch { return; }
+      handoutFiles.set(h.id, { file: h.file, title: h.title, ext: h.ext });
+      sendToMain('live:handout', {
+        id: h.id, title: h.title, at: h.at, show: !!h.show,
+        src: `data:${HANDOUT_TYPES[h.ext] || 'image/jpeg'};base64,${bytes.toString('base64')}`,
+      });
+    });
     listener.on('command', (command) => {
       if (command.file) command.url = `sound://live/${encodeURIComponent(path.basename(command.file))}`;
       else if (command.builtin) command.url = `sound://builtin/${encodeURIComponent(command.builtin)}`;
@@ -482,6 +510,35 @@ function registerLiveIpc() {
   });
 
   ipcMain.handle('live:leave', () => { endLive(); return liveStatus(); });
+
+  // The broadcaster sends a picture (already scaled down to a JPEG by the window).
+  ipcMain.handle('live:handout-send', async (_e, { data, title }) => {
+    if (!live || live.role !== 'host') throw new Error('Not broadcasting');
+    const bytes = Buffer.from(data || []);
+    if (!bytes.length || bytes.length > HANDOUT_MAX_BYTES) throw new Error('That picture is too big to send.');
+    const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+    const file = path.join(hostHandoutDir(), `${hash}.jpg`);
+    fs.writeFileSync(file, bytes);
+    const id = `h-${Date.now().toString(36)}-${hash.slice(0, 6)}`;
+    await live.host.handout({ id, file, hash, ext: 'jpg', title });
+    return { id };
+  });
+  ipcMain.handle('live:handout-show', async (_e, id) => {
+    if (live && live.role === 'host') await live.host.showHandout(String(id));
+  });
+  // A listener keeps a handout: a save dialog, then a copy of the file.
+  ipcMain.handle('live:handout-save', async (e, id) => {
+    const entry = live && live.role === 'listen' && live.handoutFiles ? live.handoutFiles.get(String(id)) : null;
+    if (!entry) return false;
+    const name = (entry.title || 'Handout').replace(/[\\/:*?"<>|]/g, '').trim() || 'Handout';
+    const result = await dialog.showSaveDialog(BrowserWindow.fromWebContents(e.sender), {
+      defaultPath: path.join(app.getPath('downloads'), `${name}.${entry.ext}`),
+      filters: [{ name: 'Images', extensions: [entry.ext] }],
+    });
+    if (result.canceled || !result.filePath) return false;
+    fs.copyFileSync(entry.file, result.filePath);
+    return true;
+  });
 
   // A dice roll by this listener, for everyone in the session.
   ipcMain.on('live:roll', (_e, message) => {

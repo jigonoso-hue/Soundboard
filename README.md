@@ -8,7 +8,7 @@ A soundboard for running tabletop RPG sessions.
 | **iPad / iPhone** (SwiftUI) | [`soundboard-ipad/`](soundboard-ipad/) | Sounds, YouTube clipping and full-audio saving, ambience layers (looping or now and then), tags, Bashes, Scene Kits with playlists and scene crossfades, Live Sessions, themes, 3D dice |
 | **Relay server** (Node) | [`live-relay/`](live-relay/) | Routes online Live Sessions between the broadcaster's app and the listeners' apps |
 
-**Live Sessions** let the broadcaster play to every listener's own device, in sync, at the table (same Wi-Fi) or online (through the relay). Listeners get their own volume for music, effects and ambience; the broadcaster can whisper a sound to one listener, keep sounds broadcaster-only, and make phones buzz on big hits, and listeners can play up to five sounds of their own for everyone. Mac and iPhone/iPad can share a session.
+**Live Sessions** let the broadcaster play to every listener's own device, in sync, at the table (same Wi-Fi) or online (through the relay). Listeners get their own volume for music, effects and ambience; the broadcaster can whisper a sound to one listener, keep sounds broadcaster-only, and make phones buzz on big hits, and listeners can play up to five sounds of their own for everyone. The broadcaster can also push a **handout** (a map, a wanted poster, a monster) to every listener's screen. Mac and iPhone/iPad can share a session.
 
 The two apps are kept feature-for-feature the same (see [`CLAUDE.md`](CLAUDE.md)).
 

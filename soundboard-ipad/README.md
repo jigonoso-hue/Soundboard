@@ -108,13 +108,15 @@ While broadcasting, two buttons join the toolbar:
 
 In the Live sheet, **Remove** next to a listener takes them out of the session.
 
+**Handout:** tap **Handout** (in the toolbar on iPad, in the bar at the bottom on iPhone), choose a picture from Photos or Files (a map, a wanted poster, a monster), give it a title if you like, then **Send to Everyone**. It fills every listener's screen, fitted to it, until they close it. The sheet lists what you've sent this session: tap one to show it again.
+
 A banner shows what's armed, with Cancel.
 
 - **Broadcaster only:** turn it on in a sound's Edit screen and it plays only on your device. Tiles show an **Only me** badge.
 - **Buzz:** turn it on in a sound's Edit screen for big hits. Listeners' iPhones vibrate whenever it plays. With the app open the phone vibrates and the stage shakes; in the background or locked, a notification vibrates the phone.
 - **Listeners' sounds:** in the Live sheet (before or during the session), choose **Off**, **Their own sounds** or **My soundboard**. Each listener picks up to 5 sounds (from their own library, or from yours, minus broadcaster-only ones); when they tap one, everyone hears it, you included. You can still use all your sounds.
 
-**Tune In (a listener).** Enter your name (required; it's shown on your sounds, rolls and everywhere else), then pick a nearby session or enter the broadcaster's code. The app switches to a full-screen stage until you leave, drawn in your theme: a radio night by default, a candlelit parchment page in Tavern, deep space with an orbiting atom in Space Age, a radar sweep in Sci-Fi, a turning gold sigil in Dark Academia. Rings pulse while sounds play; it shows the broadcaster's session and scene and what's playing (sounds, then full sounds, then ambience, with a listener's name on sounds they added); whispers glow purple and buzzes shake the screen. **Volumes** has your sliders for overall volume, music, effects and ambience. When the broadcaster allows listeners' sounds, your pads sit at the bottom (**Choose** picks up to 5). Sounds keep playing with the screen locked or while you use another app. Allow notifications when asked, so Buzz can vibrate a locked phone.
+**Tune In (a listener).** Enter your name (required; it's shown on your sounds, rolls and everywhere else), then pick a nearby session or enter the broadcaster's code. The app switches to a full-screen stage until you leave, drawn in your theme: a radio night by default, a candlelit parchment page in Tavern, deep space with an orbiting atom in Space Age, a radar sweep in Sci-Fi, a turning gold sigil in Dark Academia. Rings pulse while sounds play; it shows the broadcaster's session and scene and what's playing (sounds, then full sounds, then ambience, with a listener's name on sounds they added); whispers glow purple and buzzes shake the screen. **Volumes** has your sliders for overall volume, music, effects and ambience. A **handout** from the broadcaster fills the screen (with a notification if the app is in the background): pinch to zoom, drag to look around, double-tap to zoom in or out, **Save** to keep a copy (Save Image, Files or AirDrop), **Close** at the bottom to go back. **Handouts** at the top of the stage lists the session's handouts; they're deleted from your phone when you leave. When the broadcaster allows listeners' sounds, your pads sit at the bottom (**Choose** picks up to 5). Sounds keep playing with the screen locked or while you use another app. Allow notifications when asked, so Buzz can vibrate a locked phone.
 
 The first time you broadcast or look for sessions, iOS asks to use the local network: tap **Allow**. Online sessions go through Dungeon Radio's own relay server, built into the app, so there's nothing to set up.
 
@@ -151,6 +153,7 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Audio/SoundPlayer.swift` | Playback, volumes, progress |
 | `Audio/AudioFiles.swift` | Streaming .m4a encoding of captures and trimming audio out of videos |
 | `Audio/AmbienceMixer.swift` | Ambience layers (looping, or now and then) |
+| `Views/HandoutsView.swift` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send sheet |
 | `Audio/MusicDirector.swift` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |
 | `Audio/BackgroundAudio.swift` | Audio session, interruptions, and staying alive in the background during Live Sessions |
 | `BackgroundAudio.plist` | Declares background audio (merged into the app's Info.plist) |

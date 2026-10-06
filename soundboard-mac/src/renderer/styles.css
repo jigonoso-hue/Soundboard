@@ -1675,3 +1675,40 @@ body.game-locked { overflow: hidden; }
 .kit-autoplay-hint { margin: 4px 0 0 24px; max-width: 520px; }
 #section-menu { max-height: calc(100vh - 16px); overflow-y: auto; }
 .layer > .layer-every { grid-column: 1 / -1; justify-self: start; margin-left: 0; }
+
+/* ---------- Handouts ---------- */
+/* A listener's screen locked to a picture: fitted, zoomable, Close at the bottom. */
+.handout-view { position: fixed; inset: 0; z-index: 95; display: flex; flex-direction: column; color: #fff; background: #06060a; -webkit-app-region: no-drag; }
+.handout-title { padding: 18px 70px 10px; text-align: center; font-weight: 800; font-size: 17px; letter-spacing: 0.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.handout-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: zoom-in; display: flex; align-items: center; justify-content: center; }
+.handout-view.zoomed .handout-stage { cursor: grab; }
+.handout-img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; user-select: none; -webkit-user-drag: none; will-change: transform; box-shadow: 0 12px 50px rgba(0,0,0,0.6); }
+.handout-bar { display: flex; justify-content: center; gap: 12px; padding: 14px 16px calc(18px + env(safe-area-inset-bottom)); }
+.handout-bar button { min-height: 48px; min-width: 120px; font-size: 16px; font-weight: 700; border-radius: 14px; }
+.handout-save { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); color: #fff; }
+.handout-close { min-width: 180px !important; }
+body.handout-open .game-screen { visibility: hidden; }
+/* The session's handouts, from the stage. */
+.handout-log { position: fixed; inset: 0; z-index: 94; display: flex; flex-direction: column; gap: 12px; padding: 24px; overflow-y: auto; color: #fff; background: rgba(8, 8, 14, 0.94); backdrop-filter: blur(10px); }
+.handout-log-head { display: flex; align-items: center; justify-content: space-between; }
+.handout-log-head h2 { margin: 0; font-size: 20px; }
+.handout-log-close { min-height: 44px; min-width: 88px; }
+.handout-log-grid, .handout-sent-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.handout-thumb { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: inherit; text-align: left; }
+.handout-thumb img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; background: #000; }
+.handout-thumb span { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The broadcaster's send dialog. */
+.handout-dialog { width: min(560px, calc(100vw - 32px)); }
+.handout-dialog label { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+.handout-preview { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 10px; }
+.handout-preview img { max-width: 100%; max-height: 260px; border-radius: 10px; background: #000; }
+.handout-drop { width: 100%; min-height: 150px; justify-content: center; border: 2px dashed var(--card-stroke); border-radius: 14px; background: transparent; font-size: 15px; }
+.handout-sent { margin-top: 14px; }
+.handout-sent-row { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); max-height: 200px; overflow-y: auto; }
+@media (max-width: 560px) {
+  .handout-title { padding: 14px 16px 8px; font-size: 15px; }
+  .handout-bar button { flex: 1; min-width: 0; }
+  .handout-close { min-width: 0 !important; flex: 1.6 !important; }
+  .handout-log { padding: 16px; }
+  .handout-log-grid { grid-template-columns: repeat(2, 1fr); }
+}

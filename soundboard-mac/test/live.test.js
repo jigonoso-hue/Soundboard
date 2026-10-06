@@ -160,6 +160,64 @@ test('scene music: crossfades, built-in cues and scene-change fades', async () =
   }
 });
 
+test('handouts: sent to everyone at the table, listed for late joiners, never kept', async () => {
+  const library = makeLibrary();
+  const transport = new LanHostTransport({ name: 'Handouts' });
+  await transport.start();
+  const host = new LiveHost({ name: 'Handouts', transport, resolveSound: library.resolveSound });
+  const url = `ws://127.0.0.1:${transport.port}`;
+  // A "picture" bigger than one chunk, so it arrives in pieces.
+  const picture = crypto.randomBytes(700 * 1024);
+  const file = path.join(tempDir('pic'), 'map.jpg');
+  fs.writeFileSync(file, picture);
+  const hash = crypto.createHash('sha256').update(picture).digest('hex');
+  const cache = tempDir('sam');
+  const sam = new LiveListener({ cacheDir: cache, name: 'Sam' });
+  let kim;
+  try {
+    sam.connect(url);
+    await waitFor(host, 'peers', (list) => list.length === 1);
+    const shown = waitFor(sam, 'handout', () => true, 5000);
+    await host.handout({ id: 'h1', file, hash, ext: 'jpg', title: 'The\nOld Map' });
+    const got = await shown;
+    assert.equal(got.show, true);
+    assert.equal(got.title, 'The Old Map');
+    assert.deepEqual(fs.readFileSync(got.file), picture);
+    // Kept in a temporary folder of its own, not with the cached sounds.
+    assert.ok(!got.file.startsWith(cache));
+    assert.ok(!fs.readdirSync(cache).some((n) => n.startsWith(hash)));
+
+    // Someone joining later gets the list, not a locked screen.
+    kim = new LiveListener({ cacheDir: tempDir('kim'), name: 'Kim' });
+    const listed = waitFor(kim, 'handout', () => true, 5000);
+    kim.connect(url);
+    const late = await listed;
+    assert.equal(late.show, false);
+    assert.equal(late.id, 'h1');
+
+    // Showing it again locks screens again.
+    const again = waitFor(sam, 'handout', () => true, 5000);
+    await host.showHandout('h1');
+    assert.equal((await again).show, true);
+
+    // Its folder is the listener's own temporary one.
+    assert.equal(cleanHandoutsOnly(sam), true);
+    // Leaving deletes them.
+    sam.leave();
+    assert.ok(!fs.existsSync(got.file));
+    assert.ok(!fs.existsSync(path.dirname(got.file)));
+  } finally {
+    sam.leave();
+    kim?.leave();
+    transport.close();
+  }
+});
+
+// The listener only ever keeps handouts in its own temporary folder.
+function cleanHandoutsOnly(listener) {
+  return !!listener.handoutDir && listener.handoutDir.includes('dungeon-radio-handouts-');
+}
+
 test('late joiners pick up what is already playing', async () => {
   const library = makeLibrary();
   const transport = new LanHostTransport({ name: 'Late' });
