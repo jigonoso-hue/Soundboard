@@ -1196,6 +1196,24 @@ const Live = (() => {
     if (status.mode === 'online' && status.code) {
       head.append(el('div', 'live-code', status.code));
       head.append(el('div', 'muted small', 'Listeners open Live → Tune In and enter this code.'));
+      // Send it to players who aren't at the table.
+      const copy = (text, button, done) => {
+        navigator.clipboard.writeText(text).then(() => {
+          button.textContent = done;
+          setTimeout(() => { button.textContent = button.dataset.label; }, 1600);
+        }).catch(() => toast('Couldn’t copy.', true));
+      };
+      const share = el('div', 'live-share');
+      const codeBtn = el('button', null, 'Copy Code');
+      codeBtn.type = 'button';
+      codeBtn.dataset.label = 'Copy Code';
+      codeBtn.addEventListener('click', () => copy(status.code, codeBtn, 'Copied'));
+      const invite = el('button', null, 'Copy Invite');
+      invite.type = 'button';
+      invite.dataset.label = 'Copy Invite';
+      invite.addEventListener('click', () => copy(`Tune in to “${status.name || 'my game'}” on Dungeon Radio: open Live → Tune In and enter the code ${status.code}.`, invite, 'Copied'));
+      share.append(codeBtn, invite);
+      head.append(share);
     } else {
       head.append(el('div', 'muted small', 'Listeners on the same Wi-Fi open Live → Tune In and pick this session.'));
     }
@@ -1240,7 +1258,11 @@ const Live = (() => {
     body.append(natSoundsField());
     const end = el('button', 'danger', 'End Session');
     end.type = 'button';
-    end.addEventListener('click', () => run(() => api.live.leave()));
+    end.addEventListener('click', () => {
+      const n = (status.peers || []).length;
+      if (!window.confirm(n ? `End the session? ${n} listener${n === 1 ? '' : 's'} will be disconnected.` : 'End the session?')) return;
+      run(() => api.live.leave());
+    });
     body.append(end);
   }
 

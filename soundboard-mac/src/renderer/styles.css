@@ -1753,3 +1753,4 @@ body.handout-open .game-screen { visibility: hidden; }
   .kit-header-actions { gap: 6px; }
   .kit-header-actions button { padding-left: 9px; padding-right: 9px; }
 }
+.live-share { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }

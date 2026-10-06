@@ -185,7 +185,7 @@ Play to your listeners' own devices. Click **Live** in the toolbar.
 **Broadcast.** Name the session and choose:
 
 - **At the table:** listeners on the same Wi-Fi find it under **Tune In**. No server needed.
-- **Online:** listeners anywhere join with a 5-character code, through Dungeon Radio's own relay server (see [`live-relay/`](../live-relay/README.md)).
+- **Online:** listeners anywhere join with a 5-character code, through Dungeon Radio's own relay server (see [`live-relay/`](../live-relay/README.md)). While broadcasting, **Copy Code** and **Copy Invite** copy the code (or a ready-to-send invite) for players who aren't at the table. **End Session** asks first, since it disconnects everyone.
 
 Everything you play is sent to listeners: sounds, full sounds, bashes, ambience (strip and scene kit layers) and the name of the open scene kit. Listeners who join late pick up looping and still-playing sounds part-way through.
 

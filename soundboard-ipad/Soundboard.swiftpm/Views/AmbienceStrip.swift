@@ -5,9 +5,15 @@ struct AmbienceStrip: View {
     @Environment(\.appTheme) private var theme
     @EnvironmentObject private var mixer: AmbienceMixer
     @EnvironmentObject private var store: SoundStore
-    @AppStorage("ambienceCollapsed") private var collapsed = false
+    @AppStorage("ambienceCollapsed") private var collapsedWide = false
+    /// iPhone: starts folded away, so the board keeps the screen; one tap opens it.
+    @AppStorage("ambienceCollapsedPhone") private var collapsedPhone = true
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var compact: Bool { sizeClass == .compact }
+    private var collapsed: Bool {
+        get { compact ? collapsedPhone : collapsedWide }
+        nonmutating set { if compact { collapsedPhone = newValue } else { collapsedWide = newValue } }
+    }
 
     private var activeColor: Color { theme.ambienceColor }
 
@@ -17,13 +23,17 @@ struct AmbienceStrip: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { collapsed.toggle() }
                 } label: {
-                    Label("Ambience", systemImage: collapsed ? "chevron.right" : "chevron.down")
+                    Label(collapsed && !mixer.playing.isEmpty ? "Ambience · \(mixer.playing.count)" : "Ambience",
+                          systemImage: collapsed ? "chevron.right" : "chevron.down")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(mixer.playing.isEmpty ? (theme.ink ?? Color.primary) : activeColor)
                         .lineLimit(1)
                         .fixedSize()
                 }
                 .buttonStyle(.plain)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .accessibilityHint(collapsed ? "Shows the ambience layers" : "Hides the ambience layers")
 
                 if !compact { volume.frame(minWidth: 90, maxWidth: 160) }
 
@@ -67,7 +77,7 @@ struct AmbienceStrip: View {
                             }
                         }
                     }
-                    .frame(maxHeight: 190)
+                    .frame(maxHeight: 168)
                     .fixedSize(horizontal: false, vertical: mixer.layers.count <= 4)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {

@@ -183,7 +183,8 @@ struct KitView: View {
             .buttonStyle(.bordered)
             .accessibilityLabel("Kit options")
         }
-        .controlSize(.small)
+        // iPhone: full-size buttons for thumbs.
+        .controlSize(sizeClass == .compact ? .regular : .small)
         .fixedSize()
     }
 
@@ -236,10 +237,11 @@ struct KitView: View {
                             if let i = k.sections.firstIndex(where: { $0.id == updated.id }) { k.sections[i] = updated }
                         }
                     },
-                    onMoveItem: { item, from, to in moveItem(item, from: from, to: to, in: kit) }
+                    onMoveItem: { item, from, to in moveItem(item, from: from, to: to, in: kit) },
+                    fitsContent: true
                 )
-                // Tall enough for its sounds at full width (it scrolls inside if needed).
-                .frame(width: max(0, width), height: max(120, span(min(section.h, 8), Self.row)))
+                // Full width, as tall as everything in it: the page scrolls, not the section.
+                .frame(width: max(0, width))
             }
         }
     }
@@ -444,6 +446,7 @@ enum KitDrag {
 /// One section of a kit's board.
 struct KitSectionView: View {
     @Environment(\.appTheme) private var theme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var themes: ThemeSettings
     @EnvironmentObject private var store: SoundStore
     @EnvironmentObject private var bashes: BashStore
@@ -462,11 +465,16 @@ struct KitSectionView: View {
     let onChange: (KitSection) -> Void
     /// (item, section it came from, section it goes to).
     let onMoveItem: (KitItem, UUID?, UUID) -> Void
+    /// iPhone: the section grows to fit everything in it (the page scrolls),
+    /// instead of scrolling inside a fixed height.
+    var fitsContent = false
 
     @State private var dropHover = false
     @State private var lastShuffled: KitItem?
 
     private var ambienceColor: Color { theme.ambienceColor }
+    /// The title bar's buttons: thumb-sized on iPhone.
+    private var hit: CGFloat { sizeClass == .compact ? 44 : 30 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -475,9 +483,15 @@ struct KitSectionView: View {
                 volumeRow
             }
             Divider()
-            ScrollView {
-                content
-                    .padding(8)
+            Group {
+                if fitsContent {
+                    content.padding(8)
+                } else {
+                    ScrollView {
+                        content
+                            .padding(8)
+                    }
+                }
             }
             .disabled(editing)
             .opacity(editing ? 0.6 : 1)
@@ -549,9 +563,12 @@ struct KitSectionView: View {
                     onChange(s)
                 } label: {
                     IconLabel("Stop", icon: "stop", size: 10).font(.caption2.weight(.semibold))
+                        .frame(minHeight: hit)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .disabled(!anyOn)
+                .accessibilityLabel("Stop this section's ambience")
             }
             if section.isPlaylist {
                 let on = music.isPlaying(section.id)
@@ -564,7 +581,7 @@ struct KitSectionView: View {
                         .padding(.vertical, 4)
                         .foregroundStyle(on ? Color.white : Color.accentColor)
                         .background(on ? Color.accentColor : Color.accentColor.opacity(0.14), in: Capsule())
-                        .frame(minHeight: 30)
+                        .frame(minHeight: hit)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -576,7 +593,7 @@ struct KitSectionView: View {
                 Button(action: shufflePlay) {
                     Image(systemName: "shuffle")
                         .font(.subheadline.weight(.semibold))
-                        .frame(width: 30, height: 30)
+                        .frame(width: hit, height: hit)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
@@ -585,7 +602,7 @@ struct KitSectionView: View {
             }
             Button(action: onAdd) {
                 AppIcon(id: "plus", size: 16)
-                    .frame(width: 30, height: 30)
+                    .frame(width: hit, height: hit)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
@@ -647,7 +664,7 @@ struct KitSectionView: View {
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.subheadline.weight(.semibold))
-                    .frame(width: 30, height: 30)
+                    .frame(width: hit, height: hit)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
@@ -655,7 +672,7 @@ struct KitSectionView: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, 4)
-        .frame(height: 34)
+        .frame(height: sizeClass == .compact ? 46 : 34)
         .background(section.isAmbience ? ambienceColor.opacity(0.07) : Color.clear)
     }
 

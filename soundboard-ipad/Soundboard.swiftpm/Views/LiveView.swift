@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The Live Session sheet: start broadcasting, tune in to a session, or (while
 /// connected) see listeners and whisper, or set your own volumes.
@@ -11,6 +12,8 @@ struct LiveView: View {
     private var hasName: Bool { !live.yourName.trimmingCharacters(in: .whitespaces).isEmpty }
     /// The player waiting for "Remove from the session?" to be confirmed.
     @State private var kicking: LiveHostEngine.Peer?
+    @State private var confirmEnd = false
+    @State private var copied = false
 
     enum Tab: String, CaseIterable {
         case broadcast = "Broadcast"
@@ -32,12 +35,25 @@ struct LiveView: View {
                     }
                 }
             }
+            // The main action stays at the bottom, in thumb reach, however long the form.
+            .safeAreaInset(edge: .bottom) {
+                if live.role == .idle && tab == .broadcast { startBar }
+            }
             .navigationTitle("Live Session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .confirmationDialog("End the session?", isPresented: $confirmEnd, titleVisibility: .visible) {
+                Button("End Session", role: .destructive) {
+                    live.leave()
+                    // Out of the way of the session recap.
+                    dismiss()
+                }
+            } message: {
+                Text(live.peers.isEmpty ? "No one is listening yet." : "\(live.peers.count) listener\(live.peers.count == 1 ? "" : "s") will be disconnected.")
             }
             .confirmationDialog(
                 "Remove \(kicking?.name ?? "this listener") from the session?",
@@ -97,22 +113,31 @@ struct LiveView: View {
         }
         playerSoundsSection
         natSoundsSection
-        Section {
-            Button {
-                live.startHosting()
-            } label: {
-                HStack {
-                    Label("Start Broadcasting", systemImage: "dot.radiowaves.left.and.right")
-                    if live.busy {
-                        Spacer()
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(live.busy)
-        } footer: {
+        Section {} footer: {
             Text("Each listener's device plays the sounds itself, in sync, with its own volume for music, effects and ambience.")
         }
+    }
+
+    private var startBar: some View {
+        Button {
+            live.startHosting()
+        } label: {
+            HStack(spacing: 10) {
+                if live.busy {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                }
+                Text(live.busy ? "Starting…" : "Start Broadcasting")
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: 50)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(live.busy)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 
     @ViewBuilder
@@ -152,7 +177,7 @@ struct LiveView: View {
                 .autocorrectionDisabled()
                 .font(.body.monospaced())
             Button("Tune In Online") { live.tuneInOnline() }
-                .disabled(live.busy || !hasName)
+                .disabled(live.busy || !hasName || live.codeInput.filter { $0.isLetter || $0.isNumber }.isEmpty)
         } header: {
             Text("Online session")
         }
@@ -219,6 +244,22 @@ struct LiveView: View {
                     Text("Listeners open Live → Tune In and enter this code.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    // Send it to players who aren't at the table.
+                    HStack(spacing: 10) {
+                        ShareLink(item: "Tune in to “\(live.hostingName)” on Dungeon Radio: open Live → Tune In and enter the code \(code).") {
+                            Label("Share Code", systemImage: "square.and.arrow.up")
+                                .frame(minHeight: 36)
+                        }
+                        Button {
+                            UIPasteboard.general.string = code
+                            copied = true
+                        } label: {
+                            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                                .frame(minHeight: 36)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.top, 4)
                 } else {
                     Text("Listeners on the same Wi-Fi open Live → Tune In and pick this session.")
                         .font(.caption)
@@ -272,11 +313,7 @@ struct LiveView: View {
         playerSoundsSection
         natSoundsSection
         Section {
-            Button("End Session", role: .destructive) {
-                live.leave()
-                // Out of the way of the session recap.
-                dismiss()
-            }
+            Button("End Session", role: .destructive) { confirmEnd = true }
         }
     }
 
@@ -341,7 +378,7 @@ private struct PeerButtonLabel: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         if compact {
             // Icon only, still read out by its title.
-            Label(configuration).labelStyle(.iconOnly).frame(minWidth: 30, minHeight: 30)
+            Label(configuration).labelStyle(.iconOnly).frame(minWidth: 36, minHeight: 36)
         } else {
             Label(configuration)
         }
@@ -517,6 +554,9 @@ struct WhisperPicker: View {
                     .foregroundStyle(.secondary)
                     .padding(16)
             }
+            // A big table scrolls instead of running off a phone's screen.
+            ScrollView {
+            VStack(spacing: 0) {
             ForEach(live.peers) { peer in
                 Button {
                     if live.whisperTargets.contains(peer.id) {
@@ -534,10 +574,15 @@ struct WhisperPicker: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
+                    .frame(minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
+            }
+            }
+            .frame(maxHeight: 340)
+            .fixedSize(horizontal: false, vertical: true)
             if !live.whisperTargets.isEmpty {
                 Divider()
                 Button("Don't Whisper") { live.whisperTargets = [] }

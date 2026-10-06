@@ -136,7 +136,8 @@ struct ListenerStageView: View {
                 Button {
                     showHandouts = true
                 } label: {
-                    Label("Handouts · \(live.handouts.count)", systemImage: "map")
+                    // iPhone: the map and the count, so the bar fits a small phone.
+                    Label(sizeClass == .compact ? "\(live.handouts.count)" : "Handouts · \(live.handouts.count)", systemImage: "map")
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(style.chipFill, in: Capsule())
@@ -167,13 +168,15 @@ struct ListenerStageView: View {
                 showVolumes = true
             } label: {
                 Label("Volumes", systemImage: "slider.horizontal.3")
+                    .labelStyle(StageChipLabel(iconOnly: sizeClass == .compact))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(style.chipFill, in: Capsule())
-                    .frame(minHeight: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Volumes")
         }
     }
 
@@ -843,6 +846,19 @@ struct LiveVolumesView: View {
                 set: { live.levels[key] = $0 }
             ), in: 0...1)
             .accessibilityLabel("\(title) volume")
+        }
+    }
+}
+
+/// A stage chip's label: icon and title, or just the icon on iPhone.
+private struct StageChipLabel: LabelStyle {
+    let iconOnly: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if iconOnly {
+            configuration.icon
+        } else {
+            Label(configuration)
         }
     }
 }

@@ -903,7 +903,17 @@ final class LiveSession: ObservableObject {
 
     /// The broadcaster sends a picture to every listener's screen.
     func sendHandout(_ image: UIImage, title: String) {
-        guard role == .host, let host, let prepared = Handout.prepare(image) else {
+        guard role == .host else { return }
+        notice = "Sending…"
+        // Scaling and compressing a big photo takes a moment: off the main thread.
+        Task { @MainActor [weak self] in
+            let prepared = await Task.detached(priority: .userInitiated) { Handout.prepare(image) }.value
+            self?.finishSending(prepared, title: title)
+        }
+    }
+
+    private func finishSending(_ prepared: (url: URL, hash: String)?, title: String) {
+        guard role == .host, let host, let prepared else {
             notice = "Couldn't send that picture."
             return
         }

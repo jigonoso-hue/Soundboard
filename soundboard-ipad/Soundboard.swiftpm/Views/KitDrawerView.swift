@@ -90,8 +90,13 @@ struct KitDrawerView: View {
                         .buttonStyle(.plain)
                     }
                     if sizeClass == .compact {
-                        // iPhone: every tag in view, wrapping onto more lines.
-                        FlowLayout(spacing: 6) { chips }
+                        // iPhone: every tag in view, wrapping onto more lines (a long
+                        // list of tags scrolls, so the sounds keep most of the room).
+                        ScrollView {
+                            FlowLayout(spacing: 6) { chips }
+                        }
+                        .frame(maxHeight: 96)
+                        .fixedSize(horizontal: false, vertical: usedTags.count <= 8)
                     } else {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) { chips }
@@ -116,7 +121,7 @@ struct KitDrawerView: View {
                     }
                 }
                 .listStyle(.plain)
-                .environment(\.defaultMinListRowHeight, 34)
+                .environment(\.defaultMinListRowHeight, sizeClass == .compact ? 44 : 34)
                 Text(section.isAmbience
                      ? "Tap to add or remove a layer. You can also drag sounds onto any ambience section."
                      : "Tap to add or remove. You can also drag items onto any section.")

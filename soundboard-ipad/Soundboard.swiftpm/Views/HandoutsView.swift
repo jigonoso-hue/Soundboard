@@ -184,7 +184,11 @@ struct HandoutViewer: View {
             }
         }
         .task(id: url) {
-            image = UIImage(contentsOfFile: url.path)
+            // Decoded off the main thread, so the lock appears without a hitch.
+            let path = url.path
+            image = await Task.detached(priority: .userInitiated) {
+                UIImage(contentsOfFile: path)?.preparingForDisplay()
+            }.value
         }
     }
 
@@ -271,9 +275,7 @@ struct HandoutGrid: View {
                         Color.black
                             .aspectRatio(4 / 3, contentMode: .fit)
                             .overlay {
-                                if let url = handout.url, let image = UIImage(contentsOfFile: url.path) {
-                                    Image(uiImage: image).resizable().scaledToFill()
-                                }
+                                if let url = handout.url { HandoutThumb(url: url) }
                             }
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         Text(handout.title.isEmpty ? "Handout" : handout.title)
@@ -287,6 +289,31 @@ struct HandoutGrid: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open \(handout.title.isEmpty ? "handout" : handout.title)")
             }
+        }
+    }
+}
+
+/// A small copy of a handout, made once off the main thread (the pictures are
+/// up to 2048 pixels, too big to decode on every redraw).
+private struct HandoutThumb: View {
+    let url: URL
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .task(id: url) {
+            let path = url.path
+            image = await Task.detached(priority: .userInitiated) {
+                guard let full = UIImage(contentsOfFile: path) else { return nil }
+                let ratio = min(1, 400 / max(full.size.width, full.size.height, 1))
+                return full.preparingThumbnail(of: CGSize(width: full.size.width * ratio, height: full.size.height * ratio))
+            }.value
         }
     }
 }
