@@ -35,6 +35,7 @@ Where the code lives, side by side:
 | Bookmarks | `src/bookmarks.js`, `src/renderer/bookmarks.js` | `Model/Bookmarks.swift`, `Views/BookmarksView.swift` |
 | Ambience (loops, now-and-then layers) | `src/renderer/ambience.js` | `Audio/AmbienceMixer.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
+| Android Live engine | `src/live.js`, `src/game.js` | `Live/LiveEngines.swift`, `LiveGame.swift` → Android: `soundboard-android/core/` |
 
 ## Design for iPhone first
 
@@ -82,9 +83,17 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 - Don't download or run external binaries automatically; don't loosen the Mac app's Content Security Policy.
 - Mac app data stays in `~/Library/Application Support/Soundboard`, and the iOS bundle ID stays the same, so existing libraries carry over.
 
-## Planned: Android (not started)
+## Android (in progress)
 
-When the Android app is made, the plan is:
+`soundboard-android/`. Stage 1 is done: `core/`, the Live Session engine in
+plain Kotlin (a port of `src/live.js` and `src/game.js`), tested against the
+Mac engine and the relay (`gradle :core:test`, see its README). Protocol or
+rule changes now go into `src/live.js`, `Live/LiveEngines.swift` **and**
+`core/src/main/kotlin/com/dungeonradio/live/`, with `InteropTest` kept passing.
+The app itself (stage 2 on) follows the plan below and needs the Android SDK
+(the cloud sandbox must allow `dl.google.com` to build it).
+
+The plan:
 
 - **Capacitor around the Mac app's web code** (src/renderer): most screens,
   the dice and the games carry over. Rebuild natively, as Capacitor plugins,
