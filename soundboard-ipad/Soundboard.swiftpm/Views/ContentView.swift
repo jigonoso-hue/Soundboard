@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var themes = ThemeSettings()
     @StateObject private var live = LiveSession()
     @StateObject private var music = MusicDirector()
+    @StateObject private var bookmarks = BookmarkStore()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showBrowser = false
     @State private var selection: Destination? = .all
@@ -118,6 +119,7 @@ struct ContentView: View {
         .environmentObject(themes)
         .environmentObject(live)
         .environmentObject(music)
+        .environmentObject(bookmarks)
         .overlay(alignment: .top) {
             if let notice = live.notice {
                 Text(notice)
@@ -154,8 +156,11 @@ struct ContentView: View {
         .onChange(of: store.sounds) { _, _ in ambience.syncWithLibrary() }
         .onChange(of: selection) { old, destination in
             if case .kit(let id)? = destination { live.currentKitId = id } else { live.currentKitId = nil }
-            // A kit set to start its music and ambience: the scene changes.
-            if case .kit(let id)? = destination, destination != old, let kit = kits.kit(id), kit.autoplay == true {
+            // A kit set to start its music and ambience: the scene changes
+            // (unless a bookmark opened it, bringing back its own sound).
+            if ui.skipNextScene {
+                ui.skipNextScene = false
+            } else if case .kit(let id)? = destination, destination != old, let kit = kits.kit(id), kit.autoplay == true {
                 music.sceneOpened(kit)
             }
         }
@@ -164,8 +169,12 @@ struct ContentView: View {
             if !open { showTaggingIfNeeded() }
         }
         .onChange(of: kits.kits) { _, list in
-            // A deleted kit can't stay selected.
+            // A deleted kit can't stay selected, and bookmarks forget it.
             if case .kit(let id)? = selection, !list.contains(where: { $0.id == id }) { selection = .all }
+            let ids = Set(list.map(\.id))
+            let gone = Set(bookmarks.bookmarks.flatMap { b in [b.kitId].compactMap { $0 } + b.music.playlists.map(\.kitId) })
+                .subtracting(ids)
+            for id in gone { bookmarks.forgetKit(id) }
         }
     }
 

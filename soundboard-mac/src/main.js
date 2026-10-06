@@ -7,6 +7,7 @@ const { Library, AUDIO_EXTENSIONS } = require('./library');
 const { YtDlp } = require('./ytdlp');
 const { BashStore, COVER_TYPES } = require('./bashes');
 const { KitStore, KIT_ICONS, KIT_COLORS, COLUMNS } = require('./kits');
+const { BookmarkStore } = require('./bookmarks');
 const Live = require('./live');
 
 const AMBIENCE_DIR = path.join(__dirname, 'ambience');
@@ -27,6 +28,7 @@ app.userAgentFallback = app.userAgentFallback.replace(/\s(Electron|clipboard-sou
 let library;
 let bashes;
 let kits;
+let bookmarks;
 let ytdlp;
 const editors = new Map(); // bash id -> editor window
 let mainWindow;
@@ -318,7 +320,13 @@ function registerIpc() {
   ipcMain.handle('kits:add-items', (e, id, items, sectionId) => { const kit = kits.addItems(id, items, sectionId, library.list()); kitsChanged(e.sender); return kit; });
   ipcMain.handle('kits:remove-item', (e, id, item, sectionId) => { const kit = kits.removeItem(id, item, sectionId); kitsChanged(e.sender); return kit; });
   ipcMain.handle('kits:duplicate', (e, id) => { const kit = kits.duplicate(id); kitsChanged(e.sender); return kit; });
-  ipcMain.handle('kits:remove', (e, id) => { kits.remove(id); kitsChanged(e.sender); });
+  ipcMain.handle('kits:remove', (e, id) => { kits.remove(id); bookmarks.forgetKit(id); kitsChanged(e.sender); });
+
+  // Bookmarks: saved moments of the game's sound.
+  ipcMain.handle('bookmarks:list', () => bookmarks.list());
+  ipcMain.handle('bookmarks:save', (_e, bookmark) => bookmarks.save(bookmark));
+  ipcMain.handle('bookmarks:rename', (_e, id, name) => bookmarks.rename(String(id), name));
+  ipcMain.handle('bookmarks:remove', (_e, id) => { bookmarks.remove(String(id)); });
 
   registerLiveIpc();
 
@@ -615,6 +623,7 @@ app.whenReady().then(() => {
   library = new Library(path.join(app.getPath('userData'), 'sounds'));
   bashes = new BashStore(library.dir);
   kits = new KitStore(library.dir);
+  bookmarks = new BookmarkStore(library.dir);
   kits.finishMigration(library.list());
 
   ytdlp = new YtDlp();

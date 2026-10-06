@@ -109,6 +109,8 @@ Click **Done** to lock the layout, so nothing moves by accident during a session
 
 **Scene changes.** In **Edit**, tick **Start its music and ambience when opened**. Opening the kit is then a scene change: the music and ambience that are playing fade out over 3 seconds while the kit's first playlist and its ambience layers fade in: the layers you had on when you last left the kit (the first time, all of them). Listeners hear the same fades.
 
+**Bookmarks.** **+ Save** under **Bookmarks** in the sidebar saves the moment's sound: the scene kit that's open, the playlists playing (which song and how far in), other songs playing, the ambience layers (the strip's and the kit's, with their volumes and now-and-then settings) and the master and ambience volumes. Click a bookmark to bring it all back, next session or after a detour: it's a scene change, so what isn't in the bookmark fades out over 3 seconds while each song fades back in from where it was, and listeners hear the same. Right-click a bookmark to **Update to what's playing now**, **Rename** or **Delete** it. Deleting a scene kit leaves its bookmarks (they forget the kit).
+
 **Section options (⋯).**
 - **Rename** it (double-clicking the title also works).
 - **Item size:** Small, Medium or Large.
@@ -309,6 +311,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/ambience.js` | Ambience mixer |
 | `src/renderer/handouts.js` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send dialog |
 | `src/renderer/music.js` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |
+| `src/renderer/bookmarks.js`, `src/bookmarks.js` | Bookmarks: saving the moment's sound and bringing it back |
 | `src/ambience/` | Built-in ambience loops |
 | `src/youtube-preload.js` | Injected into the YouTube view; records the video's audio |
 | `src/renderer/` | The UI, plus WAV encoding and trimming |

@@ -472,6 +472,48 @@ const Ambience = (() => {
       if (voice) voice.gain.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
     },
     onChange(fn) { listeners.add(fn); },
+    // For bookmarks: the ambience volume and every layer playing (the strip's
+    // and scene kits'), with how each plays.
+    capture() {
+      const layers = [];
+      for (const id of voices.keys()) {
+        const strip = state.layers.find((l) => l.id === id);
+        const layer = strip || external.get(id);
+        if (!layer) continue;
+        layers.push({ id, strip: !!strip, kind: layer.kind, ref: layer.ref, volume: layer.volume, ...(layer.every ? { every: layer.every } : {}) });
+      }
+      return { volume: state.volume, layers };
+    },
+    // A bookmark coming back: fades out what isn't in it and fades in what is.
+    applyScene(scene, fade) {
+      if (Number.isFinite(scene.volume)) {
+        state.volume = Math.min(1, Math.max(0, scene.volume));
+        master.gain.setTargetAtTime(state.volume, ctx.currentTime, 0.3);
+        if ($('#amb-volume')) $('#amb-volume').value = state.volume;
+      }
+      const list = (scene.layers || []).filter((l) => l.kind === 'builtin' || sounds.some((s) => s.id === l.ref));
+      this.fadeOutAll(new Set(list.map((l) => l.id)), fade);
+      for (const entry of list) {
+        if (entry.strip) {
+          let layer = state.layers.find((l) => l.id === entry.id) || state.layers.find((l) => l.kind === entry.kind && l.ref === entry.ref);
+          if (!layer) {
+            layer = { id: entry.id, kind: entry.kind, ref: entry.ref, volume: entry.volume, on: false };
+            state.layers.push(layer);
+          }
+          layer.volume = entry.volume;
+          const every = cleanEvery(entry.every);
+          if (every) layer.every = every; else delete layer.every;
+          if (!layer.on) { layer.on = true; startVoice(layer, fade); } else voices.get(layer.id)?.gain.gain.setTargetAtTime(layer.volume, ctx.currentTime, 0.3);
+        } else if (voices.has(entry.id)) {
+          this.setVolume(entry.id, entry.volume);
+        } else {
+          this.start(entry.id, { kind: entry.kind, ref: entry.ref, volume: entry.volume, every: entry.every }, { fade });
+        }
+      }
+      save();
+      render();
+      notify();
+    },
     // Every layer playing right now, for Live Session listeners.
     snapshot() {
       const out = [];

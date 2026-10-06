@@ -60,6 +60,7 @@ function rampVolume(audio, to, seconds, then) {
 //   nearEnd: { seconds, fn }: calls fn once when that much of it is left
 //   onEnded: called when it finishes by itself
 //   gain: extra level from where it was played (a scene kit section's volume slider)
+//   seek: seconds in to start from (a bookmark brings a song back where it was)
 // Returns the audio element, or null.
 function play(id, options = {}) {
   const sound = sounds.find((s) => s.id === id);
@@ -74,6 +75,7 @@ function play(id, options = {}) {
   audio.volume = options.fadeIn ? 0 : target;
   if (prefs.outputDevice && audio.setSinkId) audio.setSinkId(prefs.outputDevice).catch(() => {});
   if (sound.repeat && sound.repeat.gap === 0 && !options.fresh) audio.loop = true; // replay immediately
+  if (options.seek > 0) audio.currentTime = options.seek;
   let set = playing.get(id);
   if (!set) playing.set(id, (set = new Set()));
   set.add(audio);
@@ -118,7 +120,7 @@ function play(id, options = {}) {
   });
   audio.play().then(() => { if (options.fadeIn) rampVolume(audio, target, options.fadeIn); }).catch(done);
   updateTile(id, audio);
-  if (typeof Live !== 'undefined') Live.soundPlayed(sound, { group: audio.group, fadeIn: options.fadeIn || 0 });
+  if (typeof Live !== 'undefined') Live.soundPlayed(sound, { group: audio.group, fadeIn: options.fadeIn || 0, gain: audio.gain, seek: options.seek || 0 });
   return audio;
 }
 

@@ -22,6 +22,12 @@ contextBridge.exposeInMainWorld('soundboard', {
     remove: (id) => ipcRenderer.invoke('kits:remove', id),
     onChanged: (callback) => ipcRenderer.on('kits:changed', (_e, list) => callback(list)),
   },
+  bookmarks: {
+    list: () => ipcRenderer.invoke('bookmarks:list'),
+    save: (bookmark) => ipcRenderer.invoke('bookmarks:save', bookmark),
+    rename: (id, name) => ipcRenderer.invoke('bookmarks:rename', id, name),
+    remove: (id) => ipcRenderer.invoke('bookmarks:remove', id),
+  },
   editor: {
     setDirty: (dirty) => ipcRenderer.invoke('bash-editor:set-dirty', dirty),
     onCloseRequested: (callback) => ipcRenderer.on('bash-editor:close-requested', () => callback()),

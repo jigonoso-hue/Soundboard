@@ -473,7 +473,8 @@ final class LiveSession: ObservableObject {
 
     /// A sound started on the board (tile, row, scene kit or playlist).
     /// group: what listeners stop it by; fadeIn: seconds it fades in over.
-    func soundPlayed(_ sound: Sound, volume: Double, group: String? = nil, fadeIn: Double = 0) {
+    /// seek: seconds in it started from (a bookmark), so listeners start at the same place.
+    func soundPlayed(_ sound: Sound, volume: Double, group: String? = nil, fadeIn: Double = 0, seek: Double = 0) {
         guard role == .host, let host else { return }
         if sound.gmOnly == true {
             if !whisperTargets.isEmpty { notice = "Broadcaster-only sounds can't be whispered." }
@@ -481,7 +482,7 @@ final class LiveSession: ObservableObject {
         }
         var event = LiveHostEngine.PlayEvent(
             pid: pid(), group: group ?? "s:\(sound.id.uuidString)", source: .library(sound.id), name: sound.name,
-            at: LiveNet.now, volume: volume, cat: sound.isFull ? "music" : "sfx")
+            at: LiveNet.now - max(0, seek) * 1000, volume: volume, cat: sound.isFull ? "music" : "sfx")
         event.fadeIn = fadeIn
         event.loop = sound.repeatGap == 0
         event.gap = sound.repeatGap ?? 0

@@ -23,6 +23,7 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
   - **+ Section** asks for a name and type. It can also add a **volume slider** for the section, which adjusts everything played from it, and a **shuffle button**, which plays a random sound or bash from it. You can turn both on or off later in the section's **⋯** menu.
   - **Playlists.** In a sound section's **⋯** menu, turn on **Play Songs One After Another**. Its songs (full sounds) then play in order, each crossfading into the next a few seconds before it ends, and start again from the top after the last. **Play** / **Stop** sits in the section's title bar; tapping a song starts the playlist from it. **Shuffle** (in the same menu) plays them in a random order, a new one each time round. **Stop All** stops the playlist too.
   - **Start its music and ambience when opened** (in **Edit** for the kit): opening the kit is a scene change. The music and ambience that are playing fade out over 3 seconds while the kit's first playlist and its ambience layers fade in: the layers you had on when you last left the kit (the first time, all of them). Listeners hear the same fades.
+- **Bookmarks.** **Save This Moment** under **Bookmarks** in the sidebar saves the moment's sound: the scene kit that's open, the playlists playing (which song and how far in), other songs playing, the ambience layers (the strip's and the kit's, with their volumes and now-and-then settings) and the master and ambience volumes. Tap a bookmark to bring it all back, next session or after a detour: it's a scene change, so what isn't in the bookmark fades out over 3 seconds while each song fades back in from where it was, and listeners hear the same. Touch and hold a bookmark to **Update to What's Playing**, **Rename** or **Delete** it (or swipe to delete).
   - While a kit is open, the toolbar only has the master volume and **Stop All**.
 - **Full sounds** show a volume slider while they play, like ambience layers. The level you set is kept for next time.
 - **Options** (in the sidebar):
@@ -155,6 +156,8 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Audio/AmbienceMixer.swift` | Ambience layers (looping, or now and then) |
 | `Views/HandoutsView.swift` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send sheet |
 | `Audio/MusicDirector.swift` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |
+| `Model/Bookmarks.swift`, `Views/BookmarksView.swift` | Bookmarks: saving the moment's sound and bringing it back |
+| `Views/FaceView.swift` | Listeners' pictures: the round face and the picker |
 | `Audio/BackgroundAudio.swift` | Audio session, interruptions, and staying alive in the background during Live Sessions |
 | `BackgroundAudio.plist` | Declares background audio (merged into the app's Info.plist) |
 | `Resources/Ambience/` | Built-in loops (made by `tools/generate-ambience.py`) |

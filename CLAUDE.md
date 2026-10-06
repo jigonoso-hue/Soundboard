@@ -32,6 +32,7 @@ Where the code lives, side by side:
 | Handouts | `src/renderer/handouts.js`, `src/live.js` | `Views/HandoutsView.swift`, `Live/LiveEngines.swift` |
 | Listeners' pictures | `face()` in `src/renderer/live.js`, `cleanAvatar` in `src/live.js` | `Views/FaceView.swift`, `LiveNet.cleanAvatar` |
 | Playlists and scene changes | `src/renderer/music.js` | `Audio/MusicDirector.swift` (keep in step) |
+| Bookmarks | `src/bookmarks.js`, `src/renderer/bookmarks.js` | `Model/Bookmarks.swift`, `Views/BookmarksView.swift` |
 | Ambience (loops, now-and-then layers) | `src/renderer/ambience.js` | `Audio/AmbienceMixer.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
 

@@ -110,14 +110,16 @@ const Kits = (() => {
     }
   }
 
-  function open(id) {
+  // options.scene: false opens it without its scene change (a bookmark brings
+  // back its own music and ambience).
+  function open(id, options = {}) {
     const changed = activeId() !== id;
     if (changed) { editing = false; closeDrawer(false); }
     prefs.view = `kit:${id}`;
     savePrefs();
     // A kit set to start its music and ambience: the scene changes.
     const kit = activeKit();
-    if (changed && kit && kit.autoplay) Music.sceneOpened(kit, voiceId);
+    if (changed && kit && kit.autoplay && options.scene !== false) Music.sceneOpened(kit, voiceId);
     render();
     $('#content').scrollTop = 0;
   }
@@ -1123,6 +1125,9 @@ const Kits = (() => {
 
   return {
     load,
+    open,
+    get: (id) => list.find((k) => k.id === id) || null,
+    askText,
     activeKit,
     renderSidebar,
     renderHeader,

@@ -238,6 +238,51 @@ final class AmbienceMixer: ObservableObject {
         cuePlayers[id]?.forEach { $0.volume = Float(volume * masterVolume) }
     }
 
+    // MARK: Bookmarks
+
+    /// The ambience volume and every layer playing (the strip's and scene
+    /// kits'), with how each plays.
+    func capture() -> Bookmark.Ambience {
+        var out: [Bookmark.Layer] = []
+        for layer in layers where playing.contains(layer.id) {
+            out.append(.init(id: layer.id, strip: true, kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every))
+        }
+        for (id, layer) in external where playing.contains(id) {
+            out.append(.init(id: id, strip: false, kind: layer.kind, ref: layer.ref, volume: layer.volume, every: layer.every))
+        }
+        return Bookmark.Ambience(volume: masterVolume, layers: out.sorted { $0.id < $1.id })
+    }
+
+    /// A bookmark coming back: fades out what isn't in it and fades in what is.
+    func applyScene(_ scene: Bookmark.Ambience, fade: TimeInterval) {
+        masterVolume = min(1, max(0, scene.volume))
+        let ids = Set(store?.sounds.map { $0.id.uuidString } ?? [])
+        let list = scene.layers.filter { $0.kind == .builtin || ids.contains($0.ref) }
+        fadeOutAll(keep: Set(list.map(\.id)), fade: fade)
+        for entry in list {
+            if entry.strip {
+                var index = layers.firstIndex { $0.id == entry.id } ?? layers.firstIndex { $0.kind == entry.kind && $0.ref == entry.ref }
+                if index == nil {
+                    layers.append(AmbienceLayer(id: entry.id, kind: entry.kind, ref: entry.ref, volume: entry.volume))
+                    index = layers.count - 1
+                }
+                guard let i = index else { continue }
+                layers[i].volume = entry.volume
+                layers[i].every = Self.cleanEvery(entry.every)
+                if playing.contains(layers[i].id) {
+                    players[layers[i].id]?.setVolume(Float(entry.volume * masterVolume), fadeDuration: 0.3)
+                } else {
+                    start(layers[i], fade: fade)
+                }
+            } else if playing.contains(entry.id) {
+                setVoiceVolume(entry.id, volume: entry.volume)
+            } else {
+                startVoice(entry.id, kind: entry.kind, ref: entry.ref, volume: entry.volume, every: entry.every, fade: fade)
+            }
+        }
+        save()
+    }
+
     /// Every layer playing right now, with the ambience volume applied, for Live Session listeners.
     func liveSnapshot() -> [AmbienceLayer] {
         (layers + Array(external.values))

@@ -34,7 +34,8 @@ const Music = (() => {
     return length > 0 ? Math.min(CROSSFADE, length / 3) : CROSSFADE;
   }
 
-  function startTrack(list, index, fadeIn) {
+  // seek: seconds into the song to start from (a bookmark).
+  function startTrack(list, index, fadeIn, seek = 0) {
     list.index = index;
     const id = list.order[index];
     list.id = id;
@@ -42,6 +43,7 @@ const Music = (() => {
     const audio = play(id, {
       fresh: true,
       fadeIn,
+      seek,
       gain: list.gain,
       group: `pl:${list.sectionId}:${list.n++}`,
       nearEnd: { seconds: fade, fn: () => { if (list.audio === audio) advance(list, fade); } },
@@ -84,7 +86,8 @@ const Music = (() => {
 
   // Starts a playlist section (from one of its songs, if given), fading in
   // over `fade` seconds and fading out what it was playing.
-  function start(kit, section, fromId = null, fade = 0) {
+  // seek: seconds into that song to start from (a bookmark).
+  function start(kit, section, fromId = null, fade = 0, seek = 0) {
     const songs = songsIn(section);
     if (!songs.length) return;
     const current = lists.get(section.id);
@@ -97,7 +100,57 @@ const Music = (() => {
     }
     const list = { kitId: kit.id, sectionId: section.id, order, index, id: null, audio: null, n: 1, failures: 0, shuffle: !!section.playlistShuffle, gain: section.volume ?? 1 };
     lists.set(section.id, list);
-    startTrack(list, index, fade || (current ? 2 : 0));
+    startTrack(list, index, fade || (current ? 2 : 0), fromId ? seek : 0);
+  }
+
+  // For bookmarks: the playlists playing (which song, how far in) and any
+  // other songs (full sounds) playing on their own.
+  function capture() {
+    const playlists = [...lists.values()].filter((l) => l.audio).map((l) => ({
+      kitId: l.kitId, sectionId: l.sectionId, songId: l.id, position: l.audio.currentTime || 0,
+    }));
+    const ours = new Set([...lists.values()].map((l) => l.audio));
+    const songs = [];
+    for (const [id, set] of playing) {
+      const sound = sounds.find((s) => s.id === id);
+      if (!sound || !isFull(sound)) continue;
+      for (const audio of set) {
+        if (ours.has(audio) || audio.stopped) continue;
+        songs.push({ id, position: audio.currentTime || 0, gain: audio.gain ?? 1 });
+      }
+    }
+    return { playlists, songs };
+  }
+
+  // A bookmark coming back: what isn't in it fades out over `fade` seconds
+  // and what is fades in, each song from where it was. `findKit(id)` gives a
+  // kit by id. Songs already playing carry on.
+  function restore(music, findKit, fade = SCENE_FADE) {
+    const wanted = (music.playlists || []).filter((p) => {
+      const section = findKit(p.kitId)?.sections.find((s) => s.id === p.sectionId);
+      return section && songsIn(section).includes(p.songId);
+    });
+    for (const sectionId of [...lists.keys()]) {
+      const keep = wanted.find((p) => p.sectionId === sectionId);
+      if (!keep || lists.get(sectionId).id !== keep.songId) stopList(sectionId, fade);
+    }
+    const freeSongs = (music.songs || []).filter((song) => sounds.some((s) => s.id === song.id && isFull(s)));
+    const ours = new Set([...lists.values()].map((l) => l.audio));
+    for (const [id, set] of [...playing]) {
+      const sound = sounds.find((s) => s.id === id);
+      if (!sound || !isFull(sound)) continue;
+      const keep = freeSongs.some((song) => song.id === id);
+      for (const audio of [...set]) if (!ours.has(audio) && !keep) release(id, audio, fade);
+    }
+    for (const p of wanted) {
+      if (lists.has(p.sectionId)) continue;
+      const kit = findKit(p.kitId);
+      start(kit, kit.sections.find((s) => s.id === p.sectionId), p.songId, fade, p.position);
+    }
+    for (const song of freeSongs) {
+      if (!playing.has(song.id)) play(song.id, { fresh: true, fadeIn: fade, seek: song.position, gain: song.gain ?? 1 });
+    }
+    notify();
   }
 
   function stopList(sectionId, fade = 0) {
@@ -156,6 +209,8 @@ const Music = (() => {
     SCENE_FADE,
     start,
     stop: stopList,
+    capture,
+    restore,
     // The section's volume slider moved: the songs still to come play at the new level.
     setGain(sectionId, gain) { const list = lists.get(sectionId); if (list) list.gain = gain; },
     sceneOpened,

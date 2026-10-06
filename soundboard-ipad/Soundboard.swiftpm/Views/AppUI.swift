@@ -25,6 +25,8 @@ enum SoundSort: String, CaseIterable {
 @MainActor
 final class AppUI: ObservableObject {
     @Published var search = ""
+    /// A bookmark is opening a scene kit: don't start the kit's own scene change.
+    var skipNextScene = false
     @Published var tagFilter: [String] = []
     @Published var matchAllTags: Bool {
         didSet { UserDefaults.standard.set(matchAllTags, forKey: "matchAllTags") }

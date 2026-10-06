@@ -33,6 +33,8 @@ final class SoundPlayer: ObservableObject {
         var onEnded: (() -> Void)? = nil
         /// Called when it's stopped from elsewhere (Stop All, its tile).
         var onRelease: (() -> Void)? = nil
+        /// Seconds in to start from (a bookmark brings a song back where it was).
+        var seek: Double = 0
     }
 
     private final class Voice {
@@ -90,6 +92,7 @@ final class SoundPlayer: ObservableObject {
         player.volume = options.fadeIn > 0 ? 0 : level
         let repeatGap = options.fresh ? nil : sound.repeatGap
         if repeatGap == 0 { player.numberOfLoops = -1 } // replay immediately, gaplessly
+        if options.seek > 0 && options.seek < player.duration { player.currentTime = options.seek }
         player.prepareToPlay()
         player.play()
         let voice = Voice(player: player, volume: volume, repeatGap: repeatGap,
@@ -103,7 +106,8 @@ final class SoundPlayer: ObservableObject {
         progress[sound.id] = 0
         volumes[sound.id] = volume
         startTicker()
-        live?.soundPlayed(sound, volume: min(1, volume * gain * masterVolume), group: voice.group, fadeIn: options.fadeIn)
+        live?.soundPlayed(sound, volume: min(1, volume * gain * masterVolume), group: voice.group, fadeIn: options.fadeIn,
+                          seek: player.currentTime)
         return voice.token
     }
 
@@ -153,6 +157,12 @@ final class SoundPlayer: ObservableObject {
 
     /// The full sounds playing, for a scene change to fade out.
     var playingIds: [UUID] { Array(players.keys) }
+
+    /// Every copy playing now: the sound, that copy's token, how far in it is
+    /// and its extra level (for bookmarks).
+    var playingCopies: [(id: UUID, token: UUID, time: Double, gain: Double)] {
+        players.flatMap { id, list in list.map { (id: id, token: $0.token, time: $0.player.currentTime, gain: $0.gain) } }
+    }
 
     func stopAll() {
         for id in Array(players.keys) { stop(id) }

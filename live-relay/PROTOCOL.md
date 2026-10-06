@@ -125,8 +125,8 @@ next can fade in while this one fades out); `a:<layer id>` a now-and-then
 ambience layer (each time it plays is a `play` with `cat: "ambience"`); and
 `p:<peer>:<pid>` a listener's own sound.
 
-If `at` is in the past (a late joiner, or a file that arrived late), the
-listener starts part-way through. If the file isn't cached, it requests it and
+If `at` is in the past (a late joiner, a file that arrived late, or a song a
+bookmark brings back from where it was), the listener starts part-way through. If the file isn't cached, it requests it and
 plays once it arrives, still in sync with `at`.
 
 ### `ambience`

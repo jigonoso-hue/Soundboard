@@ -178,9 +178,10 @@ const Live = (() => {
       group: options.group || `s:${sound.id}`,
       soundId: sound.id,
       name: sound.name,
-      at: Date.now(),
+      // Started part-way through (a bookmark): listeners start at the same place.
+      at: Date.now() - (options.seek > 0 ? options.seek * 1000 : 0),
       ...(options.fadeIn > 0 ? { fadeIn: options.fadeIn } : {}),
-      volume: Math.min(1, (sound.volume ?? 1) * prefs.master),
+      volume: Math.min(1, (sound.volume ?? 1) * (options.gain ?? 1) * prefs.master),
       cat: category(sound),
       loop: !!sound.repeat && !sound.repeat.gap,
       gap: sound.repeat && sound.repeat.gap ? sound.repeat.gap : 0,

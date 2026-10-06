@@ -72,7 +72,8 @@ final class MusicDirector: ObservableObject {
         current = next
     }
 
-    private func startTrack(_ list: Playlist, at index: Int, fadeIn: Double) {
+    /// seek: seconds into the song to start from (a bookmark).
+    private func startTrack(_ list: Playlist, at index: Int, fadeIn: Double, seek: Double = 0) {
         list.index = index
         let id = list.order[index]
         list.current = id
@@ -85,6 +86,7 @@ final class MusicDirector: ObservableObject {
         var options = SoundPlayer.PlayOptions()
         options.fresh = true
         options.fadeIn = fadeIn
+        options.seek = seek
         options.group = "pl:\(list.sectionId.uuidString):\(list.n)"
         list.n += 1
         var token: UUID?
@@ -146,7 +148,8 @@ final class MusicDirector: ObservableObject {
 
     /// Starts a playlist section (from one of its songs, if given), fading in
     /// over `fade` seconds and fading out what it was playing.
-    func start(kit: SoundKit, section: KitSection, from songId: UUID? = nil, fade: Double = 0) {
+    /// seek: seconds into that song to start from (a bookmark).
+    func start(kit: SoundKit, section: KitSection, from songId: UUID? = nil, fade: Double = 0, seek: Double = 0) {
         let available = songs(in: section)
         guard !available.isEmpty else { return }
         let wasPlaying = lists[section.id] != nil
@@ -159,7 +162,62 @@ final class MusicDirector: ObservableObject {
         }
         let list = Playlist(kitId: kit.id, sectionId: section.id, order: order, shuffle: shuffle, gain: section.gain)
         lists[section.id] = list
-        startTrack(list, at: index, fadeIn: fade > 0 ? fade : (wasPlaying ? 2 : 0))
+        startTrack(list, at: index, fadeIn: fade > 0 ? fade : (wasPlaying ? 2 : 0), seek: songId != nil ? seek : 0)
+    }
+
+    // MARK: Bookmarks
+
+    /// The playlists playing (which song, how far in) and any other songs
+    /// (full sounds) playing on their own.
+    func capture() -> Bookmark.Music {
+        guard let player, let store else { return Bookmark.Music() }
+        let copies = player.playingCopies
+        var music = Bookmark.Music()
+        for list in lists.values {
+            guard let song = list.current, let token = list.token,
+                  let copy = copies.first(where: { $0.token == token }) else { continue }
+            music.playlists.append(.init(kitId: list.kitId, sectionId: list.sectionId, songId: song, position: copy.time))
+        }
+        let ours = Set(lists.values.compactMap(\.token))
+        for copy in copies where !ours.contains(copy.token) {
+            guard let sound = store.sound(copy.id), sound.isFull else { continue }
+            music.songs.append(.init(id: copy.id, position: copy.time, gain: copy.gain))
+        }
+        return music
+    }
+
+    /// A bookmark coming back: what isn't in it fades out over `fade` seconds
+    /// and what is fades in, each song from where it was. Songs already
+    /// playing carry on. `kit(id)` finds a scene kit.
+    func restore(_ music: Bookmark.Music, kit findKit: (UUID) -> SoundKit?, fade: Double = MusicDirector.sceneFade) {
+        guard let player, let store else { return }
+        let wanted = music.playlists.filter { spot in
+            guard let section = findKit(spot.kitId)?.sections.first(where: { $0.id == spot.sectionId }) else { return false }
+            return songs(in: section).contains(spot.songId)
+        }
+        for sectionId in Array(lists.keys) {
+            let keep = wanted.first { $0.sectionId == sectionId }
+            if keep == nil || lists[sectionId]?.current != keep?.songId { stop(sectionId, fade: fade) }
+        }
+        let freeSongs = music.songs.filter { store.sound($0.id)?.isFull == true }
+        let ours = Set(lists.values.compactMap(\.token))
+        for copy in player.playingCopies where !ours.contains(copy.token) {
+            guard let sound = store.sound(copy.id), sound.isFull, !freeSongs.contains(where: { $0.id == copy.id }) else { continue }
+            player.release(copy.id, token: copy.token, fade: fade)
+        }
+        for spot in wanted where lists[spot.sectionId] == nil {
+            guard let kit = findKit(spot.kitId), let section = kit.sections.first(where: { $0.id == spot.sectionId }) else { continue }
+            start(kit: kit, section: section, from: spot.songId, fade: fade, seek: spot.position)
+        }
+        for song in freeSongs where !player.playingIds.contains(song.id) {
+            guard let sound = store.sound(song.id) else { continue }
+            var options = SoundPlayer.PlayOptions()
+            options.fresh = true
+            options.fadeIn = fade
+            options.seek = song.position
+            _ = try? player.play(sound, url: store.url(for: sound), gain: song.gain, options: options)
+        }
+        publish()
     }
 
     /// The section's volume slider moved: the songs still to come play at the new level.

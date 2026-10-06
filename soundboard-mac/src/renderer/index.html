@@ -12,12 +12,22 @@
     <aside id="sidebar">
       <div class="side-top">Dungeon Radio</div>
 
+      <!-- Scrolls when the window is short, so the footer (volume, Options) stays in view. -->
+      <div class="side-scroll">
       <div class="kits-section">
         <div class="side-head">
           <span>Scene Kits</span>
           <button id="kit-new" class="mini" title="Create a scene kit">+ New</button>
         </div>
         <div id="kit-list" class="kit-list"></div>
+      </div>
+
+      <div class="kits-section bookmarks-section">
+        <div class="side-head">
+          <span>Bookmarks</span>
+          <button id="bookmark-save" class="mini" title="Save the music and ambience playing now, to bring it all back with one click">+ Save</button>
+        </div>
+        <div id="bookmark-list" class="kit-list bookmark-list"></div>
       </div>
 
       <div class="side-head library-head"><span>Library</span></div>
@@ -39,6 +49,7 @@
         <form id="new-tag-form" class="new-tag">
           <input id="new-tag" maxlength="24" placeholder="+ New tag">
         </form>
+      </div>
       </div>
 
       <div class="side-footer">
@@ -399,6 +410,7 @@
   <script src="recorder.js"></script>
   <script src="games.js"></script>
   <script src="handouts.js"></script>
+  <script src="bookmarks.js"></script>
   <script src="dice-geometry.js"></script>
   <script type="module" src="dice.js"></script>
   <script type="module" src="table.js"></script>

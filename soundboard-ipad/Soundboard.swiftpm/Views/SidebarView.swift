@@ -59,6 +59,9 @@ struct SidebarView: View {
             }
             .themedRows(themes.theme, compactOnly: true)
 
+            BookmarkSection(selection: $selection)
+                .themedRows(themes.theme, compactOnly: true)
+
             Section("Library") {
                 row(.all, "All", icon: "grid", count: store.sounds.count)
                 row(.clips, "Clips", icon: "scissors", count: store.sounds.filter { !$0.isFull }.count)
