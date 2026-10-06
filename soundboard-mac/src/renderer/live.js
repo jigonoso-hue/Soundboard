@@ -1,4 +1,4 @@
-/* global api, $, sounds, play, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS */
+/* global api, $, sounds, play, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS, soundFileUrl */
 // Live Session in the window: the Live dialog, forwarding what the board plays
 // to listeners (when hosting), and playing what the host sends (when tuned in)
 // on a full-window stage in the theme's style, with the player's own sound pads.
@@ -303,7 +303,7 @@ const Live = (() => {
     if (cue.kind === 'library') {
       const sound = sounds.find((s) => s.id === cue.soundId);
       if (!sound || sound.gmOnly) return;
-      url = `sound://local/${encodeURIComponent(sound.file)}`;
+      url = soundFileUrl('local', sound.file);
       soundName = sound.name;
       volume = sound.volume ?? 1;
       buzzIt = !!sound.buzz;

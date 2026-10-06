@@ -1,0 +1,28 @@
+/* Android: the Mac screens on a phone. Designed phone-first like the iPhone
+   app: the sidebar is a drawer, nothing scrolls sideways, touch targets are
+   at least 44 px, and the safe areas (camera cut-out, gesture bar) are kept clear. */
+
+/* Not on Android (yet): the YouTube browser and global hotkeys. */
+.android #toggle-yt, .android #browser { display: none !important; }
+
+.android body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+#android-menu { display: none; }
+#android-scrim { display: none; }
+
+@media (max-width: 700px) {
+  .android #app { position: relative; }
+  .android #android-menu { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; flex: none; }
+  .android #sidebar {
+    position: fixed; z-index: 800; top: 0; bottom: 0; left: 0;
+    width: min(300px, 86vw); transform: translateX(-105%); transition: transform 0.22s ease;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+  .android.drawer-open #sidebar { transform: none; }
+  .android.drawer-open #android-scrim { display: block; position: fixed; inset: 0; z-index: 799; background: rgba(0, 0, 0, 0.45); }
+  .android #board { min-width: 0; width: 100%; }
+  .android .titlebar { padding: 8px 10px; gap: 6px; }
+  .android .titlebar button { min-height: 40px; }
+  .android #filter { min-width: 0; flex: 1 1 100px; }
+  .android #sort { display: none; }
+}

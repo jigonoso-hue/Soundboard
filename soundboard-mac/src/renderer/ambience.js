@@ -1,4 +1,4 @@
-/* global api, $, sounds, soundsLoaded, prefs, toast, Kits */
+/* global api, $, sounds, soundsLoaded, prefs, toast, Kits, soundFileUrl */
 // Ambience: looping background layers (built-in or from the library) with
 // their own volumes, mixed under the soundboard. Layers live in the dock at
 // the bottom of the window and in scene kits' ambience sections; both play
@@ -29,9 +29,9 @@ const Ambience = (() => {
   const buffers = new Map(); // built-in file -> Promise<AudioBuffer>
 
   function layerUrl(layer) {
-    if (layer.kind === 'builtin') return `sound://builtin/${encodeURIComponent(layer.ref)}`;
+    if (layer.kind === 'builtin') return soundFileUrl('builtin', layer.ref);
     const sound = sounds.find((s) => s.id === layer.ref);
-    return sound ? `sound://local/${encodeURIComponent(sound.file)}` : null;
+    return sound ? soundFileUrl('local', sound.file) : null;
   }
 
   function layerName(layer) {

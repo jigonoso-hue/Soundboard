@@ -36,7 +36,7 @@ function toast(message, isError = false) {
 // ---------- Playback ----------
 
 function soundUrl(sound) {
-  return `sound://local/${encodeURIComponent(sound.file)}`;
+  return soundFileUrl('local', sound.file);
 }
 
 // Fades an audio element's volume to `to` over `seconds`, then calls `then`.

@@ -1,4 +1,4 @@
-/* global AudioUtils */
+/* global AudioUtils, soundFileUrl */
 // Tags: colours, chips and the "Tag new sounds" dialog shown after adding sounds.
 const Tags = (() => {
   const api = window.soundboard;
@@ -98,7 +98,7 @@ const Tags = (() => {
       audio.addEventListener('loadedmetadata', () => done(Number.isFinite(audio.duration) ? audio.duration : null), { once: true });
       audio.addEventListener('error', () => done(null), { once: true });
       setTimeout(() => done(null), 8000);
-      audio.src = `sound://local/${encodeURIComponent(sound.file)}`;
+      audio.src = soundFileUrl('local', sound.file);
     });
   }
 
