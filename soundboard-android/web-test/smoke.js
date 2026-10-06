@@ -102,6 +102,8 @@ const check = (ok, msg) => { log.push(`${ok ? 'PASS' : 'FAIL'} ${msg}`); console
     await page.waitForTimeout(1500);
     await shot('6-dice');
     check(await page.isVisible('#dice-roll, .dice-type'), 'the dice tray opens');
+    check(await page.evaluate(() => window.DRBack()) && !(await page.evaluate(() => window.DiceTray.isOpen())), 'Back closes the dice tray');
+    check(await page.evaluate(() => window.DRBack()) === false, 'Back with nothing open leaves it to Android');
 
     // A headless browser has no sound card.
     const errs = errors.filter((e) => !/favicon|AudioContext encountered an error/i.test(e));

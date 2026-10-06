@@ -21,8 +21,57 @@
   .android.drawer-open #sidebar { transform: none; }
   .android.drawer-open #android-scrim { display: block; position: fixed; inset: 0; z-index: 799; background: rgba(0, 0, 0, 0.45); }
   .android #board { min-width: 0; width: 100%; }
-  .android .titlebar { padding: 8px 10px; gap: 6px; }
-  .android .titlebar button { min-height: 40px; }
-  .android #filter { min-width: 0; flex: 1 1 100px; }
+  .android .titlebar { padding: 8px 10px; gap: 6px; flex-wrap: nowrap; }
+  .android .titlebar button { min-height: 44px; min-width: 44px; flex: none; }
+  .android #filter { min-width: 0; width: 0; flex: 1 1 60px; }
   .android #sort { display: none; }
+}
+
+/* No global hotkeys on Android. */
+.android label:has(> .hotkey-row) { display: none; }
+
+@media (max-width: 700px) {
+  /* Touch targets: 44 px on a phone. */
+  .android .bash-more { min-width: 44px; min-height: 44px; }
+  .android #options-btn, .android #kit-new, .android #bookmark-save, .android #tags-toggle,
+  .android button.block-title, .android button.mini, .android .segmented button,
+  .android .popup-menu button, .android .dice-pill { min-height: 44px; }
+  .android button.mini { min-width: 44px; font-size: 13px; }
+  .android .swatch { width: 40px; height: 40px; }
+  .android .layer-name { min-height: 44px; display: flex; align-items: center; }
+
+  /* Scene kits: sections stack, one per row, in reading order (android-ui.js
+     sets their order). Moving and resizing them is for bigger screens. */
+  .android #kit-board { display: flex; flex-direction: column; gap: 12px; height: auto !important; }
+  .android #kit-board .kit-section { position: relative; left: auto !important; top: auto !important; width: auto !important; height: auto !important; }
+  .android #kit-board .kit-section-body { overflow: visible; }
+  .android #kit-layout-btn, .android #kit-layout-hint { display: none; }
+
+  /* Adding from the library fills the screen. */
+  .android .kit-drawer {
+    position: fixed; z-index: 700; inset: 0; width: auto; border-left: none;
+    padding: calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 14px);
+  }
+  .android .kit-drawer .drawer-row { min-height: 44px; }
+  .android #drawer-close { min-width: 44px; }
+}
+
+/* The bash editor on a phone: the timeline on top, the sounds under it. */
+@media (max-width: 700px) {
+  .android body.editor { height: 100dvh; }
+  .android .ed-top { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .android .ed-cover { width: 44px; height: 44px; }
+  .android #bash-name { flex: 1 1 120px; width: auto; }
+  .android .ed-top .spacer { display: none; }
+  .android .ed-top > label { min-height: 44px; }
+  .android #zoom { width: 90px; }
+  .android .ed-actions { margin-left: auto; display: flex; gap: 8px; }
+  .android .ed-top button { min-height: 44px; }
+  .android .ed-body { flex-direction: column; }
+  .android .ed-main { order: 1; flex: 1 1 50%; min-height: 220px; }
+  .android .ed-library { order: 2; width: auto; max-height: 34dvh; border-right: none; border-top: 1px solid var(--border); }
+  .android .ed-library > p { display: none; }
+  .android .lib-list button { min-width: 44px; min-height: 44px; }
+  .android .inspector { max-height: 30dvh; overflow-y: auto; }
+  .android #inspector-clip button { min-height: 44px; }
 }

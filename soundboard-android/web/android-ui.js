@@ -27,12 +27,52 @@
     });
   }
 
-  // Back: the drawer, then whatever the screens close themselves.
+  const shown = (selector) => [...document.querySelectorAll(selector)].find((n) => n.getClientRects().length > 0);
+
+  // Back: the drawer, the bash editor and dialogs, then menus and panels, one
+  // at a time. Nothing left to close: Android puts the app in the background
+  // (sounds and a Live Session keep going).
   window.DRBack = () => {
     if (html.classList.contains('drawer-open')) { html.classList.remove('drawer-open'); return true; }
-    return DRApp.back();
+    if (DRApp.back()) return true;
+    // Menus close on a click anywhere else.
+    if (shown('.popup-menu:not(.hidden)')) { document.body.click(); return true; }
+    const handoutClose = shown('.handout-view:not(.hidden) .handout-close');
+    if (handoutClose) { handoutClose.click(); return true; }
+    if (window.DiceTray && window.DiceTray.isOpen()) { window.DiceTray.close(); return true; }
+    const kitDrawerClose = shown('#kit-drawer:not(.hidden) #drawer-close');
+    if (kitDrawerClose) { kitDrawerClose.click(); return true; }
+    return false;
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addMenuButton, { once: true });
-  else addMenuButton();
+  // Stacked scene kit sections (android.css) read top to bottom, left to right,
+  // in the order of the bigger screens' grid.
+  function orderSections(board) {
+    for (const section of board.querySelectorAll(':scope > .kit-section')) {
+      section.style.order = String(Math.round(parseFloat(section.style.top || '0')) * 10000 + Math.round(parseFloat(section.style.left || '0')));
+    }
+  }
+
+  // The ambience strip starts folded on a phone, as on iPhone, unless it's playing.
+  function foldAmbience() {
+    const toggle = document.getElementById('amb-collapse');
+    const layers = document.getElementById('amb-layers');
+    if (phone() && toggle && layers && !layers.classList.contains('hidden') && !toggle.classList.contains('active')) toggle.click();
+  }
+
+  function start() {
+    addMenuButton();
+    const filter = document.getElementById('filter');
+    if (filter && phone()) filter.placeholder = 'Search';
+    const board = document.getElementById('kit-board');
+    if (board) {
+      new MutationObserver(() => orderSections(board)).observe(board, { childList: true });
+      orderSections(board);
+    }
+    // After the screens have loaded their saved state.
+    setTimeout(foldAmbience, 600);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+  else start();
 })();
