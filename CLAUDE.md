@@ -85,9 +85,9 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 
 ## Android (in progress)
 
-`soundboard-android/` (see its README). The code is written and tested; the
-APK still has to be built in Android Studio (the cloud sandbox can't reach
-`dl.google.com`).
+`soundboard-android/` (see its README). The app builds and is tested; it
+hasn't been tried on a real phone yet. To build it in the cloud sandbox, the
+environment must allow `dl.google.com`.
 
 - **How it works:** a WebView runs the Mac's `src/renderer` unchanged.
   - `web/node-shim.js` runs the Mac's store modules unchanged.

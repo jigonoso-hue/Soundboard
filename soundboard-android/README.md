@@ -6,10 +6,8 @@ bookmarks, recording, dice, games and handouts). It also shares Live Sessions
 with the Mac and iPhone/iPad apps, at the table or online, as broadcaster or
 listener.
 
-**Status:** the app's code is written and tested. The APK hasn't been built
-yet, because the Android Gradle plugin and SDK come from `dl.google.com`,
-which the cloud build environment can't reach. Build it with Android Studio
-(see below).
+**Status:** the app builds (`gradle :app:assembleDebug`) and passes lint with
+no errors. It hasn't been tried on a real phone yet.
 
 ## How it's built
 
