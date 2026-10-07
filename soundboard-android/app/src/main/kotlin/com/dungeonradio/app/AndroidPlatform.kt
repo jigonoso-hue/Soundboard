@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -15,6 +16,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.Settings
 import android.util.Log
+import com.dungeonradio.bridge.NativeBridge
 import com.dungeonradio.bridge.Platform
 import com.dungeonradio.live.LanPublisher
 import org.json.JSONObject
@@ -29,6 +31,8 @@ class AndroidPlatform(private val context: Context) : Platform {
     @Volatile var activity: MainActivity? = null
     @Volatile var inFront = false
     private val lan = Lan(context)
+    // Premium: tells the page when it turns on or off (a purchase, a lapsed subscription).
+    private val billing = Billing(context) { emit("premium:changed", NativeBridge.encode(premiumStatus())) }.also { it.start() }
 
     init {
         val manager = context.getSystemService(NotificationManager::class.java)!!
@@ -112,6 +116,23 @@ class AndroidPlatform(private val context: Context) : Platform {
             } else context.stopService(intent)
         }
     }
+
+    override fun mediaDuration(file: File): Double? = try {
+        MediaMetadataRetriever().run {
+            try {
+                setDataSource(file.path)
+                extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.let { it / 1000.0 }
+            } finally { release() }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "Couldn't measure ${file.name}: ${e.message}")
+        null
+    }
+
+    override fun premiumStatus(): JSONObject = billing.status()
+    override fun premiumPurchase(id: String, done: (JSONObject?, String?) -> Unit) { billing.purchase(activity, id, done) }
+    override fun premiumRestore(done: (JSONObject) -> Unit) { billing.refresh { done(billing.status()) } }
+    override fun premiumTestUnlock(on: Boolean): JSONObject = billing.testUnlock(on)
 
     override val deviceName: String =
         (Settings.Global.getString(context.contentResolver, "device_name") ?: Build.MODEL ?: "Android").take(40)

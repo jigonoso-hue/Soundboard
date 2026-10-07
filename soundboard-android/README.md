@@ -69,7 +69,8 @@ gradle :core:test                 # engine rules, Mac interop, the bridge
 node web-test/smoke.js            # the web layer in Chromium at phone size
 node web-test/phone-tour.js       # every screen: screenshots + layout audit
 node web-test/live-e2e.js         # two phones in a Live Session, real native side
-python3 scripts/compile-check.py <android.jar>   # the app's Kotlin, without the SDK
+node web-test/premium.js         # free limits, locked features, buying
+gradle :app:assembleDebug :app:lintDebug   # the app (needs the Android SDK)
 ```
 
 Needs Node, plus `npm install` in `soundboard-mac/` and `live-relay/`.

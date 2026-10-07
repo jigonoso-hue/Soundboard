@@ -44,10 +44,10 @@ kotlin {
     compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
-// Only the Android framework and core: no AndroidX, so the app's code also
-// compiles (and is checked) against a plain android.jar.
 dependencies {
     implementation(project(":core"))
+    // Premium: Google Play's in-app purchases and subscriptions.
+    implementation("com.android.billingclient:billing:9.1.0")
 }
 
 // Builds the web screens from soundboard-mac (needs Node, and npm install in soundboard-mac).
