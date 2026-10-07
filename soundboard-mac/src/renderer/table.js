@@ -1,4 +1,4 @@
-/* global Live, DiceGeometry */
+/* global Live, DiceGeometry, Premium */
 // The broadcaster's table, on top of the dice (dice.js): roll requests
 // ("Everyone: Dexterity save, DC 14"), initiative with a shared turn order and
 // a "your turn" nudge, and "who goes first / who pays" (everyone rolls, the
@@ -446,9 +446,10 @@ function renderContestPanel(box) {
   box.append(form);
 }
 
-Tray.addPanel('ask', { label: 'Ask a roll', title: 'Ask listeners for a save or check', visible: hosting, render: renderAskPanel });
-Tray.addPanel('initiative', { label: 'Initiative', title: 'Roll initiative and run the turn order', visible: hosting, render: renderInitiativePanel });
-Tray.addPanel('contest', { label: 'Who wins?', title: 'Everyone rolls, the highest (or lowest) wins', visible: hosting, render: renderContestPanel });
+// Roll requests, initiative and contests are Premium on the phone apps (premium.js).
+Tray.addPanel('ask', { label: 'Ask a roll', title: 'Ask listeners for a save or check', visible: hosting, render: Premium.gate('table', renderAskPanel) });
+Tray.addPanel('initiative', { label: 'Initiative', title: 'Roll initiative and run the turn order', visible: hosting, render: Premium.gate('table', renderInitiativePanel) });
+Tray.addPanel('contest', { label: 'Who wins?', title: 'Everyone rolls, the highest (or lowest) wins', visible: hosting, render: Premium.gate('table', renderContestPanel) });
 
 // ---------------------------------------------------------------------
 // Everyone: request cards, result cards, the turn strip.

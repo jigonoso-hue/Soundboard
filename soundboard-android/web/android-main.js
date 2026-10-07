@@ -11,7 +11,8 @@
 // (name, json, id) answers later through DRBridge.resolve(id, json, error).
 // Native events (Live Session, …) arrive through DRBridge.emit(channel, json).
 (() => {
-  const { Library, AUDIO_EXTENSIONS } = DRNode.require('library');
+  const { Library, AUDIO_EXTENSIONS, FULL_SOUND_SECONDS } = DRNode.require('library');
+  const Rules = DRNode.require('premium');
   const { BashStore } = DRNode.require('bashes');
   const { KitStore, KIT_ICONS, KIT_COLORS, COLUMNS } = DRNode.require('kits');
   const { BookmarkStore } = DRNode.require('bookmarks');
@@ -64,6 +65,55 @@
   };
 
   const serverBase = call('serverBase');
+
+  // ---- Premium (the rules are in soundboard-mac/src/premium.js) ----
+  // Purchases are the store's (Google Play Billing, native); the free
+  // version's limits are kept here, where sounds, bashes and kits are stored.
+  let premiumStatus = { premium: false, products: [] };
+  try { premiumStatus = call('premiumStatus') || premiumStatus; } catch (err) { console.error(err); }
+  on(null, 'premium:changed', (s) => { if (s) premiumStatus = s; });
+  const premium = () => !!premiumStatus.premium;
+  // A limit was reached: the screens open the Premium screen.
+  const limitHit = (limit) => { const err = Rules.limitError(limit); emit('premium:limit', [err.message]); return err; };
+
+  // A new sound: measured (by the phone) to know whether it's a clip or a
+  // full sound, then checked against the free version's limits.
+  function checkNewSound(sound) {
+    let { kind, duration } = sound;
+    if (!duration) { try { duration = call('probeDuration', { file: path.join(ROOT, sound.file) }); } catch { duration = null; } }
+    if (!kind && duration) kind = duration >= FULL_SOUND_SECONDS ? 'full' : 'clip';
+    if (!premium()) {
+      const others = library.list().filter((s) => s.id !== sound.id);
+      const limit = Rules.soundLimit(others, kind || 'clip');
+      if (limit) { library.remove(sound.id); throw Rules.limitError(limit); }
+    }
+    const changes = {};
+    if (kind && !sound.kind) changes.kind = kind;
+    if (duration && !sound.duration) changes.duration = duration;
+    return Object.keys(changes).length ? library.update(sound.id, changes) : sound;
+  }
+  // No room for any more sounds at all (checked before copying a file in).
+  const libraryFull = () => !premium() && Rules.soundLimit(library.list(), 'clip') && Rules.soundLimit(library.list(), 'full');
+  // A sound's type changing (or being worked out): within the limits.
+  function checkSoundChange(id, changes) {
+    if (premium()) return changes;
+    const sound = library.get(id);
+    if (!sound) return changes;
+    const others = library.list().filter((s) => s.id !== id);
+    if ('kind' in changes && changes.kind !== Rules.kindOf(sound)) {
+      const limit = Rules.soundLimit(others, changes.kind);
+      if (limit) throw limitHit(limit);
+    }
+    // Measured for the first time: a long sound with no room for another full sound stays a clip.
+    if (!sound.kind && !('kind' in changes) && Number(changes.duration) >= FULL_SOUND_SECONDS && Rules.soundLimit(others, 'full')) {
+      return { ...changes, kind: 'clip' };
+    }
+    return changes;
+  }
+  const checkItems = (type, count) => {
+    const limit = !premium() && Rules.itemLimit(type, count);
+    if (limit) throw limitHit(limit);
+  };
   const soundUrl = (host, file) => `${serverBase}${host}/${encodeURIComponent(file)}`;
 
   function titleCase(text) { return text.replace(/\b\w/g, (c) => c.toUpperCase()); }
@@ -83,19 +133,31 @@
       importDialog: wrap(async () => {
         const picked = await callAsync('pickFiles', { kind: 'audio', multiple: true });
         const added = [];
+        let limited = null;
         for (const { file, name } of picked || []) {
           try {
             if (!AUDIO_EXTENSIONS.includes(path.extname(name).slice(1).toLowerCase())) continue;
-            added.push(library.addFromFile(file, { name: path.basename(name, path.extname(name)) }));
-          } catch (err) { console.error(err); } finally { fs.rmSync(file); }
+            if (libraryFull()) { limited = limited || Rules.soundLimit(library.list(), 'clip'); continue; }
+            added.push(checkNewSound(library.addFromFile(file, { name: path.basename(name, path.extname(name)) })));
+          } catch (err) {
+            if (err.premiumLimit) limited = err.premiumLimit; else console.error(err);
+          } finally { fs.rmSync(file); }
         }
         if (added.length) soundsChanged();
+        // Some didn't fit in the free version: the Premium screen says why.
+        if (limited) limitHit(limited);
         return added;
       }),
-      add: wrap((sound) => { const s = library.add(sound); soundsChanged(); return s; }),
+      add: wrap((sound) => {
+        if (libraryFull()) throw limitHit(Rules.soundLimit(library.list(), 'clip'));
+        let s;
+        try { s = checkNewSound(library.add(sound)); } catch (err) { if (err.premiumLimit) limitHit(err.premiumLimit); throw err; }
+        soundsChanged();
+        return s;
+      }),
       micAccess: () => callAsync('micAccess'),
       update: wrap((id, changes) => {
-        const sound = library.update(id, changes);
+        const sound = library.update(id, checkSoundChange(id, changes));
         soundsChanged();
         // No global hotkeys on Android.
         return { sound, sounds: library.list(), failedHotkeys: [] };
@@ -117,11 +179,11 @@
       }),
       kits: {
         list: wrap(() => ({ kits: kits.list(), icons: KIT_ICONS, colors: KIT_COLORS, columns: COLUMNS })),
-        create: wrap((options) => { const kit = kits.create(options); kitsChanged(); return kit; }),
+        create: wrap((options) => { checkItems('kits', kits.list().length); const kit = kits.create(options); kitsChanged(); return kit; }),
         update: wrap((id, changes) => { const kit = kits.update(id, changes); kitsChanged(); return kit; }),
         addItems: wrap((id, items, sectionId) => { const kit = kits.addItems(id, items, sectionId, library.list()); kitsChanged(); return kit; }),
         removeItem: wrap((id, item, sectionId) => { const kit = kits.removeItem(id, item, sectionId); kitsChanged(); return kit; }),
-        duplicate: wrap((id) => { const kit = kits.duplicate(id); kitsChanged(); return kit; }),
+        duplicate: wrap((id) => { checkItems('kits', kits.list().length); const kit = kits.duplicate(id); kitsChanged(); return kit; }),
         remove: wrap((id) => { kits.remove(id); bookmarks.forgetKit(id); kitsChanged(); }),
         onChanged: (fn) => on(owner, 'kits:changed', fn),
       },
@@ -144,9 +206,9 @@
       bashes: {
         list: wrap(() => bashes.list()),
         get: wrap((id) => bashes.get(id)),
-        create: wrap((options) => { const bash = bashes.create(options); bashesChanged(); return bash; }),
+        create: wrap((options) => { checkItems('bashes', bashes.list().length); const bash = bashes.create(options); bashesChanged(); return bash; }),
         update: wrap((id, changes) => { const bash = bashes.update(id, changes); bashesChanged(); return bash; }),
-        duplicate: wrap((id) => { const bash = bashes.duplicate(id); bashesChanged(); return bash; }),
+        duplicate: wrap((id) => { checkItems('bashes', bashes.list().length); const bash = bashes.duplicate(id); bashesChanged(); return bash; }),
         remove: wrap((id) => {
           bashes.remove(id);
           if (kits.prune('bash', id)) emit('kits:changed', [kits.list()]);
@@ -213,6 +275,21 @@
         handoutShow: wrap((id) => call('liveHandoutShow', { id })),
         handoutSave: (id) => callAsync('liveHandoutSave', { id }),
         onHandout: (fn) => on(owner, 'live:handout', fn),
+      },
+      // Premium: see renderer/premium.js. purchase/restore answer with the new status.
+      premium: {
+        status: wrap(() => { premiumStatus = call('premiumStatus') || premiumStatus; return premiumStatus; }),
+        purchase: async (id) => {
+          const result = await callAsync('premiumPurchase', { id });
+          if (result && result.status) premiumStatus = result.status;
+          return result;
+        },
+        restore: async () => { premiumStatus = (await callAsync('premiumRestore')) || premiumStatus; return premiumStatus; },
+        // Test builds only (the native side refuses otherwise).
+        testUnlock: wrap((onOff) => { premiumStatus = call('premiumTestUnlock', { on: !!onOff }); return premiumStatus; }),
+        limits: Rules.LIMITS,
+        onChanged: (fn) => on(owner, 'premium:changed', fn),
+        onLimit: (fn) => on(owner, 'premium:limit', fn),
       },
       // YouTube clipping isn't on Android yet.
       downloadAudio: () => Promise.reject(new Error('Not available on Android yet.')),

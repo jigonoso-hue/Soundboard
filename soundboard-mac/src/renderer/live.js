@@ -1,4 +1,4 @@
-/* global api, $, sounds, play, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS, soundFileUrl */
+/* global api, $, sounds, play, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS, soundFileUrl, Premium */
 // Live Session in the window: the Live dialog, forwarding what the board plays
 // to listeners (when hosting), and playing what the host sends (when tuned in)
 // on a full-window stage in the theme's style, with the player's own sound pads.
@@ -401,11 +401,16 @@ const Live = (() => {
 
   $('#whisper-btn').addEventListener('click', (e) => {
     e.stopPropagation();
+    if (!Premium.require('whispers')) return;
     if ($('#whisper-menu').classList.contains('hidden')) openWhisperMenu(); else $('#whisper-menu').classList.add('hidden');
   });
   $('#whisper-menu').addEventListener('click', (e) => e.stopPropagation());
   document.addEventListener('click', () => $('#whisper-menu').classList.add('hidden'));
-  $('#emphasis-btn').addEventListener('click', () => { emphasis = !emphasis; renderArmed(); });
+  $('#emphasis-btn').addEventListener('click', () => {
+    if (!emphasis && !Premium.require('emphasis')) return;
+    emphasis = !emphasis;
+    renderArmed();
+  });
 
   // ---------------------------------------------------------------------
   // Listener: plays what the host sends, with its own volume sliders.
@@ -1350,6 +1355,7 @@ const Live = (() => {
       whisperButton.type = 'button';
       whisperButton.title = 'The next sound you play goes only to this listener';
       whisperButton.addEventListener('click', () => {
+        if (!Premium.require('whispers')) return;
         whisper.clear();
         whisper.set(peer.peer, peer.name);
         renderArmed();

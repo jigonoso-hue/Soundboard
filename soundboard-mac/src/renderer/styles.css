@@ -1786,3 +1786,20 @@ body.handout-open .game-screen { visibility: hidden; }
 .side-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; }
 .side-scroll > * { flex: none; }
 .side-footer { flex: none; }
+
+/* Premium (phone apps only; see premium.js) */
+.premium-btn { margin-bottom: 8px; border-color: color-mix(in srgb, #f5c542 55%, var(--border)); color: #f5c542; }
+.premium-btn.is-premium { color: var(--muted); border-color: var(--border); }
+.premium-dialog { width: min(440px, calc(100vw - 24px)); }
+.premium-dialog h2 { margin: 0 0 8px; }
+.premium-reason { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #f5c542 14%, transparent); border: 1px solid color-mix(in srgb, #f5c542 45%, transparent); }
+.premium-list { margin: 6px 0 10px; padding-left: 20px; line-height: 1.6; }
+.premium-free { margin-top: 0; }
+.premium-buy { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
+.premium-product { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 48px; padding: 10px 16px; text-align: left; }
+.premium-product span { opacity: 0.9; }
+.premium-dialog .dialog-actions { flex-wrap: wrap; }
+.premium-dialog .dialog-actions button { min-height: 44px; }
+.premium-lock { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 12px; text-align: center; }
+.premium-lock-title { font-weight: 700; color: #f5c542; }
+.premium-lock button { min-height: 44px; }

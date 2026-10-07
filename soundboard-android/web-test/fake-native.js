@@ -38,7 +38,20 @@ function startFakeNative({ webDir, ambienceDir }) {
     fsStat: ({ p }) => { try { const s = fs.statSync(resolve(p)); return JSON.stringify({ size: s.size, mtime: s.mtimeMs, dir: s.isDirectory() }); } catch { return 'null'; } },
   };
   let base;
+  // Premium, as a test build sees it: store prices, and a test unlock.
+  const premium = {
+    premium: false,
+    debug: true,
+    products: [
+      { id: 'premium_yearly', title: 'Yearly', price: '$19.99', period: 'year' },
+      { id: 'premium_monthly', title: 'Monthly', price: '$2.99', period: 'month' },
+      { id: 'premium_lifetime', title: 'Lifetime', price: '$39.99', period: null },
+    ],
+  };
   const callOps = {
+    premiumStatus: () => premium,
+    premiumTestUnlock: ({ on }) => { premium.premium = !!on; return premium; },
+    probeDuration: ({ file }) => wavSeconds(resolve(file)),
     serverBase: () => base,
     builtins: () => fs.readdirSync(ambienceDir).filter((f) => f.endsWith('.wav')),
     readBuiltin: ({ file }) => fs.readFileSync(path.join(ambienceDir, path.basename(file))).toString('base64'),
@@ -58,6 +71,8 @@ function startFakeNative({ webDir, ambienceDir }) {
       return { file: dest, name };
     }),
     micAccess: () => true,
+    premiumPurchase: () => { premium.premium = true; return { status: premium }; },
+    premiumRestore: () => premium,
   };
 
   const server = http.createServer((req, res) => {
@@ -112,9 +127,23 @@ function startFakeNative({ webDir, ambienceDir }) {
     ready({
       url: `http://127.0.0.1:${port}/index.html`, root, calls, initScript,
       pick: (files) => picks.push(...files),
+      setPremium: (on) => { premium.premium = !!on; },
       close: () => new Promise((done) => server.close(done)),
     });
   }));
+}
+
+// A WAV file's length in seconds (what the phone's media reader would say), or null.
+function wavSeconds(file) {
+  try {
+    const head = Buffer.alloc(44);
+    const fd = fs.openSync(file, 'r');
+    fs.readSync(fd, head, 0, 44, 0);
+    fs.closeSync(fd);
+    if (head.toString('ascii', 0, 4) !== 'RIFF') return null;
+    const byteRate = head.readUInt32LE(28);
+    return byteRate ? (fs.statSync(file).size - 44) / byteRate : null;
+  } catch { return null; }
 }
 
 function serveFile(req, res, file) {

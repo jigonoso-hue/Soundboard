@@ -21,7 +21,7 @@ fs.rmSync(path.join(out, 'ambience'), { recursive: true, force: true });
 fs.cpSync(path.join(mac, 'ambience'), path.join(out, 'ambience'), { recursive: true });
 
 // The Mac's store modules, as modules for node-shim.js's require().
-const modules = ['library', 'bashes', 'kits', 'bookmarks', 'icon-ids', 'renderer/icons'];
+const modules = ['library', 'bashes', 'kits', 'bookmarks', 'premium', 'icon-ids', 'renderer/icons'];
 const wrapped = modules.map((name) => {
   const source = fs.readFileSync(path.join(mac, `${name}.js`), 'utf8');
   return `DRNode.define(${JSON.stringify(name)}, function (module, exports, require) {\n${source}\n});`;

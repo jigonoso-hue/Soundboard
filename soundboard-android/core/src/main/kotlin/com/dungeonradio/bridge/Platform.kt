@@ -34,4 +34,21 @@ interface Platform {
     fun sessionActive(active: Boolean)
 
     val deviceName: String
+
+    /** A sound file's length in seconds, or null if the phone can't tell. */
+    fun mediaDuration(file: File): Double? = null
+
+    // ---- Premium (the store's purchases; the rules are in soundboard-mac/src/premium.js) ----
+
+    /**
+     * { premium, products: [{ id, title, price, period: "month"|"year"|null }],
+     *   debug (a test build), manageUrl, error }
+     */
+    fun premiumStatus(): JSONObject = JSONObject().put("premium", false).put("products", org.json.JSONArray())
+    /** Buys a product; done(status, error). */
+    fun premiumPurchase(id: String, done: (JSONObject?, String?) -> Unit) = done(null, "Purchases aren’t available here.")
+    /** Asks the store again for this account's purchases; done(status). */
+    fun premiumRestore(done: (JSONObject) -> Unit) = done(premiumStatus())
+    /** Test builds only: unlocks (or locks) without the store. */
+    fun premiumTestUnlock(on: Boolean): JSONObject = premiumStatus()
 }

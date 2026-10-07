@@ -33,6 +33,7 @@
 @media (max-width: 700px) {
   /* Touch targets: 44 px on a phone. */
   .android .bash-more { min-width: 44px; min-height: 44px; }
+  .android .premium-btn { min-height: 44px; }
   .android #options-btn, .android #kit-new, .android #bookmark-save, .android #tags-toggle,
   .android button.block-title, .android button.mini, .android .segmented button,
   .android .popup-menu button, .android .dice-pill { min-height: 44px; }

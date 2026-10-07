@@ -62,6 +62,9 @@
 
   function start() {
     addMenuButton();
+    // The Mac's empty-library hint talks about dropping files and YouTube.
+    const hint = document.querySelector('#empty p:nth-of-type(2)');
+    if (hint) hint.innerHTML = 'Tap <b>+</b> to add sounds from your phone, or <b>●</b> to record one.';
     const filter = document.getElementById('filter');
     if (filter && phone()) filter.placeholder = 'Search';
     const board = document.getElementById('kit-board');

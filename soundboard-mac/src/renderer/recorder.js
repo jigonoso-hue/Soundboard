@@ -180,8 +180,9 @@ const Recorder = (() => {
       reset();
       dialog.close();
       await afterAdding([added]);
-    } catch {
-      toast('Couldn’t save the recording.', true);
+    } catch (err) {
+      // A free-version limit opens the Premium screen; the recording stays here.
+      toast(err && err.premiumLimit ? err.message : 'Couldn’t save the recording.', true);
     }
   }
 

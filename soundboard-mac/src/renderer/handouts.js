@@ -1,4 +1,4 @@
-/* global api, $, Live, Icons, toast */
+/* global api, $, Live, Icons, toast, Premium */
 // Handouts: pictures the broadcaster pushes to every listener's screen (a map,
 // a wanted poster, a monster reveal). A new one locks the listener's window
 // to it, fitted to the screen, until they close it; pinch or scroll to zoom,
@@ -291,6 +291,7 @@ const Handouts = (() => {
   }
 
   function openDialog() {
+    if (!Premium.require('handouts')) return;
     picked = null;
     sendTo.clear();
     $('#handout-title').value = '';

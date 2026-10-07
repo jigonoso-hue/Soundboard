@@ -1,4 +1,4 @@
-/* global api, $, Live */
+/* global api, $, Live, Premium */
 // Games for everyone in a Live Session: a buzzer and a quiz. Only the
 // broadcaster starts one (Games in the toolbar), and while it runs every
 // listener's window is locked to it: no closing it, no other screens, until
@@ -265,7 +265,7 @@ const Games = (() => {
     card.append(el('p', 'muted small', 'Starting a game locks every listener\'s screen to it until you end it.'));
     const choices = el('div', 'game-choices');
     const choice = (title, text, kind) => {
-      const b = button('', 'game-choice', () => control('start', { kind }));
+      const b = button('', 'game-choice', () => { if (Premium.require('games')) control('start', { kind }); });
       b.append(el('b', null, title), el('span', null, text));
       return b;
     };

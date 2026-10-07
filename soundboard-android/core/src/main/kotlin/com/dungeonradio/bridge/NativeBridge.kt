@@ -51,6 +51,10 @@ class NativeBridge(
                     }
                 }
                 "micAccess" -> platform.micAccess { ok -> done(ok, null) }
+                "premiumPurchase" -> platform.premiumPurchase(args.optString("id")) { status, error ->
+                    if (error != null) done(null, error) else done(JSONObject().put("status", status ?: platform.premiumStatus()), null)
+                }
+                "premiumRestore" -> platform.premiumRestore { status -> done(status, null) }
                 "liveHandoutSave" -> live.handoutSave(args.optString("id")) { ok -> done(ok, null) }
                 "liveHostStart", "liveListen", "liveHandoutSend" -> work.execute {
                     try {
@@ -82,6 +86,12 @@ class NativeBridge(
             if (url.startsWith("https://")) platform.openExternal(url)
             null
         }
+        "probeDuration" -> {
+            val file = files.resolve(args.optString("file"))
+            if (file.isFile) platform.mediaDuration(file) else null
+        }
+        "premiumStatus" -> platform.premiumStatus()
+        "premiumTestUnlock" -> platform.premiumTestUnlock(args.optBoolean("on"))
         "liveStatus" -> live.status().put("bonjour", true)
         "liveHostEvent" -> { live.hostEvent(args); null }
         "liveLeave" -> { live.leave(); live.status() }
