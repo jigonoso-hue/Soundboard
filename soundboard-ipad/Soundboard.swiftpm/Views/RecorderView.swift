@@ -227,6 +227,9 @@ struct RecorderView: View {
             _ = try store.addFile(at: recorder.fileURL, name: clean.isEmpty ? "Recording" : clean)
             recorder.discard()
             dismiss()
+        } catch SoundError.premiumLimit(let limit) {
+            // The Premium screen opens; the recording stays here.
+            recorder.error = limit.message
         } catch {
             recorder.error = "Couldn't save the recording."
         }

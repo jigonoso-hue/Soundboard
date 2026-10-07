@@ -517,7 +517,7 @@ struct GameHostView: View {
     }
 
     private func choice(_ title: String, _ detail: String, _ kind: String) -> some View {
-        Button { live.gameControl("start", ["kind": kind]) } label: {
+        Button { if Premium.shared.require(.games) { live.gameControl("start", ["kind": kind]) } } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.headline)
                 Text(detail).font(.footnote).foregroundStyle(.secondary)

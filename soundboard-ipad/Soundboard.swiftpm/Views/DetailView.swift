@@ -76,10 +76,10 @@ struct DetailView: View {
             }
         }
         .sheet(isPresented: $showLive) {
-            LiveView()
+            LiveView().premiumSheet()
         }
         .sheet(isPresented: $showRecorder) {
-            RecorderView()
+            RecorderView().premiumSheet()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showStrip {
@@ -123,6 +123,7 @@ struct DetailView: View {
                 defer { try? FileManager.default.removeItem(at: exported) }
                 try store.addFile(at: exported, name: name)
             }
+            .premiumSheet()
         }
     }
 
@@ -269,6 +270,8 @@ struct DetailView: View {
                     } else {
                         try store.addFile(at: url, name: name)
                     }
+                } catch SoundError.premiumLimit(_) {
+                    // The Premium screen says why.
                 } catch {
                     failures.append(url.lastPathComponent)
                 }

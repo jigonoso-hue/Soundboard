@@ -60,6 +60,7 @@ struct ContentView: View {
                         }
                     }
             }
+            .premiumSheet()
         }
         .sheet(item: $ui.editingSound) { sound in
             EditSoundView(
@@ -68,6 +69,7 @@ struct ContentView: View {
                 onDelete: { deleteSound(sound, store: store, player: player, bashes: bashes, kits: kits) }
             )
             .environmentObject(store)
+            .premiumSheet()
         }
         .fullScreenCover(item: $ui.editingBash) { request in
             if let bash = bashes.bash(request.id) {
@@ -90,6 +92,7 @@ struct ContentView: View {
                 .environmentObject(store)
                 .environmentObject(kits)
                 .environmentObject(ui)
+                .premiumSheet()
         }
         // While tuned in to a Live Session, the stage covers the app until the player leaves.
         .fullScreenCover(isPresented: Binding(
@@ -102,7 +105,10 @@ struct ContentView: View {
         .sheet(item: $tagging, onDismiss: showTaggingIfNeeded) { request in
             TagNewSoundsView(soundIds: request.soundIds)
                 .environmentObject(store)
+                .premiumSheet()
         }
+        // Premium (Premium.swift): when a limit or a locked feature asks for it.
+        .premiumSheet()
         .alert("Something went wrong", isPresented: Binding(get: { ui.errorMessage != nil }, set: { if !$0 { ui.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {

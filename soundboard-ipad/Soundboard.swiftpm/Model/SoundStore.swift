@@ -114,7 +114,7 @@ final class SoundStore: ObservableObject {
         let id = UUID()
         let fileName = "\(id.uuidString).\(ext.lowercased())"
         try data.write(to: folder.appendingPathComponent(fileName), options: .atomic)
-        return insert(id: id, fileName: fileName, name: name, source: source)
+        return try insert(id: id, fileName: fileName, name: name, source: source)
     }
 
     /// Copies an audio file into the library, rejecting files the iPad can't play.
@@ -131,12 +131,21 @@ final class SoundStore: ObservableObject {
             try? FileManager.default.removeItem(at: destination)
             throw SoundError.unsupported(source.lastPathComponent)
         }
-        return insert(id: id, fileName: fileName, name: name, source: origin)
+        return try insert(id: id, fileName: fileName, name: name, source: origin)
     }
 
     func update(_ sound: Sound) {
         guard let index = sounds.firstIndex(where: { $0.id == sound.id }) else { return }
         var updated = sound
+        // Free version: switching a clip to a full sound (or back) has to fit the limits.
+        if sound.isFull != sounds[index].isFull, !Premium.shared.isPremium {
+            var others = sounds
+            others.remove(at: index)
+            if let limit = PremiumRules.soundLimit(others, adding: sound.isFull ? .full : .clip) {
+                updated.kind = sounds[index].kind
+                Premium.shared.request = PremiumRequest(reason: limit.message)
+            }
+        }
         updated.name = Self.clean(sound.name).isEmpty ? sounds[index].name : Self.clean(sound.name)
         updated.volume = min(1, max(0, sound.volume))
         if let gap = sound.repeatGap { updated.repeatGap = min(3600, max(0, (gap * 10).rounded() / 10)) }
@@ -164,8 +173,16 @@ final class SoundStore: ObservableObject {
         save()
     }
 
-    private func insert(id: UUID, fileName: String, name: String, source: SoundSource?) -> Sound {
+    private func insert(id: UUID, fileName: String, name: String, source: SoundSource?) throws -> Sound {
         let duration = Self.measure(folder.appendingPathComponent(fileName))
+        // A whole saved video is a full sound even if it's short.
+        let kind: SoundKind = source?.full == true || (duration ?? 0) >= SoundKind.fullSoundSeconds ? .full : .clip
+        // The free version's limits (Premium.swift): the file goes, and the Premium screen says why.
+        if !Premium.shared.isPremium, let limit = PremiumRules.soundLimit(sounds, adding: kind) {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(fileName))
+            Premium.shared.request = PremiumRequest(reason: limit.message)
+            throw SoundError.premiumLimit(limit)
+        }
         var sound = Sound(
             id: id,
             name: Self.clean(name).isEmpty ? "Untitled" : Self.clean(name),
@@ -177,8 +194,7 @@ final class SoundStore: ObservableObject {
         )
         sound.duration = duration
         sound.tags = []
-        // A whole saved video is a full sound even if it's short.
-        sound.kind = source?.full == true || (duration ?? 0) >= SoundKind.fullSoundSeconds ? .full : .clip
+        sound.kind = kind
         sounds.append(sound)
         save()
         recentlyAdded.append(id)

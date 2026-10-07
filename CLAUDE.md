@@ -36,6 +36,7 @@ Where the code lives, side by side:
 | Ambience (loops, now-and-then layers) | `src/renderer/ambience.js` | `Audio/AmbienceMixer.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
 | Android Live engine | `src/live.js`, `src/game.js` | `Live/LiveEngines.swift`, `LiveGame.swift` → Android: `soundboard-android/core/` |
+| Premium (phone apps; see `PREMIUM.md`) | `src/premium.js` (rules), `src/renderer/premium.js` (screen, locks); Android: `soundboard-android/web/android-main.js`, `app/.../Billing.kt` | `Model/Premium.swift` (keep the rules in step) |
 
 ## Design for iPhone first
 
@@ -77,6 +78,7 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 - iPhone only: Shake to roll (the motion sensors). Everywhere else, tap or hold Roll.
 - Recordings are saved as M4A on the iPad and WAV on the Mac (Chromium can't record AAC); both play everywhere.
 - Options: the iPad keeps playback and library settings on its Options screen; the Mac keeps them in the sidebar and the toolbar.
+- Premium: the iPhone/iPad and Android apps have free limits and Premium (`PREMIUM.md`); the Mac app is always unlocked. A new broadcaster feature that's Premium gets the same lock on both phone apps (`Premium.require` / `Premium.shared.require`).
 
 ## Other rules
 

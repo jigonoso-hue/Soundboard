@@ -33,6 +33,7 @@ struct SidebarView: View {
                             Label("Edit…", systemImage: "pencil")
                         }
                         Button {
+                            guard Premium.shared.allows(.kits, count: kits.kits.count) else { return }
                             if let copy = kits.duplicate(kit.id) { selection = .kit(copy.id) }
                         } label: {
                             Label("Duplicate", systemImage: "plus.square.on.square")
@@ -45,6 +46,7 @@ struct SidebarView: View {
                     }
                 }
                 Button {
+                    guard Premium.shared.allows(.kits, count: kits.kits.count) else { return }
                     ui.editingKit = KitEditRequest(kitId: nil)
                 } label: {
                     IconLabel("New Scene Kit", icon: "plus")
@@ -71,6 +73,7 @@ struct SidebarView: View {
             .themedRows(themes.theme, compactOnly: true)
 
             Section {
+                PremiumRow()
                 NavigationLink(value: Destination.options) {
                     Label("Options", systemImage: "gearshape")
                 }

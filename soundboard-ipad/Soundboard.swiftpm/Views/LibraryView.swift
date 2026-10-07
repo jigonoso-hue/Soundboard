@@ -84,6 +84,7 @@ struct LibraryView: View {
                     .lineLimit(1)
                 Spacer()
                 Button {
+                    guard Premium.shared.allows(.bashes, count: bashes.bashes.count) else { return }
                     let bash = bashes.create()
                     ui.editingBash = BashEditRequest(id: bash.id)
                 } label: {

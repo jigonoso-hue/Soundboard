@@ -132,6 +132,7 @@ struct KitChooserView: View {
                 Section {
                     Button {
                         let item = choice.item
+                        guard Premium.shared.allows(.kits, count: kits.kits.count) else { return }
                         dismiss()
                         // Open the new-kit sheet once this one has gone.
                         Task {

@@ -2282,9 +2282,9 @@ struct DiceView: View {
                     switch tray.panel ?? "log" {
                     case "stats": DiceStatsView(tray: tray, title: "Statistics")
                     case "custom": CustomDicePanel(tray: tray)
-                    case "ask": AskPanel(table: tray.table)
-                    case "initiative": InitiativePanel(table: tray.table)
-                    case "contest": ContestPanel(table: tray.table)
+                    case "ask": PremiumGate(.table) { AskPanel(table: tray.table) }
+                    case "initiative": PremiumGate(.table) { InitiativePanel(table: tray.table) }
+                    case "contest": PremiumGate(.table) { ContestPanel(table: tray.table) }
                     default: logList
                     }
                 }
@@ -2529,7 +2529,7 @@ struct DicePresenter: ViewModifier {
                 get: { active && tray.isOpen },
                 set: { if !$0 { tray.close() } }
             )) {
-                DiceView(tray: tray)
+                DiceView(tray: tray).premiumSheet()
             }
     }
 }

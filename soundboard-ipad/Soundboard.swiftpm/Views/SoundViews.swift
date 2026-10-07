@@ -301,6 +301,7 @@ struct SoundMenu: View {
             }
             Divider()
             Button {
+                guard Premium.shared.allows(.bashes, count: bashes.bashes.count) else { return }
                 let bash = bashes.create(name: sound.name, soundIds: [sound.id])
                 ui.editingBash = BashEditRequest(id: bash.id)
             } label: {

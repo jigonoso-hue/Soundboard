@@ -113,6 +113,7 @@ struct BashMenu: View {
             Label("Edit…", systemImage: "pencil")
         }
         Button {
+            guard Premium.shared.allows(.bashes, count: bashes.bashes.count) else { return }
             bashes.duplicate(bash.id)
         } label: {
             Label("Duplicate", systemImage: "plus.square.on.square")

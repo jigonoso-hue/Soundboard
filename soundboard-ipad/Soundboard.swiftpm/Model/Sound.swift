@@ -129,9 +129,12 @@ enum SoundError: LocalizedError {
     case unsupported(String)
     case noAudio
     case exportFailed
+    /// The free version's limit for clips or full sounds (see Premium.swift).
+    case premiumLimit(PremiumRules.Limit)
 
     var errorDescription: String? {
         switch self {
+        case .premiumLimit(let limit): return limit.message
         case .unsupported(let name): return "“\(name)” isn't an audio format this iPad can play."
         case .noAudio: return "That file doesn't contain any audio."
         case .exportFailed: return "Couldn't cut the audio out of that file."

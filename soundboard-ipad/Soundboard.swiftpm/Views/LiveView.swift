@@ -423,7 +423,7 @@ struct LiveControls: View {
         HStack(spacing: 14) {
             if live.role == .host && !toolsBelow {
                 Button {
-                    choosingWhisper = true
+                    if Premium.shared.require(.whispers) { choosingWhisper = true }
                 } label: {
                     Label(live.whisperTargets.isEmpty ? "Whisper" : "Whisper (\(live.whisperTargets.count))",
                           systemImage: live.whisperTargets.isEmpty ? "ear" : "ear.fill")
@@ -436,7 +436,7 @@ struct LiveControls: View {
                 .accessibilityLabel("Whisper the next sound")
 
                 Button {
-                    live.emphasis.toggle()
+                    if live.emphasis || Premium.shared.require(.emphasis) { live.emphasis.toggle() }
                 } label: {
                     Label("Emphasis", systemImage: live.emphasis ? "iphone.radiowaves.left.and.right.circle.fill" : "iphone.radiowaves.left.and.right")
                 }
@@ -454,11 +454,11 @@ struct LiveControls: View {
                 .tint(live.game == nil ? nil : Color(hex: 0xC41818))
                 .accessibilityLabel("Games: a buzzer or a quiz for everyone")
                 .sheet(isPresented: $showGames) {
-                    GameHostView().environmentObject(live)
+                    GameHostView().environmentObject(live).premiumSheet()
                 }
                 // A picture on every listener's screen.
                 Button {
-                    showHandout = true
+                    if Premium.shared.require(.handouts) { showHandout = true }
                 } label: {
                     Label("Handout", systemImage: "map")
                 }
@@ -508,7 +508,7 @@ struct BroadcastBar: View {
         HStack(spacing: 6) {
             tool(live.whisperTargets.isEmpty ? "Whisper" : "Whisper (\(live.whisperTargets.count))",
                  live.whisperTargets.isEmpty ? "ear" : "ear.fill", on: !live.whisperTargets.isEmpty, color: Color(hex: 0xB07CFF)) {
-                choosingWhisper = true
+                if Premium.shared.require(.whispers) { choosingWhisper = true }
             }
             .popover(isPresented: $choosingWhisper) {
                 WhisperPicker().presentationCompactAdaptation(.popover)
@@ -516,7 +516,7 @@ struct BroadcastBar: View {
             .accessibilityLabel("Whisper the next sound")
             tool("Emphasis", live.emphasis ? "iphone.radiowaves.left.and.right.circle.fill" : "iphone.radiowaves.left.and.right",
                  on: live.emphasis, color: Color(hex: 0xFF6A3D)) {
-                live.emphasis.toggle()
+                if live.emphasis || Premium.shared.require(.emphasis) { live.emphasis.toggle() }
             }
             .accessibilityLabel("Emphasis: the next sound vibrates listeners' phones")
             .accessibilityAddTraits(live.emphasis ? .isSelected : [])
@@ -524,10 +524,10 @@ struct BroadcastBar: View {
                 showGames = true
             }
             .sheet(isPresented: $showGames) {
-                GameHostView().environmentObject(live)
+                GameHostView().environmentObject(live).premiumSheet()
             }
             .accessibilityLabel("Games: a buzzer or a quiz for everyone")
-            tool("Handout", "map", on: false, color: .accentColor) { showHandout = true }
+            tool("Handout", "map", on: false, color: .accentColor) { if Premium.shared.require(.handouts) { showHandout = true } }
                 .sheet(isPresented: $showHandout) {
                     HandoutSendView().environmentObject(live)
                 }

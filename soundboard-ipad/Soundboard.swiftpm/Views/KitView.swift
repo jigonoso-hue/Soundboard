@@ -166,6 +166,7 @@ struct KitView: View {
                     Label("Edit Name and Icon…", systemImage: "pencil")
                 }
                 Button {
+                    guard Premium.shared.allows(.kits, count: kits.kits.count) else { return }
                     kits.duplicate(kit.id)
                 } label: {
                     Label("Duplicate", systemImage: "plus.square.on.square")
