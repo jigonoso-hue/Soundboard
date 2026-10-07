@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dungeon Radio</string>
+    <string name="channel_session">Live Session</string>
+    <string name="channel_session_about">Keeps a Live Session going while the app is in the background.</string>
+    <string name="channel_buzz">Buzzes and turns</string>
+    <string name="channel_buzz_about">A buzz from the broadcaster, or your turn, while the app is in the background.</string>
+    <string name="session_on">Live Session on</string>
+    <string name="session_tap">Tap to go back to the session.</string>
+</resources>

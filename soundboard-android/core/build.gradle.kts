@@ -26,3 +26,10 @@ tasks.test {
     useJUnit()
     testLogging { events("passed", "failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL; showStandardStreams = false }
 }
+
+// The test classpath, for web-test/ (which runs DevServer, the native side for a desktop browser).
+tasks.register("printTestClasspath") {
+    dependsOn("testClasses")
+    val cp = sourceSets["test"].runtimeClasspath
+    doLast { println("CLASSPATH=" + cp.asPath) }
+}

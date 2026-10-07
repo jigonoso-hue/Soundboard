@@ -1,63 +1,117 @@
 # Dungeon Radio for Android
 
-The Android version of Dungeon Radio, made to share Live Sessions with the Mac
-and iPhone/iPad apps: an Android phone can tune in to a Mac or iPhone
-broadcast, at the table or online, and broadcast to them.
+The full Dungeon Radio app for Android phones and tablets. It has the same
+screens as the Mac app (the library, Scene Kits, bashes, ambience, playlists,
+bookmarks, recording, dice, games and handouts). It also shares Live Sessions
+with the Mac and iPhone/iPad apps, at the table or online, as broadcaster or
+listener.
 
-**Status: in progress.** Stage 1 (the Live Session engine) is done and
-tested against the Mac app and the relay. The app itself (stage 2 on) needs
-the Android SDK to build.
+**Status:** the app's code is written and tested. The APK hasn't been built
+yet, because the Android Gradle plugin and SDK come from `dl.google.com`,
+which the cloud build environment can't reach. Build it with Android Studio
+(see below).
 
 ## How it's built
 
-As planned in the repo's `CLAUDE.md`:
+The app is a WebView running the Mac app's own web screens
+(`soundboard-mac/src/renderer`), unchanged. A thin Android layer sits around
+them, and a native Kotlin side does what Electron's main process does on the
+Mac.
 
-- **`core/`** (plain Kotlin, any JVM): the Live Session engine, a port of the
-  Mac app's `src/live.js` and `src/game.js` (and the iPhone app's
-  `Live/LiveEngines.swift`, `LiveGame.swift`).
-  - `LiveNet.kt`: the protocol's constants and checks (relay URLs, fades,
-    titles, listeners' pictures, file chunks).
-  - `FileFetcher.kt`: fetches files in hash-checked 256 KB chunks.
-  - `Transports.kt`: hosting at the table (a WebSocket server on the phone,
-    advertised on the local network) and online (through the relay).
-  - `LiveHost.kt`: the broadcaster: answers listeners, serves files, plays,
-    ambience, scenes, roll checks and dice colours, roll requests and
-    initiative, the buzzer and quiz, players' sounds, handouts (secret ones
-    too) and pictures.
-  - `LiveListener.kt`: the listener: clock sync, file cache, commands with
-    local times and files, handouts in a temporary folder, its picture,
-    rolls, games and its own sounds.
-  - `Game.kt`, `Rolls.kt`: the buzzer and quiz rules; the checks on rolls.
-- **`app/`** (stage 2, needs the Android SDK): Capacitor around the Mac app's
-  web screens (`soundboard-mac/src/renderer`), so the board, Scene Kits,
-  dice, games and the listener's stage carry over, with native code for what
-  Electron's main process does on the Mac: the sound library and its files,
-  the Live engine above, local-network discovery (NsdManager), background
-  audio (a foreground service, so a locked phone keeps playing) and
-  recording.
+- **`web/`**: the Android layer for the web screens.
+  - `node-shim.js`: just enough of Node (`fs`, `path`, `Buffer`, `require`)
+    for the Mac's store modules (`src/library.js`, `bashes.js`, `kits.js`,
+    `bookmarks.js`) to run unchanged. Files go through the native bridge
+    (`DRNative`).
+  - `android-main.js`: the `window.soundboard` API the screens expect, as the
+    Mac's `main.js` and `preload.js` give it.
+  - `android-ui.js` and `android.css`: phone-first layout.
+    - The sidebar becomes a drawer, touch targets are 44 px and nothing
+      scrolls sideways.
+    - Scene Kit sections stack, and the bash editor is laid out for a phone.
+    - The Back button closes what's open.
+  - `android-editor.js`: the bash editor, as a layer over the board.
+- **`scripts/assemble-web.js`**: puts the Mac's screens and the Android layer
+  together into the app's assets. The Gradle build runs it. It needs Node,
+  plus `npm install` in `soundboard-mac/` for the dice's 3D libraries.
+- **`core/`** (plain Kotlin; builds and tests on any JVM):
+  - `live/`: the Live Session engine, a port of the Mac's `src/live.js` and
+    `src/game.js`.
+    - Hosting at the table (a WebSocket server) or online (the relay).
+    - Listening: clock sync, the file cache, handouts and pictures.
+    - Rolls, dice colours, the buzzer and quiz, and players' sounds.
+  - `bridge/`: the native side of the web screens.
+    - `AppFiles`: the page's files, kept inside the app's folder.
+    - `SoundServer`: sounds over `127.0.0.1` with byte ranges and a secret
+      path. It plays the role of the Mac's `sound://` protocol.
+    - `NativeBridge`: answers `DRNative.call` and `callAsync`.
+    - `LiveBridge`: the engine behind the same calls and events as the Mac's
+      `main.js`, so the Mac's `live.js` screen runs unchanged.
+    - `Platform`: what the phone itself provides.
+- **`app/`** (Android, framework APIs only, no AndroidX):
+  - `MainActivity`: the WebView and the app's assets on an https origin
+    (`AppAssets`).
+    - The system file picker and "Save as…".
+    - The microphone for recording.
+    - Edge-to-edge insets, and Back.
+  - `AndroidPlatform`: buzzes (a vibration, plus a notification while the app
+    is in the background).
+  - `Lan`: finds and announces sessions at the table with DNS-SD
+    (`_dungeonradio._tcp`, the same Bonjour service the Mac and iPhone use).
+  - `SessionService`: a foreground service with wake and Wi-Fi locks. A Live
+    Session keeps playing with the screen off or the app in the background.
+  - With nothing open, Back sends the app to the background rather than
+    closing it, so sounds keep going.
 
 ## Tests
 
 ```bash
 cd soundboard-android
-gradle :core:test
+gradle :core:test                 # engine rules, Mac interop, the bridge
+node web-test/smoke.js            # the web layer in Chromium at phone size
+node web-test/phone-tour.js       # every screen: screenshots + layout audit
+node web-test/live-e2e.js         # two phones in a Live Session, real native side
+python3 scripts/compile-check.py <android.jar>   # the app's Kotlin, without the SDK
 ```
 
-Besides the rules, `InteropTest` runs the Mac app's real engine and the real
-relay (`core/src/test/node/harness.js`, needs Node and `npm install` in
-`soundboard-mac/` and `live-relay/`) and checks, end to end:
+Needs Node, plus `npm install` in `soundboard-mac/` and `live-relay/`.
 
-- an Android listener tuning in to a Mac at the table: sounds fetched in
-  chunks and played in sync, a secret handout, its picture on the Mac, its
-  dice colour and roll (named by the host), the buzzer, the session ending;
-- a Mac listener tuning in to an Android broadcast online through the relay:
-  sounds, ambience, a secret handout, the listener's picture and roll, the
-  buzzer;
-- Android to Android at the table, including removing a listener.
+- `InteropTest` runs the Mac app's real engine and the real relay
+  (`core/src/test/node/harness.js`):
+  - an Android listener with a Mac broadcaster, at the table;
+  - a Mac listener with an Android broadcaster, online;
+  - Android to Android.
+- `BridgeTest` checks the native side:
+  - files stay in the app's folder;
+  - the sound server handles byte ranges and refuses paths without the
+    secret or outside its folders;
+  - the calls answer like the Mac;
+  - two bridges hold a Live Session: a sound, ambience, a secret handout and
+    a picture.
+- `live-e2e.js` runs the web screens in Chromium. Each page sits on the real
+  Kotlin bridge (`DevServer.kt`, which serves `DRNative` over HTTP), and the
+  pages are joined through the real relay. It checks:
+  - adding a sound through the picker;
+  - broadcasting online and tuning in with the code;
+  - the listener playing the sound from its own sound server;
+  - a built-in ambience loop;
+  - leaving the session.
+- `web-test/fake-native.js` is a lighter stand-in for the native side, used
+  by the smoke test and the phone tour.
 
-## Build notes
+## Building the app
 
-- Gradle repositories use `maven.google.com` (not `google()`, which is
-  `dl.google.com`); both serve the same artifacts.
-- Package: `com.dungeonradio`. Choose the permanent application ID before the
-  first Play Store upload and turn on Play App Signing (see `CLAUDE.md`).
+1. Open `soundboard-android/` in Android Studio. It writes `local.properties`
+   with the SDK's location, which turns on the `app` module.
+2. Run `npm install` in `soundboard-mac/` (Node is needed for the web screens).
+3. Run the `app` configuration, or `gradle :app:assembleDebug`.
+
+The application ID is `com.dungeonradio.app`. Choose the permanent one before
+the first Play Store upload, and turn on Play App Signing (see `CLAUDE.md`).
+Until there's a release key, release builds are signed with the debug key so
+you can install them by hand.
+
+## Not on Android yet
+
+- YouTube clipping (the Mac's built-in browser).
+- Global hotkeys.

@@ -85,15 +85,26 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 
 ## Android (in progress)
 
-`soundboard-android/`. Stage 1 is done: `core/`, the Live Session engine in
-plain Kotlin (a port of `src/live.js` and `src/game.js`), tested against the
-Mac engine and the relay (`gradle :core:test`, see its README). Protocol or
-rule changes now go into `src/live.js`, `Live/LiveEngines.swift` **and**
-`core/src/main/kotlin/com/dungeonradio/live/`, with `InteropTest` kept passing.
-The app itself (stage 2 on) follows the plan below and needs the Android SDK
-(the cloud sandbox must allow `dl.google.com` to build it).
+`soundboard-android/` (see its README). The code is written and tested; the
+APK still has to be built in Android Studio (the cloud sandbox can't reach
+`dl.google.com`).
 
-The plan:
+- **How it works:** a WebView runs the Mac's `src/renderer` unchanged.
+  - `web/node-shim.js` runs the Mac's store modules unchanged.
+  - `web/android-main.js` is the `window.soundboard` API.
+  - `core/.../bridge/` is the native side (files, the sound server, and Live
+    through the Kotlin engine).
+  - `app/` is the Android shell (framework APIs only).
+- **Protocol or rule changes:** these now go into `src/live.js`,
+  `Live/LiveEngines.swift` **and** `core/src/main/kotlin/com/dungeonradio/live/`,
+  with `InteropTest` kept passing.
+- **New `window.soundboard` calls or events in `main.js`/`preload.js`:** also
+  go into `web/android-main.js` (and `LiveBridge` for Live ones).
+- **Layout:** phone layouts for Android go in `web/android.css`.
+- **Before pushing Android changes:** run `gradle :core:test` and the
+  `web-test/` scripts (`smoke.js`, `phone-tour.js`, `live-e2e.js`).
+
+The original plan, for reference:
 
 - **Capacitor around the Mac app's web code** (src/renderer): most screens,
   the dice and the games carry over. Rebuild natively, as Capacitor plugins,

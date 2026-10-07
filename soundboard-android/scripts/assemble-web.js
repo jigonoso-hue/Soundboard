@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds the Android app's web content from the Mac app's screens:
-//   node scripts/assemble-web.js [outDir]   (default app/src/main/assets)
+//   node scripts/assemble-web.js [outDir]   (default app/build/generated/web-assets)
 // - web/: soundboard-mac/src/renderer, plus the Android layer (web/*) and the
 //   Mac's store modules (src/library.js, …) wrapped for node-shim.js.
 // - ambience/: the built-in loops.
@@ -11,7 +11,7 @@ const path = require('path');
 const repo = path.resolve(__dirname, '../..');
 const mac = path.join(repo, 'soundboard-mac/src');
 const android = path.resolve(__dirname, '..');
-const out = path.resolve(process.argv[2] || path.join(android, 'app/src/main/assets'));
+const out = path.resolve(process.argv[2] || path.join(android, 'app/build/generated/web-assets'));
 const web = path.join(out, 'web');
 
 fs.rmSync(web, { recursive: true, force: true });
@@ -44,8 +44,11 @@ for (const file of fs.readdirSync(path.join(android, 'web'))) {
   fs.copyFileSync(path.join(android, 'web', file), path.join(web, file));
 }
 
-// Sounds come from the app's own file server on this phone (127.0.0.1).
-const csp = "default-src 'self'; media-src 'self' http://127.0.0.1:* blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'";
+// Sounds come from the app's own file server on this phone (127.0.0.1): played
+// as media, and fetched to decode (ambience, bashes, waveforms), which the
+// Mac's privileged sound:// protocol allows without a CSP entry.
+const local = 'http://127.0.0.1:*';
+const csp = `default-src 'self'; media-src 'self' ${local} blob:; connect-src 'self' ${local}; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'`;
 function adapt(file, scripts) {
   const target = path.join(web, file);
   let html = fs.readFileSync(target, 'utf8');
