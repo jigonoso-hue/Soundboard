@@ -14,7 +14,6 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.Settings
 import android.util.Log
 import com.dungeonradio.bridge.NativeBridge
 import com.dungeonradio.bridge.Platform
@@ -134,8 +133,8 @@ class AndroidPlatform(private val context: Context) : Platform {
     override fun premiumRestore(done: (JSONObject) -> Unit) { billing.refresh { done(billing.status()) } }
     override fun premiumTestUnlock(on: Boolean): JSONObject = billing.testUnlock(on)
 
-    override val deviceName: String =
-        (Settings.Global.getString(context.contentResolver, "device_name") ?: Build.MODEL ?: "Android").take(40)
+    /** The phone's model ("Pixel 8"), not its owner's name for it: it's announced on the Wi-Fi. */
+    override val deviceName: String = (Build.MODEL ?: "Android").take(40)
 
     companion object {
         const val TAG = "DungeonRadio"

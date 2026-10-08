@@ -2393,7 +2393,7 @@ struct DiceRecap: View {
                 HStack {
                     Spacer()
                     Button("Done") { tray.showRecap = false }
-                        .buttonStyle(.borderedProminent)
+                        .accentProminent()
                 }
             }
             .foregroundStyle(Color.white)
@@ -2489,7 +2489,7 @@ struct CustomDicePanel: View {
                     if let clean = CustomDie.clean(def.json) { tray.saveCustom(clean) }
                     editing = nil
                 }
-                .buttonStyle(.borderedProminent)
+                .accentProminent()
                 TablePill(title: "Cancel") { editing = nil }
                 if !isNew {
                     TablePill(title: "Delete", danger: true) {

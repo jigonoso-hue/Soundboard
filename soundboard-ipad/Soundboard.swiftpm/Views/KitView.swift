@@ -142,7 +142,7 @@ struct KitView: View {
             } label: {
                 IconLabel(drawerOpen ? "Close Library" : "Add from Library", icon: drawerOpen ? "close" : "plus", size: 14)
             }
-            .buttonStyle(.borderedProminent)
+            .accentProminent()
             // On iPhone sections stack one after another, so there's no layout to arrange.
             if sizeClass != .compact {
                 Button {

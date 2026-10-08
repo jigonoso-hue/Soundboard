@@ -269,7 +269,11 @@ struct PremiumView: View {
                             .disabled(premium.busy)
                         }
                     } footer: {
-                        Text("Free: 10 clips, 5 full sounds, 5 bashes and 2 scene kits, all of ambience, and broadcasting with dice, custom dice and players’ sounds.")
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Free: 10 clips, 5 full sounds, 5 bashes and 2 scene kits, all of ambience, and broadcasting with dice, custom dice and players’ sounds.")
+                            // What the App Store requires next to subscription prices.
+                            Text("Subscriptions renew automatically at the price shown until you cancel. Payment is charged to your Apple ID. Cancel any time in Settings → your name → Subscriptions, at least 24 hours before the period ends. Lifetime is a single payment.")
+                        }
                     }
                     Section {
                         Button("Restore Purchases") { Task { await premium.restore() } }
@@ -282,6 +286,10 @@ struct PremiumView: View {
                             if let url = URL(string: "https://apps.apple.com/account/subscriptions") { UIApplication.shared.open(url) }
                         }
                     }
+                }
+                Section {
+                    Link("Terms of Use", destination: LegalLinks.terms)
+                    Link("Privacy Policy", destination: LegalLinks.privacy)
                 }
                 #if DEBUG
                 Section {
@@ -323,7 +331,7 @@ struct PremiumLockCard: View {
             Text("⭐ Premium").font(.headline).foregroundStyle(Color(hex: 0xF5C542))
             Text(feature.title).font(.footnote).multilineTextAlignment(.center)
             Button("See Premium") { Premium.shared.open() }
-                .buttonStyle(.borderedProminent)
+                .accentProminent()
                 .frame(minHeight: 44)
         }
         .frame(maxWidth: .infinity)
@@ -377,4 +385,12 @@ struct PremiumRow: View {
         }
         .accessibilityHint("Unlimited sounds, games, handouts, whispers and more")
     }
+}
+
+/// The Privacy Policy, Terms of Use and Licenses, served by the Live Session
+/// relay (live-relay/legal). The same pages the stores link to.
+enum LegalLinks {
+    static let privacy = URL(string: "https://soundboard-r1zt.onrender.com/privacy")!
+    static let terms = URL(string: "https://soundboard-r1zt.onrender.com/terms")!
+    static let licenses = URL(string: "https://soundboard-r1zt.onrender.com/licenses")!
 }

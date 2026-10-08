@@ -24,6 +24,8 @@ const Premium = (() => {
     table: 'Roll requests, initiative and contests are part of Premium.',
   };
   let status = { premium: !store, products: [], debug: false };
+  // The Privacy Policy and Terms of Use, served by the Live Session relay (live-relay/legal).
+  const LEGAL_URL = (page) => `https://soundboard-r1zt.onrender.com/${page}`;
   let busy = false;
 
   const el = (tag, cls, text) => {
@@ -100,7 +102,17 @@ const Premium = (() => {
         buy.append(b);
       }
       dialog.append(buy);
+      // What the stores require next to subscription prices (and what's fair to say).
+      dialog.append(el('p', 'muted small premium-terms', 'Subscriptions renew automatically at the price shown until you cancel. Cancel any time in your Google Play or App Store subscriptions, at least 24 hours before the period ends. Lifetime is a single payment.'));
     }
+    const legal = el('p', 'muted small premium-legal');
+    for (const [label, route] of [['Terms of Use', 'terms'], ['Privacy Policy', 'privacy']]) {
+      const link = el('button', 'plain premium-link', label);
+      link.type = 'button';
+      link.addEventListener('click', () => api.openExternal(LEGAL_URL(route)));
+      legal.append(link);
+    }
+    dialog.append(legal);
     const actions = el('div', 'dialog-actions');
     if (!on()) {
       const restore = el('button', 'plain', 'Restore purchases');

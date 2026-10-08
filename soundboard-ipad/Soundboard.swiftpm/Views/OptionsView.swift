@@ -193,6 +193,12 @@ struct OptionsView: View {
             Text("The icon set, bashes, scene kits and ambience work the same way as in the Mac app.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            Link("Privacy Policy", destination: LegalLinks.privacy)
+            Link("Terms of Use", destination: LegalLinks.terms)
+            Link("Licenses", destination: LegalLinks.licenses)
+            Text("Everything you make stays on this device. Deleting the app deletes it all.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

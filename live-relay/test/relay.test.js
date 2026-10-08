@@ -103,3 +103,22 @@ test('the host can kick a listener', async () => {
     await relay.close();
   }
 });
+
+test('serves the Privacy Policy, Terms of Use and Licenses', async () => {
+  const relay = await createRelay({ port: 0, host: '127.0.0.1' });
+  const base = `http://127.0.0.1:${relay.port}`;
+  try {
+    for (const [route, heading] of [['/privacy', 'Privacy Policy'], ['/terms', 'Terms of Use'], ['/licenses/', 'Licenses']]) {
+      const res = await fetch(base + route);
+      assert.equal(res.status, 200, route);
+      assert.match(res.headers.get('content-type'), /text\/html/);
+      const html = await res.text();
+      assert.match(html, new RegExp(`<h1>${heading}</h1>`));
+      assert.doesNotMatch(html, /\{\{\w+\}\}/, `${route} has every detail filled in`);
+    }
+    assert.equal((await fetch(`${base}/privacy.html`)).status, 404);
+    assert.equal((await fetch(`${base}/../server.js`)).status, 404);
+  } finally {
+    await relay.close();
+  }
+});

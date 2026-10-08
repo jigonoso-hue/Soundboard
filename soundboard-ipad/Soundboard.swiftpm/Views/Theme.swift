@@ -167,11 +167,18 @@ extension EnvironmentValues {
 @MainActor
 final class ThemeSettings: ObservableObject {
     @Published var theme: AppTheme {
-        didSet { UserDefaults.standard.set(theme.rawValue, forKey: "theme") }
+        didSet { UserDefaults.standard.set(theme.rawValue, forKey: "theme"); updateFill() }
     }
     /// A custom accent ("#rrggbb"), or nil for the theme's own.
     @Published var accentHex: String? {
-        didSet { UserDefaults.standard.set(accentHex, forKey: "accent") }
+        didSet { UserDefaults.standard.set(accentHex, forKey: "accent"); updateFill() }
+    }
+
+    /// Updates the colours for buttons filled with the accent (AccentFill).
+    private func updateFill() {
+        let (fill, darkInk) = AccentFill.colors(for: accentHex ?? theme.defaultAccent)
+        AccentFill.fill = Color(hexString: fill) ?? .purple
+        AccentFill.ink = darkInk ? Color(hex: 0x141418) : .white
     }
 
     static let accentPresets: [(String, String)] = [
@@ -185,10 +192,69 @@ final class ThemeSettings: ObservableObject {
         // The old Parchment theme is now part of Tavern.
         theme = saved == "parchment" ? .tavern : (AppTheme(rawValue: saved) ?? .dark)
         accentHex = defaults.string(forKey: "accent")
+        updateFill()
     }
 
     var accent: Color {
         Color(hexString: accentHex ?? theme.defaultAccent) ?? .purple
+    }
+}
+
+// MARK: - Readable accent fills
+
+/// A filled button's colour and text, readable at 4.5:1 (WCAG AA): white text,
+/// on the colour darkened a little if needed; or dark text on a bright colour
+/// (teal, gold…) that would need a lot of darkening. Same rule as themes.js.
+enum AccentFill {
+    /// The current accent's fill and text colours (ThemeSettings keeps them up to date).
+    static var fill: Color = Color(hex: 0xA246EB)
+    static var ink: Color = .white
+
+    static func colors(for hex: String) -> (fill: String, darkInk: Bool) {
+        guard let rgb = parse(hex) else { return (hex, false) }
+        let white = (255.0, 255.0, 255.0)
+        for step in 0...3 {
+            let fill = scale(rgb, pow(0.92, Double(step)))
+            if contrast(fill, white) >= 4.5 { return (format(fill), false) }
+        }
+        if contrast(rgb, (20, 20, 24)) >= 4.5 { return (format(rgb), true) }
+        var fill = rgb
+        for _ in 0..<30 where contrast(fill, white) < 4.5 { fill = scale(fill, 0.92) }
+        return (format(fill), false)
+    }
+
+    private typealias RGB = (Double, Double, Double)
+
+    private static func parse(_ hex: String) -> RGB? {
+        let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard digits.count == 6, let v = UInt32(digits, radix: 16) else { return nil }
+        return (Double((v >> 16) & 0xFF), Double((v >> 8) & 0xFF), Double(v & 0xFF))
+    }
+
+    private static func scale(_ c: RGB, _ f: Double) -> RGB { ((c.0 * f).rounded(), (c.1 * f).rounded(), (c.2 * f).rounded()) }
+
+    private static func format(_ c: RGB) -> String { String(format: "#%02x%02x%02x", Int(c.0), Int(c.1), Int(c.2)) }
+
+    private static func luminance(_ c: RGB) -> Double {
+        func channel(_ v: Double) -> Double {
+            let s = v / 255
+            return s <= 0.03928 ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(c.0) + 0.7152 * channel(c.1) + 0.0722 * channel(c.2)
+    }
+
+    static func contrast(_ a: (Double, Double, Double), _ b: (Double, Double, Double)) -> Double {
+        let x = luminance(a), y = luminance(b)
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+}
+
+extension View {
+    /// A prominent button in the accent, with text that stays readable.
+    func accentProminent() -> some View {
+        buttonStyle(.borderedProminent)
+            .tint(AccentFill.fill)
+            .foregroundStyle(AccentFill.ink)
     }
 }
 

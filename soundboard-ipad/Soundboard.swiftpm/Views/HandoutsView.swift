@@ -185,8 +185,8 @@ struct HandoutViewer: View {
                         Text("Close")
                             .font(.headline)
                             .frame(maxWidth: .infinity, minHeight: 50)
-                            .foregroundStyle(Color.white)
-                            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14))
+                            .foregroundStyle(AccentFill.ink)
+                            .background(AccentFill.fill, in: RoundedRectangle(cornerRadius: 14))
                     }
                     .layoutPriority(1)
                 }
@@ -396,7 +396,7 @@ struct HandoutSendView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
-                .buttonStyle(.borderedProminent)
+                .accentProminent()
                 .disabled(image == nil)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)

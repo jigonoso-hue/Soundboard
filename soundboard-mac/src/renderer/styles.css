@@ -13,6 +13,10 @@ button > .icon:only-child { vertical-align: middle; }
   --muted: #9a9ab0;
   --accent: #b04cff;
   --accent-hover: color-mix(in srgb, var(--accent) 82%, #fff);
+  /* Filled buttons (themes.js sets these from the accent, readable at 4.5:1). */
+  --accent-fill: #a246eb;
+  --accent-fill-hover: #ac59ed;
+  --on-accent: #fff;
   --danger: #ff5d73;
   --sidebar-bg: #111118;
   --dock-bg: #111118;
@@ -64,8 +68,8 @@ button, input, select {
 button { cursor: pointer; white-space: nowrap; }
 button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--hover); }
 button:disabled { opacity: 0.45; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
-button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+button.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); font-weight: 600; }
+button.primary:hover:not(:disabled) { background: var(--accent-fill-hover); }
 button.danger { color: var(--danger); }
 button.active { border-color: var(--accent); color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
 input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -642,7 +646,7 @@ dialog { max-height: 90vh; overflow-y: auto; }
 .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: none; align-self: flex-start; }
 .segmented button { border: none; border-radius: 0; padding: 5px 10px; font-size: 12px; background: var(--panel-2); color: var(--muted); }
 .segmented button + button { border-left: 1px solid var(--border); }
-.segmented button.active { background: var(--accent); color: #fff; }
+.segmented button.active { background: var(--accent-fill); color: var(--on-accent); }
 #tag-dialog-picker { margin: 6px 0 4px; }
 #edit-tags .tag-picker, #edit-kind { color: var(--text); }
 
@@ -1320,12 +1324,12 @@ dialog label.picker-row input { width: auto; }
 .dice-mod { display: flex; align-items: center; gap: 6px; }
 .dice-mod-value { min-width: 36px; text-align: center; font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
 .dice-adv, .dice-dis { width: 46px; height: 40px; border-radius: 12px; font-weight: 900; font-size: 15px; color: #fff; border: none; }
-.dice-adv { background: #1f9d55; }
-.dice-adv:hover:not(:disabled) { background: #22b25f; border: none; }
+.dice-adv { background: #17804a; }
+.dice-adv:hover:not(:disabled) { background: #1b8f53; border: none; }
 .dice-dis { background: #c62828; }
 .dice-dis:hover:not(:disabled) { background: #dc3030; border: none; }
-.dice-roll { position: relative; overflow: hidden; min-width: 200px; height: 44px; border-radius: 14px; font-weight: 800; font-size: 15px; color: #fff; background: var(--accent); border: none; user-select: none; }
-.dice-roll:hover:not(:disabled) { background: var(--accent-hover); border: none; }
+.dice-roll { position: relative; overflow: hidden; min-width: 200px; height: 44px; border-radius: 14px; font-weight: 800; font-size: 15px; color: var(--on-accent); background: var(--accent-fill); border: none; user-select: none; }
+.dice-roll:hover:not(:disabled) { background: var(--accent-fill-hover); border: none; }
 .dice-roll .dice-charge { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--charge, 0)); background: rgba(255,255,255,0.35); pointer-events: none; }
 .dice-roll-text { position: relative; }
 .dice-banner { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); min-width: 220px; max-width: min(560px, calc(100vw - 32px)); text-align: center; padding: 12px 22px 14px; border-radius: 18px; background: rgba(10,10,16,0.72); color: #fff; backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,0.4); pointer-events: none; }
@@ -1677,7 +1681,7 @@ body.game-locked { overflow: hidden; }
 .dice-layer.rolling .dice-ui { opacity: 0; visibility: hidden; pointer-events: none; }
 
 /* ---- Playlists, scene autoplay, now-and-then layers ---- */
-.section-playlist.on { background: var(--accent); color: #fff; border-color: transparent; }
+.section-playlist.on { background: var(--accent-fill); color: var(--on-accent); border-color: transparent; }
 .track.playlist-current { box-shadow: inset 3px 0 0 var(--accent); }
 .layer-every { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; opacity: 0.85; background: rgba(255,255,255,0.12); vertical-align: middle; white-space: nowrap; }
 .menu-note { max-width: 240px; padding: 6px 10px 8px; line-height: 1.35; }
@@ -1774,7 +1778,7 @@ body.handout-open .game-screen { visibility: hidden; }
 .handout-to-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .handout-to-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px 4px 4px; min-height: 32px; }
 .handout-to-chip:first-child { padding-left: 12px; }
-.handout-to-chip.on, .handout-to-chip.on:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; }
+.handout-to-chip.on, .handout-to-chip.on:hover:not(:disabled) { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); }
 .handout-secret { color: #d9c2ff; font-size: 13px; text-align: center; margin: -4px 0 6px; }
 
 /* Bookmarks: saved moments of the game's sound, in the sidebar. */
@@ -1803,3 +1807,6 @@ body.handout-open .game-screen { visibility: hidden; }
 .premium-lock { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 12px; text-align: center; }
 .premium-lock-title { font-weight: 700; color: #f5c542; }
 .premium-lock button { min-height: 44px; }
+.premium-terms { margin: 8px 0 0; line-height: 1.45; }
+.premium-legal { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 0; }
+.premium-link { min-height: 44px; padding: 0 10px; text-decoration: underline; color: var(--muted); }

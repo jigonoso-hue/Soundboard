@@ -638,7 +638,8 @@ private struct AskCard: View {
                 }
                 Button { table.answer(ask, mode: .normal, modifier: modifier) } label: {
                     Text("Roll").font(.headline.weight(.heavy)).frame(maxWidth: .infinity, minHeight: 40)
-                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(AccentFill.ink)
+                        .background(AccentFill.fill, in: RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
             }
@@ -872,8 +873,8 @@ private struct WideButton: View {
     var body: some View {
         Button(action: action) {
             Text(title).font(.callout.weight(.bold)).frame(maxWidth: .infinity, minHeight: 38)
-                .foregroundStyle(danger ? Color(red: 1, green: 0.7, blue: 0.7) : Color.white)
-                .background(danger ? Color.black.opacity(0.45) : Color.accentColor, in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(danger ? Color(red: 1, green: 0.7, blue: 0.7) : AccentFill.ink)
+                .background(danger ? Color.black.opacity(0.45) : AccentFill.fill, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(danger ? Color(red: 1, green: 0.47, blue: 0.47).opacity(0.5) : Color.clear))
         }
         .buttonStyle(.plain)

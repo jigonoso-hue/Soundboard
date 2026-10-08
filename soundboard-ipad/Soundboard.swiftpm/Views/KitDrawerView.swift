@@ -54,7 +54,7 @@ struct KitDrawerView: View {
                     Text("Library").font(.headline)
                     Spacer()
                     Button("Done", action: onClose)
-                        .buttonStyle(.borderedProminent)
+                        .accentProminent()
                         .controlSize(sizeClass == .compact ? .regular : .small)
                 }
                 VStack(alignment: .leading, spacing: 2) {

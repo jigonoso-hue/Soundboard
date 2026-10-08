@@ -35,6 +35,32 @@ const Themes = (() => {
   const info = () => THEMES[theme];
   const accent = () => accentHex || info().accent;
 
+  // Contrast between two #rrggbb colours (WCAG).
+  function contrast(a, b) {
+    const lum = (h) => {
+      const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const [x, y] = [lum(a), lum(b)];
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+
+  // A filled button's colour and text, readable at 4.5:1: white text, on the
+  // colour darkened a little if needed; or, on a bright colour (teal, gold…)
+  // that would need a lot of darkening, dark text instead.
+  function accentFill(hex) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) return { fill: hex, ink: '#fff' };
+    const darker = (h, f) => `#${[1, 3, 5].map((i) => Math.round(parseInt(h.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('')}`;
+    for (let step = 0; step <= 3; step++) {
+      const fill = darker(hex, 0.92 ** step);
+      if (contrast(fill, '#ffffff') >= 4.5) return { fill, ink: '#fff' };
+    }
+    if (contrast(hex, '#141418') >= 4.5) return { fill: hex, ink: '#141418' };
+    let fill = hex;
+    for (let i = 0; i < 30 && contrast(fill, '#ffffff') < 4.5; i++) fill = darker(fill, 0.92);
+    return { fill, ink: '#fff' };
+  }
+
   function apply() {
     const root = document.documentElement;
     root.dataset.theme = theme;
@@ -43,6 +69,11 @@ const Themes = (() => {
     root.classList.toggle('has-backdrop', !!info().backdrop);
     root.style.setProperty('--accent', accent());
     root.style.setProperty('--accent-hover', `color-mix(in srgb, ${accent()} 82%, #fff)`);
+    // Buttons filled with the accent: text that stays readable (WCAG AA, 4.5:1) on any colour picked.
+    const { fill, ink } = accentFill(accent());
+    root.style.setProperty('--accent-fill', fill);
+    root.style.setProperty('--accent-fill-hover', `color-mix(in srgb, ${fill} 88%, ${ink === '#fff' ? '#fff' : '#000'})`);
+    root.style.setProperty('--on-accent', ink);
     paintAll(true);
     listeners.forEach((fn) => fn(theme));
   }
@@ -375,6 +406,24 @@ const Themes = (() => {
     footer.className = 'muted small';
     footer.textContent = 'Tavern puts every page on worn parchment on a wooden table. Space Age looks out of a starship window onto deep space, with 50s atomic panels. Sci-Fi is a glowing holographic starship HUD. Dark Academia puts deep indigo pages in gilded frames under a starry night.';
     container.append(cards, accentRow, footer);
+    // The phone apps: the Privacy Policy, Terms and Licenses (served by the relay).
+    const api = window.soundboard;
+    if (api && api.premium) {
+      const legal = document.createElement('p');
+      legal.className = 'muted small premium-legal';
+      for (const [label, page] of [['Privacy Policy', 'privacy'], ['Terms of Use', 'terms'], ['Licenses', 'licenses']]) {
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'plain premium-link';
+        link.textContent = label;
+        link.addEventListener('click', () => api.openExternal(`https://soundboard-r1zt.onrender.com/${page}`));
+        legal.append(link);
+      }
+      const note = document.createElement('p');
+      note.className = 'muted small';
+      note.textContent = 'Everything you make stays on this device. Uninstalling the app deletes it all.';
+      container.append(legal, note);
+    }
   }
 
   function init() {

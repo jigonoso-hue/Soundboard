@@ -149,7 +149,7 @@ struct YouTubePanel: View {
                 Label("Create Sound", systemImage: "scissors")
                     .frame(maxWidth: sizeClass == .compact ? .infinity : nil)
             }
-            .buttonStyle(.borderedProminent)
+            .accentProminent()
         }
     }
 

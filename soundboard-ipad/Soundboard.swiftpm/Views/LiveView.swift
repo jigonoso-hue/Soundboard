@@ -133,7 +133,7 @@ struct LiveView: View {
             .font(.headline)
             .frame(maxWidth: .infinity, minHeight: 50)
         }
-        .buttonStyle(.borderedProminent)
+        .accentProminent()
         .disabled(live.busy)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

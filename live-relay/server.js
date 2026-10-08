@@ -5,7 +5,9 @@
 // with the listener's id), and host messages go to every listener or to one.
 // See PROTOCOL.md.
 
+const fs = require('fs');
 const http = require('http');
+const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
@@ -36,6 +38,20 @@ function send(socket, message) {
   if (socket && socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
 }
 
+// ---- Legal pages ----
+
+const LEGAL_PAGES = { '/privacy': ['privacy', 'Privacy Policy'], '/terms': ['terms', 'Terms of Use'], '/licenses': ['licenses', 'Licenses'] };
+const LEGAL_DIR = path.join(__dirname, 'legal');
+
+// A legal page with the developer's details (legal/details.json) filled in.
+function legalPage([file, title]) {
+  const details = JSON.parse(fs.readFileSync(path.join(LEGAL_DIR, 'details.json'), 'utf8'));
+  const escape = (text) => String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const fill = (text) => text.replace(/\{\{(\w+)\}\}/g, (_, key) => escape(details[key] ?? ''));
+  const body = fill(fs.readFileSync(path.join(LEGAL_DIR, `${file}.html`), 'utf8'));
+  return fs.readFileSync(path.join(LEGAL_DIR, '_page.html'), 'utf8').replace('{{title}}', escape(title)).replace('{{body}}', body);
+}
+
 function createRelay({ port = 8787, host = '0.0.0.0', log = () => {} } = {}) {
   const rooms = new Map(); // code -> { key, host, listeners: Map<peer, socket>, nextPeer, endTimer }
 
@@ -43,6 +59,15 @@ function createRelay({ port = 8787, host = '0.0.0.0', log = () => {} } = {}) {
     if (req.url === '/health') {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end(`ok ${rooms.size} rooms\n`);
+      return;
+    }
+    // The apps' Privacy Policy, Terms of Use and Licenses (legal/), linked from
+    // the apps and their store listings.
+    const page = LEGAL_PAGES[(req.url || '').split('?')[0].replace(/\/$/, '')];
+    if (page && (req.method === 'GET' || req.method === 'HEAD')) {
+      const html = legalPage(page);
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', 'x-content-type-options': 'nosniff' });
+      res.end(req.method === 'HEAD' ? undefined : html);
       return;
     }
     res.writeHead(404);

@@ -164,7 +164,7 @@ struct BashEditorView: View {
         } label: {
             IconLabel(isPlaying ? "Stop" : "Play", icon: isPlaying ? "stop" : "play")
         }
-        .buttonStyle(.borderedProminent)
+        .accentProminent()
         .disabled(draft.clips.isEmpty)
     }
 
