@@ -1,0 +1,64 @@
+# Builds the Mac app's DMG on a Mac and publishes it as the "Mac app (latest)"
+# release, so the newest build is always one click away:
+#   https://github.com/jigonoso-hue/Soundboard/releases/tag/mac-latest
+# Runs when the Mac app changes on main, or by hand (Actions → Mac DMG → Run workflow).
+name: Mac DMG
+
+on:
+  push:
+    branches: [main]
+    paths: ['soundboard-mac/**', '.github/workflows/mac-dmg.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-dmg
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: soundboard-mac
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: soundboard-mac/package-lock.json
+
+      - run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      # Not signed with a Developer ID (there isn't one yet): Apple Silicon gets an
+      # ad-hoc signature, and macOS asks once before the first launch.
+      - name: Build the DMGs (Apple Silicon and Intel)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac dmg --arm64 --x64 --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dungeon-radio-mac
+          path: soundboard-mac/dist/*.dmg
+
+      - name: Publish as the "mac-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete mac-latest --yes --cleanup-tag || true
+          gh release create mac-latest dist/*.dmg \
+            --title "Dungeon Radio for Mac (latest)" \
+            --target "$GITHUB_SHA" \
+            --notes "Built from $(git rev-parse --short HEAD) on $(date -u '+%Y-%m-%d %H:%M UTC').
+
+          Download **arm64** for Apple Silicon Macs (M1 and later), **x64** for Intel Macs.
+
+          The app isn't notarized by Apple yet, so the first time: open the DMG, drag Dungeon Radio to Applications, then **right-click it → Open → Open** (or System Settings → Privacy & Security → Open Anyway)."
