@@ -113,9 +113,42 @@ const IconPicker = (() => {
     }
 
     // The credit the icons' licence (CC BY 3.0) asks for.
-    const credit = document.createElement('p');
-    credit.className = 'ip-credit muted small';
-    credit.textContent = `Icons by ${Icons.artists.join(', ')} at game-icons.net (CC BY 3.0).`;
+    // A glowing "Disclaimer" with a ? that shows the full text on hover,
+    // or on tap where there's no hover.
+    const credit = document.createElement('div');
+    credit.className = 'ip-credit';
+    const label = document.createElement('span');
+    label.className = 'ip-disclaimer';
+    label.textContent = 'Disclaimer';
+    const info = document.createElement('button');
+    info.type = 'button';
+    info.className = 'ip-info';
+    info.textContent = '?';
+    info.setAttribute('aria-label', 'Show disclaimer');
+    info.setAttribute('aria-expanded', 'false');
+    const tip = document.createElement('div');
+    tip.className = 'ip-credit-text';
+    tip.id = `ip-credit-${Math.random().toString(36).slice(2, 8)}`;
+    tip.setAttribute('role', 'tooltip');
+    tip.textContent = `Icons by ${Icons.artists.join(', ')} at game-icons.net, used under CC BY 3.0. `
+      + 'See the Licenses page for details.';
+    info.setAttribute('aria-describedby', tip.id);
+    const setOpen = (open) => {
+      credit.classList.toggle('open', open);
+      info.setAttribute('aria-expanded', String(open));
+    };
+    info.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(!credit.classList.contains('open'));
+    });
+    info.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && credit.classList.contains('open')) { e.stopPropagation(); setOpen(false); }
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!credit.contains(e.target)) setOpen(false);
+    });
+    credit.append(label, info, tip);
 
     root.append(bg.row, fg.row, tools, grid, credit);
     syncColors();

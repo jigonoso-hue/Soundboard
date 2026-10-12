@@ -3,6 +3,7 @@ import SwiftUI
 /// Pick an icon from the app's set, a background colour and an icon colour.
 struct IconPickerView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var icon: String
     @Binding var color: String
     @Binding var iconColor: String
@@ -13,6 +14,7 @@ struct IconPickerView: View {
 
     @State private var search = ""
     @State private var category = "All"
+    @State private var showCredit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -69,11 +71,46 @@ struct IconPickerView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            // The credit the icons' licence (CC BY 3.0) asks for.
-            Text("Icons by \(Icons.artists.joined(separator: ", ")) at game-icons.net (CC BY 3.0).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // The credit the icons' licence (CC BY 3.0) asks for, behind a
+            // glowing "Disclaimer" and a ? that shows it.
+            HStack(spacing: 6) {
+                Text("Disclaimer")
+                    .font(.caption.weight(.semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(gold)
+                    .shadow(color: Color(red: 0.94, green: 0.75, blue: 0.31).opacity(0.75), radius: 4)
+                Button {
+                    showCredit.toggle()
+                } label: {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.body)
+                        .foregroundStyle(gold)
+                        .shadow(color: Color(red: 0.94, green: 0.75, blue: 0.31).opacity(0.6), radius: 4)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show disclaimer")
+                .popover(isPresented: $showCredit) {
+                    Text(creditText)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 320, alignment: .leading)
+                        .padding()
+                        .presentationCompactAdaptation(.popover)
+                }
+            }
         }
+    }
+
+    private var creditText: String {
+        "Icons by \(Icons.artists.joined(separator: ", ")) at game-icons.net, used under CC BY 3.0. "
+            + "See the Licenses page for details."
+    }
+
+    // Pale gold vanishes on light backgrounds; use a deeper gold there.
+    private var gold: Color {
+        colorScheme == .dark ? Color(red: 0.94, green: 0.81, blue: 0.46) : Color(red: 0.54, green: 0.38, blue: 0.06)
     }
 
     private var matches: [IconDefinition] {

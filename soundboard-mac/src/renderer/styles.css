@@ -1942,7 +1942,39 @@ body.handout-open .game-screen { visibility: hidden; }
 .premium-terms { margin: 8px 0 0; line-height: 1.45; }
 .premium-legal { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 0; }
 .premium-link { min-height: 44px; padding: 0 10px; text-decoration: underline; color: var(--muted); }
-.ip-credit { margin: 10px 2px 0; line-height: 1.4; }
+.ip-credit { position: relative; display: flex; align-items: center; gap: 6px; margin: 10px 2px 0; }
+.ip-disclaimer {
+  color: #f0cf75; font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  text-shadow: 0 0 6px rgba(240, 190, 80, 0.75), 0 0 14px rgba(240, 190, 80, 0.4);
+  animation: ip-glow 2.6s ease-in-out infinite alternate;
+}
+@keyframes ip-glow { from { opacity: 0.8; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ip-disclaimer { animation: none; } }
+.ip-info {
+  position: relative; width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700; line-height: 1;
+  color: #f0cf75; background: rgba(240, 190, 80, 0.12); border: 1px solid rgba(240, 190, 80, 0.6);
+  box-shadow: 0 0 8px rgba(240, 190, 80, 0.35); cursor: help;
+}
+/* A 44pt tap area around the small dot. */
+.ip-info::after { content: ''; position: absolute; inset: -11px; }
+.ip-credit-text {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 20;
+  padding: 10px 12px; border-radius: 10px; font-size: 12px; line-height: 1.45;
+  color: var(--text); background: var(--panel, #222); border: 1px solid rgba(240, 190, 80, 0.55);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35), 0 0 12px rgba(240, 190, 80, 0.2);
+  visibility: hidden; opacity: 0; transition: opacity 0.15s;
+}
+.ip-credit.open .ip-credit-text { visibility: visible; opacity: 1; }
+/* Pale gold vanishes on light panels; use a deeper gold there. */
+:root[data-scheme="light"] .ip-disclaimer, :root[data-theme="tavern"] .ip-disclaimer,
+:root[data-scheme="light"] .ip-info, :root[data-theme="tavern"] .ip-info {
+  color: #8a6210; text-shadow: 0 0 6px rgba(214, 160, 40, 0.55);
+}
+@media (hover: hover) {
+  .ip-credit:has(.ip-info:hover) .ip-credit-text,
+  .ip-credit:has(.ip-info:focus-visible) .ip-credit-text { visibility: visible; opacity: 1; }
+}
 
 /* The Add menu (files, Record, YouTube) under the + button. */
 #add-menu { min-width: 220px; }

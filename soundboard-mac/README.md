@@ -60,7 +60,7 @@ The app plays the selected range once and records the video's audio while it pla
 
 ### Icons
 
-Bash covers and Scene Kits use 343 picture icons for tabletop games from [game-icons.net](https://game-icons.net), by Lorc, Delapouite and other artists (Creative Commons BY 3.0; credited under the icon picker and on the Licenses page). They come in these groups:
+Bash covers and Scene Kits use 399 picture icons for tabletop games from [game-icons.net](https://game-icons.net), by Lorc, Delapouite and other artists (Creative Commons BY 3.0; credited under the icon picker and on the Licenses page). They come in these groups:
 - **Combat:** swords, axes, bows, shields, armour, cannons and bombs.
 - **Magic:** wands, potions, spellbooks, runes, portals, spells.
 - **Creatures:** dragons, wolves, owls, hydras, krakens, orcs, goblins, skeletons, vampires.
@@ -69,6 +69,7 @@ Bash covers and Scene Kits use 343 picture icons for tabletop games from [game-i
 - **Nature and weather:** storms, wind, waves, campfires, volcanoes, night skies.
 - **Treasure:** chests, coins, gems, rings, food and drink, d20 and d6 dice.
 - **Music:** lutes, drums, harps, horns, bagpipes.
+- **Sci-fi:** UFOs, rockets, starfighters, astronauts, aliens, planets, galaxies, satellites, ray guns and lasers, robots and mechs.
 
 The interface uses the app's own line icons.
 

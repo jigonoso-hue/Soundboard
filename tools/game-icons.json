@@ -2399,5 +2399,397 @@
 "category": "Music",
 "gi": "bugle-call",
 "author": "lorc"
+},
+{
+"id": "ufo",
+"name": "UFO",
+"category": "Sci-fi",
+"gi": "ufo",
+"author": "delapouite"
+},
+{
+"id": "rocket",
+"name": "Rocket",
+"category": "Sci-fi",
+"gi": "rocket",
+"author": "lorc"
+},
+{
+"id": "rocket-flight",
+"name": "Rocket flight",
+"category": "Sci-fi",
+"gi": "rocket-flight",
+"author": "lorc"
+},
+{
+"id": "space-shuttle",
+"name": "Space shuttle",
+"category": "Sci-fi",
+"gi": "space-shuttle",
+"author": "delapouite"
+},
+{
+"id": "spaceship",
+"name": "Spaceship",
+"category": "Sci-fi",
+"gi": "spaceship",
+"author": "delapouite"
+},
+{
+"id": "starfighter",
+"name": "Starfighter",
+"category": "Sci-fi",
+"gi": "starfighter",
+"author": "delapouite"
+},
+{
+"id": "lunar-module",
+"name": "Lunar lander",
+"category": "Sci-fi",
+"gi": "lunar-module",
+"author": "delapouite"
+},
+{
+"id": "space-suit",
+"name": "Space suit",
+"category": "Sci-fi",
+"gi": "space-suit",
+"author": "lorc"
+},
+{
+"id": "astronaut-helmet",
+"name": "Astronaut",
+"category": "Sci-fi",
+"gi": "astronaut-helmet",
+"author": "delapouite"
+},
+{
+"id": "alien-stare",
+"name": "Alien",
+"category": "Sci-fi",
+"gi": "alien-stare",
+"author": "lorc"
+},
+{
+"id": "alien-skull",
+"name": "Alien skull",
+"category": "Sci-fi",
+"gi": "alien-skull",
+"author": "lorc"
+},
+{
+"id": "alien-bug",
+"name": "Alien bug",
+"category": "Sci-fi",
+"gi": "alien-bug",
+"author": "delapouite"
+},
+{
+"id": "alien-egg",
+"name": "Alien egg",
+"category": "Sci-fi",
+"gi": "alien-egg",
+"author": "delapouite"
+},
+{
+"id": "ringed-planet",
+"name": "Ringed planet",
+"category": "Sci-fi",
+"gi": "ringed-planet",
+"author": "lorc"
+},
+{
+"id": "planet-core",
+"name": "Planet core",
+"category": "Sci-fi",
+"gi": "planet-core",
+"author": "delapouite"
+},
+{
+"id": "exploding-planet",
+"name": "Exploding planet",
+"category": "Sci-fi",
+"gi": "exploding-planet",
+"author": "delapouite"
+},
+{
+"id": "earth-america",
+"name": "Earth",
+"category": "Sci-fi",
+"gi": "earth-america",
+"author": "delapouite"
+},
+{
+"id": "moon-orbit",
+"name": "Moon orbit",
+"category": "Sci-fi",
+"gi": "moon-orbit",
+"author": "delapouite"
+},
+{
+"id": "orbit",
+"name": "Orbit",
+"category": "Sci-fi",
+"gi": "orbit",
+"author": "skoll"
+},
+{
+"id": "solar-system",
+"name": "Solar system",
+"category": "Sci-fi",
+"gi": "solar-system",
+"author": "delapouite"
+},
+{
+"id": "galaxy",
+"name": "Galaxy",
+"category": "Sci-fi",
+"gi": "galaxy",
+"author": "delapouite"
+},
+{
+"id": "black-hole-bolas",
+"name": "Black hole",
+"category": "Sci-fi",
+"gi": "black-hole-bolas",
+"author": "lorc"
+},
+{
+"id": "star-formation",
+"name": "Star formation",
+"category": "Sci-fi",
+"gi": "star-formation",
+"author": "delapouite"
+},
+{
+"id": "star-prominences",
+"name": "Solar flare",
+"category": "Sci-fi",
+"gi": "star-prominences",
+"author": "lorc"
+},
+{
+"id": "satellite",
+"name": "Satellite",
+"category": "Sci-fi",
+"gi": "satellite",
+"author": "lorc"
+},
+{
+"id": "satellite-communication",
+"name": "Satellite dish",
+"category": "Sci-fi",
+"gi": "satellite-communication",
+"author": "delapouite"
+},
+{
+"id": "defense-satellite",
+"name": "Defense satellite",
+"category": "Sci-fi",
+"gi": "defense-satellite",
+"author": "delapouite"
+},
+{
+"id": "radar-dish",
+"name": "Radar dish",
+"category": "Sci-fi",
+"gi": "radar-dish",
+"author": "lorc"
+},
+{
+"id": "radar-sweep",
+"name": "Radar sweep",
+"category": "Sci-fi",
+"gi": "radar-sweep",
+"author": "lorc"
+},
+{
+"id": "ray-gun",
+"name": "Ray gun",
+"category": "Sci-fi",
+"gi": "ray-gun",
+"author": "lorc"
+},
+{
+"id": "blaster",
+"name": "Blaster",
+"category": "Sci-fi",
+"gi": "blaster",
+"author": "sbed"
+},
+{
+"id": "laser-blast",
+"name": "Laser blast",
+"category": "Sci-fi",
+"gi": "laser-blast",
+"author": "lorc"
+},
+{
+"id": "laser-gun",
+"name": "Laser gun",
+"category": "Sci-fi",
+"gi": "laser-gun",
+"author": "sbed"
+},
+{
+"id": "laser-burst",
+"name": "Laser burst",
+"category": "Sci-fi",
+"gi": "laser-burst",
+"author": "skoll"
+},
+{
+"id": "laser-turret",
+"name": "Laser turret",
+"category": "Sci-fi",
+"gi": "laser-turret",
+"author": "delapouite"
+},
+{
+"id": "energy-sword",
+"name": "Energy sword",
+"category": "Sci-fi",
+"gi": "energy-sword",
+"author": "lorc"
+},
+{
+"id": "plasma-bolt",
+"name": "Plasma bolt",
+"category": "Sci-fi",
+"gi": "plasma-bolt",
+"author": "lorc"
+},
+{
+"id": "incoming-rocket",
+"name": "Incoming rocket",
+"category": "Sci-fi",
+"gi": "incoming-rocket",
+"author": "lorc"
+},
+{
+"id": "robot-golem",
+"name": "Robot",
+"category": "Sci-fi",
+"gi": "robot-golem",
+"author": "lorc"
+},
+{
+"id": "android-mask",
+"name": "Android",
+"category": "Sci-fi",
+"gi": "android-mask",
+"author": "lorc"
+},
+{
+"id": "cyborg-face",
+"name": "Cyborg",
+"category": "Sci-fi",
+"gi": "cyborg-face",
+"author": "delapouite"
+},
+{
+"id": "robot-helmet",
+"name": "Robot helmet",
+"category": "Sci-fi",
+"gi": "robot-helmet",
+"author": "delapouite"
+},
+{
+"id": "vintage-robot",
+"name": "Retro robot",
+"category": "Sci-fi",
+"gi": "vintage-robot",
+"author": "lorc"
+},
+{
+"id": "tracked-robot",
+"name": "Tracked robot",
+"category": "Sci-fi",
+"gi": "tracked-robot",
+"author": "delapouite"
+},
+{
+"id": "battle-mech",
+"name": "Battle mech",
+"category": "Sci-fi",
+"gi": "battle-mech",
+"author": "delapouite"
+},
+{
+"id": "mecha-head",
+"name": "Mecha",
+"category": "Sci-fi",
+"gi": "mecha-head",
+"author": "delapouite"
+},
+{
+"id": "circuitry",
+"name": "Circuitry",
+"category": "Sci-fi",
+"gi": "circuitry",
+"author": "lorc"
+},
+{
+"id": "processor",
+"name": "Processor",
+"category": "Sci-fi",
+"gi": "processor",
+"author": "lorc"
+},
+{
+"id": "radioactive",
+"name": "Radioactive",
+"category": "Sci-fi",
+"gi": "radioactive",
+"author": "lorc"
+},
+{
+"id": "biohazard",
+"name": "Biohazard",
+"category": "Sci-fi",
+"gi": "biohazard",
+"author": "lorc"
+},
+{
+"id": "nuclear",
+"name": "Nuclear",
+"category": "Sci-fi",
+"gi": "nuclear",
+"author": "sbed"
+},
+{
+"id": "energy-shield",
+"name": "Energy shield",
+"category": "Sci-fi",
+"gi": "energy-shield",
+"author": "lorc"
+},
+{
+"id": "power-generator",
+"name": "Power generator",
+"category": "Sci-fi",
+"gi": "power-generator",
+"author": "delapouite"
+},
+{
+"id": "star-gate",
+"name": "Star gate",
+"category": "Sci-fi",
+"gi": "star-gate",
+"author": "delapouite"
+},
+{
+"id": "telescope",
+"name": "Telescope",
+"category": "Sci-fi",
+"gi": "telescope",
+"author": "delapouite"
+},
+{
+"id": "observatory",
+"name": "Observatory",
+"category": "Sci-fi",
+"gi": "observatory",
+"author": "delapouite"
 }
 ]
