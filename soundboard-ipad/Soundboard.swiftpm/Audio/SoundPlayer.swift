@@ -73,7 +73,7 @@ final class SoundPlayer: ObservableObject {
         let defaults = UserDefaults.standard
         masterVolume = defaults.object(forKey: "masterVolume") as? Double ?? 1
         restartInsteadOfOverlap = defaults.bool(forKey: "restartInsteadOfOverlap")
-        // Playback that mixes with music or the Online browser and keeps going with the screen locked.
+        // Playback that mixes with music or the YouTube view and keeps going with the screen locked.
         BackgroundAudio.shared.configure()
     }
 
