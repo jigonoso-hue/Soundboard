@@ -74,9 +74,7 @@
           <option value="longest">Longest first</option>
         </select>
         <span class="spacer"></span>
-        <button id="add-btn" class="primary" title="Add audio files"><i data-icon="plus"></i> Add Sounds</button>
-        <button id="record-btn" title="Record a sound with the microphone"><span class="rec-dot"></span> Record</button>
-        <button id="toggle-yt" title="Show/hide the YouTube browser"><i data-icon="video"></i> YouTube</button>
+        <button id="add-menu-btn" class="primary" aria-haspopup="menu" aria-expanded="false" aria-controls="add-menu" title="Add sounds: files, record or YouTube"><i data-icon="plus"></i> Add</button>
         <button id="whisper-btn" class="hidden" title="Whisper: the next sound goes only to the listeners you tick"><i data-icon="speech"></i> <span id="whisper-label">Whisper</span></button>
         <button id="emphasis-btn" class="hidden" title="Emphasis: the next sound vibrates listeners' phones"><i data-icon="bolt"></i> Emphasis</button>
         <button id="handout-btn" class="hidden" title="Handout: show a picture on every listener's screen (a map, a wanted poster, a monster)"><i data-icon="map"></i> Handout</button>
@@ -85,6 +83,13 @@
         <button id="live-btn" title="Live Session: play to your listeners' devices"><i data-icon="speaker"></i> <span id="live-label">Live</span></button>
         <button id="stop-all" class="danger" title="Stop every sound effect and bash (Esc)"><i data-icon="stop"></i> Stop All</button>
       </header>
+
+      <!-- The Add menu: every way of adding sounds, under the + button. -->
+      <div id="add-menu" class="popup-menu hidden" role="menu" aria-label="Add sounds">
+        <button id="add-btn" role="menuitem" title="Add audio or video files"><i data-icon="folder"></i> Audio or video files…</button>
+        <button id="record-btn" role="menuitem" title="Record a sound with the microphone"><span class="rec-dot"></span> Record…</button>
+        <button id="toggle-yt" role="menuitem" title="Show/hide the YouTube browser"><i data-icon="video"></i> YouTube</button>
+      </div>
 
       <div id="whisper-bar" class="whisper-bar hidden" role="status"></div>
       <div id="active-filters" class="active-filters hidden"></div>

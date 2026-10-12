@@ -628,6 +628,44 @@ async function afterAdding(added) {
 
 // ---------- Adding sounds ----------
 
+// ---- The Add menu: files, Record and YouTube under the + button ----
+const addMenu = $('#add-menu');
+const addMenuBtn = $('#add-menu-btn');
+const addMenuItems = () => [...addMenu.querySelectorAll('button')].filter((b) => !b.classList.contains('hidden') && getComputedStyle(b).display !== 'none');
+function closeAddMenu() {
+  addMenu.classList.add('hidden');
+  addMenuBtn.setAttribute('aria-expanded', 'false');
+}
+function openAddMenu(fromKeyboard) {
+  addMenu.classList.remove('hidden');
+  addMenuBtn.setAttribute('aria-expanded', 'true');
+  const rect = addMenuBtn.getBoundingClientRect();
+  const width = addMenu.offsetWidth;
+  addMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))}px`;
+  addMenu.style.top = `${rect.bottom + 4}px`;
+  if (fromKeyboard) addMenuItems()[0]?.focus();
+}
+// While broadcasting, files and Record step aside; with nothing left, so does the button.
+window.syncAddMenu = () => addMenuBtn.classList.toggle('hidden', !addMenuItems().length);
+addMenuBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  // detail is 0 for a click made with the keyboard (Enter or Space).
+  if (addMenu.classList.contains('hidden')) openAddMenu(e.detail === 0); else closeAddMenu();
+});
+addMenu.addEventListener('click', closeAddMenu); // after the item's own action
+document.addEventListener('click', (e) => { if (!addMenu.contains(e.target)) closeAddMenu(); });
+addMenu.addEventListener('keydown', (e) => {
+  const items = addMenuItems();
+  const at = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.stopPropagation(); closeAddMenu(); addMenuBtn.focus(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(at + 1) % items.length]?.focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(at - 1 + items.length) % items.length]?.focus(); }
+});
+window.addEventListener('resize', closeAddMenu);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !addMenu.classList.contains('hidden')) { e.stopImmediatePropagation(); closeAddMenu(); }
+}, true);
+
 $('#add-btn').addEventListener('click', async () => {
   const added = await api.importDialog();
   await afterAdding(added);

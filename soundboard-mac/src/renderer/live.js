@@ -1125,6 +1125,7 @@ const Live = (() => {
     // No need to add sounds while broadcasting.
     $('#add-btn').classList.toggle('hidden', status.role === 'host');
     $('#record-btn').classList.toggle('hidden', status.role === 'host');
+    window.syncAddMenu?.();
     if (status.role === 'host' && was !== 'host') { lastScene = undefined; syncHostState(true); }
     if (status.role !== 'host') { whisper.clear(); emphasis = false; $('#whisper-menu').classList.add('hidden'); }
     // Drop whisper targets who left.

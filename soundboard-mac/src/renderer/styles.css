@@ -1115,7 +1115,7 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
 
 /* Themed backdrops: buttons get a solid sheet, so the pictures behind
    (planets, moons, stars) never show through them. */
-.has-backdrop :is(#board, #sidebar, .kit-header, .kit-section-head) button:not(.primary):not(.plain):not(.chip):not(.danger):not(.block-title):not(.layer-name):not(.titlebar *):not(.tile *):not(.track *):not(.bash-card *):not(.layer *):not(.view-btn):not(.kit-btn):not(.bookmark-btn):not(.tag-filter-btn):not(#tags-toggle):not(.player-btn.on) {
+.has-backdrop :is(#board, #sidebar, .kit-header, .kit-section-head) button:not(.primary):not(.plain):not(.chip):not(.danger):not(.block-title):not(.layer-name):not(.titlebar *):not(.tile *):not(.track *):not(.bash-card *):not(.layer *):not(.view-btn):not(.kit-btn):not(.bookmark-btn):not(.tag-filter-btn):not(#tags-toggle):not(.player-btn.on):not(.popup-menu *) {
   background: color-mix(in srgb, var(--panel) 94%, var(--text));
 }
 
@@ -1925,3 +1925,20 @@ body.handout-open .game-screen { visibility: hidden; }
 .premium-legal { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 0; }
 .premium-link { min-height: 44px; padding: 0 10px; text-decoration: underline; color: var(--muted); }
 .ip-credit { margin: 10px 2px 0; line-height: 1.4; }
+
+/* The Add menu (files, Record, YouTube) under the + button. */
+#add-menu { min-width: 220px; }
+#add-menu button { display: flex; align-items: center; gap: 10px; padding: 9px 12px; color: var(--text); }
+#add-menu button.active { background: var(--panel-2); }
+#add-menu .rec-dot { margin: 0 3px; }
+
+/* The dice: dice-table green, so they stand out from the other toolbar buttons
+   (no theme accent is green, and white text keeps 4.5:1). */
+#dice-btn {
+  background: linear-gradient(160deg, #178a4c, #0d6638);
+  color: #fff;
+  border-color: #0b5a31;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 2px rgba(0, 0, 0, 0.3);
+  font-weight: 600;
+}
+#dice-btn:hover:not(:disabled) { background: linear-gradient(160deg, #1b9a55, #0f7340); border-color: #0b5a31; color: #fff; }

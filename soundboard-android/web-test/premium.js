@@ -30,7 +30,7 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); 
   const closePaywall = async () => { if (await paywall()) await page.click('#premium-dialog button:has-text("Not now")'); };
   const addFiles = async (files) => {
     native.pick(files);
-    await page.click('#add-btn');
+    await page.click('#add-menu-btn'); await page.click('#add-btn');
     await page.waitForTimeout(700);
     if (await page.isVisible('dialog[open] button:has-text("Skip")')) await page.click('dialog[open] button:has-text("Skip")');
   };

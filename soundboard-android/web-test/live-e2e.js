@@ -99,7 +99,7 @@ async function until(fn, label, timeout = 15000) {
 
     // The broadcaster adds a sound from the "system picker".
     await fetch(`${gm.url}/test/pick`, { method: 'POST', body: JSON.stringify([{ path: path.join(ambienceDir, 'campfire.wav'), name: 'Dragon Roar.wav' }]) });
-    await gmPage.click('#add-btn');
+    await gmPage.click('#add-menu-btn'); await gmPage.click('#add-btn');
     await until(() => gmPage.isVisible('dialog[open] button:has-text("Skip")'), 'the tags step');
     await gmPage.click('dialog[open] button:has-text("Skip")');
     await until(() => gmPage.isVisible('.tile:has-text("Dragon Roar")'), 'the added tile');

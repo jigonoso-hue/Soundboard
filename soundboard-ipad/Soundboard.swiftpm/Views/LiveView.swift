@@ -473,6 +473,8 @@ struct LiveControls: View {
                 } label: {
                     Label("Dice", systemImage: "dice")
                 }
+                // Dice-table green, so it stands out from the other buttons (the Mac's #dice-btn).
+                .tint(Color(hex: 0x178A4C))
                 .accessibilityLabel("Roll dice")
             }
             Button {
@@ -532,7 +534,7 @@ struct BroadcastBar: View {
                     HandoutSendView().environmentObject(live)
                 }
                 .accessibilityLabel("Handout: show a picture on every listener's screen")
-            tool("Dice", "dice", on: false, color: .accentColor) { live.dice.open() }
+            tool("Dice", "dice", on: false, color: Color(hex: 0x178A4C)) { live.dice.open() }
                 .accessibilityLabel("Roll dice")
         }
         .padding(.horizontal, 8)

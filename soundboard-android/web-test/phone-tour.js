@@ -89,7 +89,7 @@ async function audit(page, label, scope = null) {
       { path: path.join(assets, 'ambience/campfire.wav'), name: 'Dragon Roar.wav' },
       { path: path.join(assets, 'ambience/thunderstorm.wav'), name: 'Tavern Song.wav' },
     ]);
-    await page.click('#add-btn');
+    await page.click('#add-menu-btn'); await page.click('#add-btn');
     await page.waitForTimeout(1000);
     await page.keyboard.press('Escape');
     await page.evaluate(async () => {
@@ -125,7 +125,7 @@ async function audit(page, label, scope = null) {
       await shot('07-edit-sound', '#edit-dialog');
       await page.keyboard.press('Escape');
     });
-    await step('record', async () => { await page.click('#record-btn'); await page.waitForTimeout(400); await shot('08-record', '#record-dialog'); await page.keyboard.press('Escape'); });
+    await step('record', async () => { await page.click('#add-menu-btn'); await page.waitForTimeout(250); await shot('08a-add-menu', '#add-menu'); await page.click('#record-btn'); await page.waitForTimeout(400); await shot('08-record', '#record-dialog'); await page.keyboard.press('Escape'); });
     await step('options', async () => { await page.click('#android-menu'); await page.click('#options-btn'); await page.waitForTimeout(400); await shot('09-options', '#options-dialog'); await page.keyboard.press('Escape'); });
     await step('live', async () => {
       await page.click('#live-btn');

@@ -2,7 +2,7 @@
 
 A desktop soundboard for your Mac. You can:
 
-- **Add your own sounds.** Click **+ Add Sounds** or drag audio files (mp3, wav, m4a, aac, ogg, opus, flac, aiff, caf, webm) onto the board. You're asked to tag them as they're added.
+- **Add your own sounds.** Click **+ Add → Audio or video files…** or drag audio files (mp3, wav, m4a, aac, ogg, opus, flac, aiff, caf, webm) onto the board. You're asked to tag them as they're added.
 - **Clips and Full Sounds.** Short effects are *Clips*, shown as tiles. Songs and long tracks are *Full Sounds*, shown as rows with a play button, a timer and a progress bar.
 - **Tags and filters.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic, creature, weather, nature, tavern, music, victory, sad, mystery) plus your own. A sound can have several. Filter from the sidebar by one or more tags, search names and tags, and sort.
 - **Scene Kits.** Collect clips, full songs and Bashes from your whole library into a kit for a scene, such as "Tavern Brawl" or "Dragon's Lair", and open it from the sidebar.
@@ -36,11 +36,11 @@ The app icon comes from `build/icon.png` (1024×1024).
 
 ## Recording a sound
 
-Click **Record** in the toolbar, then the red button, and record with your microphone (up to 10 minutes). Click it again to stop. **Listen** plays it back; name it and click **Save** to add it to your library. macOS asks for microphone access the first time.
+Click **+ Add → Record…**, then the red button, and record with your microphone (up to 10 minutes). Click it again to stop. **Listen** plays it back; name it and click **Save** to add it to your library. macOS asks for microphone access the first time.
 
 ## Making a sound from YouTube
 
-1. Click **▶ YouTube** to open the browser panel.
+1. Click **+ Add → YouTube** to open the browser panel.
 2. Search, or paste a video link, and open a video.
 3. Play the video. Click **Set Start** and **Set End** at the moments you want, or type times such as `1:23.5`.
 4. Click **Preview** to hear your selection. Then give the sound a name (optional) and click **✂ Create Sound**.
@@ -54,7 +54,7 @@ The app plays the selected range once and records the video's audio while it pla
   - **Library** views: **All**, **Clips**, **Full Sounds**, **Bashes**.
   - **Tags**, a dropdown: click **Tags** to show or hide the tag filters. When it's collapsed with filters on, it shows how many are active (for example "Tags · 2 active").
   - **Master volume**, **Output** device and **Restart instead of overlap**.
-- **Top bar:** search, sort, **+ Add Sounds**, **▶ YouTube** and **■ Stop All**.
+- **Top bar:** search, sort, **+ Add** (a menu: **Audio or video files…**, **Record…** and **YouTube**), **Dice** (in green, so it's easy to find), **Live** and **■ Stop All**.
 - **Main area:** Bashes, then Clips (tiles), then Full Sounds (rows).
 - **Ambience:** a mixer docked at the bottom. Click its title to collapse it.
 
@@ -199,7 +199,7 @@ Everything you play is sent to listeners: sounds, full sounds, bashes, ambience 
 - **Listeners' sounds:** choose who else may play sounds for everyone, when you start broadcasting or any time after in the Live window. **Off**: only you. **Their own sounds**: each listener picks up to 5 sounds from their own library. **My soundboard**: each listener picks up to 5 of your sounds (broadcaster-only sounds are never offered). When a listener plays one, it plays for everyone, you included, and you see who played it. You can still use all your sounds.
 - **Remove:** in the Live window, **Remove** next to a listener takes them out of the session.
 - **Handout:** click **Handout** in the toolbar, choose a picture (a map, a wanted poster, a monster) and give it a title if you like, then **Send to everyone**. It fills every listener's screen, fitted to it, until they close it. The dialog lists what you've sent this session: click one to show it again. **Send to** picks who sees it: **Everyone**, or click listeners to make it a **secret handout** that only they get (marked 🔒 on their screen; no one else is told, and it shows again only to them).
-- **Add Sounds** and **Record** hide while you broadcast.
+- In the **+ Add** menu, **Audio or video files…** and **Record…** hide while you broadcast.
 
 **Tune In (a listener).** Enter your name (you can't tune in without one; it's shown on your sounds, rolls and everywhere else), then pick a session on this Wi-Fi or enter the broadcaster's code. **Your picture** (optional) is shown beside your name to everyone: in the broadcaster's listener list, Whisper and handouts, and in games and dice rolls. **Choose…** picks one (it's cropped square); click your picture at the top of the stage to change it mid-session. The window turns into a full-window stage in your theme's style, until you click **Leave**: rings ripple out while sounds play, whispers glow purple, buzz sounds shake the stage (with a notification and a bouncing Dock icon if Dungeon Radio isn't in front), and what's playing is grouped into sounds, full sounds and, last, ambience. A sound a listener played shows their name. **Volumes** sets your own levels for music, effects and ambience. A **handout** from the broadcaster fills the window (with a notification if Dungeon Radio isn't in front): pinch or scroll to zoom, drag to look around, double-click to zoom in or out, **Save** to keep a copy, **Close** at the bottom to go back. **Handouts** at the top of the stage lists the session's handouts; they're deleted from your Mac when you leave. When the broadcaster allows listeners' sounds, your pads sit at the bottom: **Choose** up to 5, then click one to play it for everyone.
 

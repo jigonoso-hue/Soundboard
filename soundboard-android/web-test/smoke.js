@@ -35,7 +35,7 @@ const check = (ok, msg) => { log.push(`${ok ? 'PASS' : 'FAIL'} ${msg}`); console
 
     // Add sounds through the "system picker".
     native.pick([{ path: path.join(assets, 'ambience/rain.wav'), name: 'Rain Hit.wav' }, { path: path.join(assets, 'ambience/campfire.wav'), name: 'Campfire Crackle.wav' }]);
-    await page.click('#add-btn');
+    await page.click('#add-menu-btn'); await page.click('#add-btn');
     await page.waitForSelector('.tile, .track', { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(800);
     const names = await page.$$eval('.tile-name, .track-name', (n) => n.map((x) => x.textContent));
