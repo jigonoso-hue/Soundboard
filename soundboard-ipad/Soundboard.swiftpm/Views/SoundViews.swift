@@ -42,7 +42,7 @@ struct SoundTile: View {
         let scrap = theme == .tavern
         let shape = book
             ? AnyShape(UnevenRoundedRectangle(topLeadingRadius: 3, bottomLeadingRadius: 3, bottomTrailingRadius: 8, topTrailingRadius: 8))
-            : (scrap ? AnyShape(Rectangle()) : AnyShape(RoundedRectangle(cornerRadius: 14)))
+            : (scrap ? AnyShape(Rectangle()) : AnyShape(RoundedRectangle(cornerRadius: theme == .spaceAge ? 10 : 14)))
         Button {
             playSound(sound, store: store, player: player, ui: ui, gain: gain)
         } label: {
@@ -149,8 +149,12 @@ struct SoundTile: View {
                 .blur(radius: isPlaying ? 6 : 4)
                 .opacity(isPlaying ? 0.9 : 0.6)
         }
-        RoundedRectangle(cornerRadius: 14)
-            .strokeBorder(color.opacity(scifi ? 0.95 : 0.7), lineWidth: scifi ? 1.5 : 1)
+        if theme == .spaceAge {
+            MetalTrim()
+        } else {
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(color.opacity(scifi ? 0.95 : 0.7), lineWidth: scifi ? 1.5 : 1)
+        }
     }
 }
 
@@ -275,8 +279,11 @@ struct TrackRow: View {
         }
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop && theme != .academia ? 1 : 0)
+                .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop && theme != .academia && theme != .spaceAge ? 1 : 0)
         )
+        .overlay {
+            if theme == .spaceAge { MetalTrim(cornerRadius: 12) }
+        }
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2).fill(current ? Color.accentColor : color).frame(width: current ? 4 : 3).padding(.vertical, current ? 0 : 8)
         }

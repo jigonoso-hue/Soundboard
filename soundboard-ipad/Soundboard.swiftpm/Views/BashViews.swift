@@ -82,8 +82,11 @@ struct BashCard: View {
             }
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(playing ? theme.bashColor : theme.cardStroke, lineWidth: theme == .academia && !playing ? 0 : 1)
+                    .strokeBorder(playing ? theme.bashColor : theme.cardStroke, lineWidth: (theme == .academia || theme == .spaceAge) && !playing ? 0 : 1)
             )
+            .overlay {
+                if theme == .spaceAge { MetalTrim(cornerRadius: 14) }
+            }
             .overlay(alignment: .bottomLeading) {
                 if playing {
                     GeometryReader { geo in

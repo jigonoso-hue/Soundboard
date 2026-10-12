@@ -1189,6 +1189,28 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
   box-shadow: 0 1px 0 rgba(246, 220, 143, 0.35), 0 3px 6px rgba(0, 0, 0, 0.5);
 }
 
+/* Space Age: gunmetal-trimmed cards with a rivet in each corner. */
+:root[data-theme="spaceAge"] :is(.tile, .track, .bash-card) {
+  --rivet: #f0f3f7 0 1.2px, #3a4250 1.8px, transparent 2.4px;
+  --plate: color-mix(in srgb, var(--tile-color, var(--accent)) 22%, #0c142c);
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 6px 6px, var(--rivet)) padding-box,
+    radial-gradient(circle at calc(100% - 6px) 6px, var(--rivet)) padding-box,
+    radial-gradient(circle at 6px calc(100% - 6px), var(--rivet)) padding-box,
+    radial-gradient(circle at calc(100% - 6px) calc(100% - 6px), var(--rivet)) padding-box,
+    linear-gradient(var(--plate), color-mix(in srgb, var(--plate) 70%, #0a1026)) padding-box,
+    linear-gradient(180deg, #b9c2ce 0%, #5b6676 30%, #8f9aa9 50%, #3d4654 75%, #7e899a 100%) border-box;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="spaceAge"] :is(.tile, .track, .bash-card).playing {
+  --plate: color-mix(in srgb, var(--tile-color, var(--accent)) 40%, #0c142c);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--tile-color, var(--accent)) 70%, transparent), 0 3px 8px rgba(0, 0, 0, 0.55);
+}
+:root[data-theme="spaceAge"] .bash-card { --tile-color: var(--bash, var(--accent)); }
+:root[data-theme="spaceAge"] .bash-card:not(.playing) { --plate: #0e1834; }
+
 /* Sci-Fi: see-through glass tiles with a glowing edge; synth waves while playing. */
 :root[data-theme="scifi"] .tile {
   background: color-mix(in srgb, var(--tile-color) 12%, rgba(8, 30, 54, 0.35));

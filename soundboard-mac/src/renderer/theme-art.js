@@ -47,6 +47,12 @@ const ThemeArt = (() => {
     return p;
   }
 
+  function radial(ctx, x0, y0, r0, x1, y1, r1, stops) {
+    const g = ctx.createRadialGradient(x0, y0, r0, x1, y1, r1);
+    stops.forEach(([at, color]) => g.addColorStop(at, color));
+    return g;
+  }
+
   function linear(ctx, x0, y0, x1, y1, stops) {
     const g = ctx.createLinearGradient(x0, y0, x1, y1);
     stops.forEach(([at, color]) => g.addColorStop(at, color));
@@ -59,6 +65,7 @@ const ThemeArt = (() => {
     if (opts.alpha != null) ctx.globalAlpha *= opts.alpha;
     if (opts.blur) ctx.filter = `blur(${opts.blur}px)`;
     if (opts.clip) ctx.clip(opts.clip);
+    if (opts.op) ctx.globalCompositeOperation = opts.op;
     draw();
     ctx.restore();
   }
@@ -379,41 +386,279 @@ const ThemeArt = (() => {
     }
   }
 
-  function planet(ctx, x, y, r, tilt) {
-    const ring = (front) => {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(tilt);
-      ctx.beginPath();
-      ctx.rect(-r * 3, front ? 0 : -r * 3, r * 6, r * 3);
-      ctx.clip();
-      const band = ellipse(0, 0, r * 1.9, r * 0.45);
-      ctx.strokeStyle = ATOMIC.cream; ctx.lineWidth = Math.max(2, r * 0.07); ctx.stroke(band);
-      ctx.strokeStyle = ATOMIC.teal; ctx.lineWidth = Math.max(1, r * 0.025); ctx.stroke(band);
+  function nebula(ctx, w, h, random, palette) {
+    const s = Math.max(w, h) / 1100;
+    // Big soft clouds, then brighter cores, then dark dust lanes.
+    layer(ctx, { blur: Math.min(90, Math.max(w, h) * 0.09) }, () => {
+      for (const [c, a, n] of palette) {
+        for (let i = 0; i < n; i++) {
+          ctx.globalAlpha = a; ctx.fillStyle = c;
+          ctx.fill(ellipse(random.range(-0.1, 1.1) * w, random.range(-0.1, 1.1) * h, random.range(160, 340) * s, random.range(90, 200) * s, random.range(0, 3)));
+        }
+      }
+    });
+    layer(ctx, { blur: Math.min(40, Math.max(w, h) * 0.04), op: 'screen' }, () => {
+      for (const [c] of palette) {
+        ctx.globalAlpha = 0.18; ctx.fillStyle = c;
+        ctx.fill(ellipse(random.range(0.1, 0.9) * w, random.range(0.2, 0.9) * h, random.range(60, 140) * s, random.range(30, 70) * s, random.range(0, 3)));
+      }
+    });
+    layer(ctx, { blur: Math.min(30, Math.max(w, h) * 0.03) }, () => {
+      for (let i = 0; i < 5; i++) {
+        ctx.globalAlpha = 0.35; ctx.fillStyle = '#03040c';
+        ctx.fill(ellipse(random.range(0, w), random.range(0, h), random.range(120, 260) * s, random.range(10, 30) * s, random.range(-0.6, 0.6)));
+      }
+    });
+  }
+
+  const STAR_TINTS = ['#ffffff', '#ffffff', '#cfe4ff', '#fff2d6', '#ffd9c2', '#d9f7ff'];
+  function starfield(ctx, w, h, random, density = 1) {
+    // Dust of faint stars.
+    for (let i = 0; i < w * h / 700 * density; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${random.range(0.08, 0.45)})`;
+      ctx.fillRect(random.range(0, w), random.range(0, h), random.range(0.5, 1.1), random.range(0.5, 1.1));
+    }
+    // Mid stars, tinted by temperature.
+    for (let i = 0; i < w * h / 4000 * density; i++) {
+      const r = random.range(0.6, 1.5);
+      ctx.globalAlpha = random.range(0.5, 1);
+      ctx.fillStyle = STAR_TINTS[Math.floor(random.next() * STAR_TINTS.length)];
+      ctx.fill(circle(random.range(0, w), random.range(0, h), r));
+    }
+    ctx.globalAlpha = 1;
+    // A few bright stars with a glow and diffraction spikes.
+    for (let i = 0; i < Math.max(4, w * h / 90000) * density; i++) {
+      const x = random.range(0, w); const y = random.range(0, h);
+      const c = STAR_TINTS[Math.floor(random.next() * STAR_TINTS.length)];
+      const r = random.range(1.4, 2.4); const spike = random.range(8, 18);
+      ctx.fillStyle = radial(ctx, x, y, 0, x, y, r * 6, [[0, c], [0.25, 'rgba(255,255,255,0.35)'], [1, 'rgba(255,255,255,0)']]);
+      ctx.fill(circle(x, y, r * 6));
+      ctx.strokeStyle = c; ctx.lineWidth = 0.7;
+      for (const [dx, dy, l] of [[1, 0, spike], [0, 1, spike], [0.7, 0.7, spike * 0.35], [0.7, -0.7, spike * 0.35]]) {
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.moveTo(x - dx * l, y - dy * l); ctx.lineTo(x + dx * l, y + dy * l); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff'; ctx.fill(circle(x, y, r * 0.8));
+    }
+  }
+
+  function spiralGalaxy(ctx, x, y, size, tilt) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); ctx.scale(1, 0.42);
+    const random = rng(77);
+    layer(ctx, { blur: size * 0.12 }, () => { ctx.fillStyle = 'rgba(255,230,200,0.5)'; ctx.fill(circle(0, 0, size * 0.25)); });
+    for (let arm = 0; arm < 2; arm++) {
+      for (let i = 0; i < 160; i++) {
+        const t = i / 160; const a = arm * Math.PI + t * 4.2; const d = t * size;
+        ctx.fillStyle = `rgba(${200 + random.range(0, 55) | 0},${210 + random.range(0, 45) | 0},255,${(1 - t) * 0.6})`;
+        ctx.fill(circle(Math.cos(a) * d + random.range(-3, 3), Math.sin(a) * d + random.range(-3, 3), random.range(0.4, 1.3)));
+      }
+    }
+    ctx.fillStyle = '#fff6e8'; ctx.fill(circle(0, 0, size * 0.06));
+    ctx.restore();
+  }
+
+    /** A banded gas giant with a storm, terminator, atmosphere and rings with a gap,
+      their shadow on the planet and the planet's shadow on them. */
+  function gasGiant(ctx, x, y, r, tilt, bands, ringColors) {
+    const ringBand = (front) => {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(tilt);
+      ctx.beginPath(); ctx.rect(-r * 4, front ? 0 : -r * 4, r * 8, r * 4); ctx.clip();
+      const rings = [[1.35, 1.5, ringColors[0], 0.55], [1.52, 1.78, ringColors[1], 0.85], [1.83, 1.88, ringColors[2], 0.3], [1.9, 2.2, ringColors[2], 0.7], [2.24, 2.32, ringColors[0], 0.35]];
+      for (const [a, b, c, al] of rings) {
+        for (let k = a; k < b; k += 0.012) {
+          ctx.globalAlpha = al * (0.75 + 0.25 * Math.sin(k * 90));
+          ctx.strokeStyle = c; ctx.lineWidth = Math.max(0.6, r * 0.012);
+          ctx.stroke(ellipse(0, 0, r * k, r * k * 0.24));
+        }
+      }
+      ctx.globalAlpha = 1;
+      if (!front) {
+        // The planet's shadow falling on the rings behind it.
+        ctx.clip(ellipse(0, 0, r * 2.34, r * 2.34 * 0.24));
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath(); ctx.moveTo(r * 0.2, -r * 0.1); ctx.lineTo(r * 2.4, -r * 0.55); ctx.lineTo(r * 2.4, -r * 0.05); ctx.lineTo(r * 0.6, r * 0.2); ctx.fill();
+      }
       ctx.restore();
     };
-    ring(false);
+    ringBand(false);
     const body = circle(x, y, r);
-    ctx.fillStyle = linear(ctx, x - r, y - r, x + r, y + r, [[0, '#FFB35C'], [1, '#E0532E']]);
-    ctx.fill(body);
-    layer(ctx, { clip: body }, () => { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill(circle(x + r * 0.35, y + r * 0.35, r)); });
-    ring(true);
-  }
-
-  function saucer(ctx, x, y, s) {
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x - s * 0.5, y - s * 0.7, s, s * 0.45); ctx.clip();
-    ctx.fillStyle = 'rgba(246,239,221,0.9)';
-    ctx.fill(ellipse(x, y - s * 0.25, s * 0.45, s * 0.4));
+    ctx.save(); ctx.clip(body);
+    ctx.fillStyle = bands[0]; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt);
+    const random = rng(311);
+    for (let i = 0; i < 26; i++) {
+      const by = random.range(-r, r); const bh = random.range(r * 0.03, r * 0.16);
+      ctx.globalAlpha = random.range(0.25, 0.8);
+      ctx.fillStyle = bands[1 + Math.floor(random.next() * (bands.length - 1))];
+      const p = new Path2D(); const amp = random.range(0, r * 0.03); const ph = random.range(0, 6);
+      p.moveTo(-r, by);
+      for (let bx = -r; bx <= r; bx += r / 20) p.lineTo(bx, by + Math.sin(bx / r * 6 + ph) * amp);
+      for (let bx = r; bx >= -r; bx -= r / 20) p.lineTo(bx, by + bh + Math.sin(bx / r * 5 + ph) * amp);
+      ctx.fill(p);
+    }
+    ctx.globalAlpha = 1;
+    // The storm.
+    ctx.fillStyle = bands[bands.length - 1]; ctx.fill(ellipse(r * 0.28, r * 0.32, r * 0.17, r * 0.09));
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = r * 0.012; ctx.stroke(ellipse(r * 0.28, r * 0.32, r * 0.2, r * 0.11));
     ctx.restore();
-    const hull = ellipse(x, y, s, s * 0.28);
-    ctx.fillStyle = ATOMIC.teal; ctx.fill(hull);
-    ctx.strokeStyle = ATOMIC.cream; ctx.lineWidth = 2; ctx.stroke(hull);
-    ctx.fillStyle = ATOMIC.mustard;
-    for (const d of [-0.6, 0, 0.6]) ctx.fill(circle(x + d * s, y + s * 0.05, 3));
+    // Light and the night side.
+    ctx.fillStyle = radial(ctx, x - r * 0.45, y - r * 0.45, 0, x - r * 0.45, y - r * 0.45, r * 1.2, [[0, 'rgba(255,255,255,0.35)'], [1, 'rgba(255,255,255,0)']]);
+    ctx.fill(body);
+    ctx.fillStyle = radial(ctx, x - r * 0.35, y - r * 0.35, r * 0.6, x - r * 0.1, y - r * 0.1, r * 1.55, [[0, 'rgba(0,0,0,0)'], [0.55, 'rgba(0,0,10,0.55)'], [1, 'rgba(0,0,10,0.92)']]);
+    ctx.fill(body);
+    // The rings' shadow across the planet.
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = r * 0.1; ctx.stroke(ellipse(0, r * 0.12, r * 1.65, r * 0.3));
+    ctx.restore();
+    ctx.restore();
+    layer(ctx, { blur: r * 0.08 }, () => { ctx.strokeStyle = 'rgba(255,220,180,0.35)'; ctx.lineWidth = r * 0.06; ctx.stroke(ellipse(x - r * 0.04, y - r * 0.04, r * 0.98, r * 0.98)); });
+    ringBand(true);
   }
 
-  /** A window onto deep space framed by hull plating. */
+  function moon(ctx, x, y, r, seed, base = '#b9bcc4') {
+    const body = circle(x, y, r);
+    ctx.fillStyle = radial(ctx, x - r * 0.4, y - r * 0.4, 0, x, y, r * 1.1, [[0, '#eef0f4'], [0.5, base], [1, '#5f636d']]);
+    ctx.fill(body);
+    ctx.save(); ctx.clip(body);
+    const random = rng(seed);
+    for (let i = 0; i < 14; i++) {
+      const cx = x + random.range(-r, r) * 0.85; const cy = y + random.range(-r, r) * 0.85; const cr = random.range(r * 0.05, r * 0.2);
+      ctx.fillStyle = 'rgba(60,62,70,0.35)'; ctx.fill(circle(cx + cr * 0.15, cy + cr * 0.15, cr));
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = cr * 0.18; ctx.beginPath(); ctx.arc(cx, cy, cr, Math.PI * 0.9, Math.PI * 1.7); ctx.stroke();
+    }
+    ctx.fillStyle = radial(ctx, x - r * 0.3, y - r * 0.3, r * 0.5, x, y, r * 1.4, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,10,0.85)']]);
+    ctx.fill(body);
+    ctx.restore();
+  }
+
+  /** A chrome flying saucer: mirrored hull, glowing rim lights, a glass dome and a beam. */
+  function saucer(ctx, x, y, s, beam) {
+    if (beam) {
+      ctx.fillStyle = linear(ctx, 0, y, 0, y + s * 2.4, [[0, 'rgba(150,255,235,0.4)'], [1, 'rgba(150,255,235,0)']]);
+      ctx.beginPath(); ctx.moveTo(x - s * 0.35, y + s * 0.2); ctx.lineTo(x + s * 0.35, y + s * 0.2); ctx.lineTo(x + s * 0.9, y + s * 2.4); ctx.lineTo(x - s * 0.9, y + s * 2.4); ctx.fill();
+    }
+    layer(ctx, { blur: s * 0.25 }, () => { ctx.fillStyle = 'rgba(120,255,230,0.45)'; ctx.fill(ellipse(x, y + s * 0.18, s * 0.9, s * 0.18)); });
+    // Dome.
+    const dome = ellipse(x, y - s * 0.2, s * 0.42, s * 0.36);
+    ctx.save(); ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 0.85); ctx.clip();
+    ctx.fillStyle = radial(ctx, x - s * 0.15, y - s * 0.38, s * 0.02, x, y - s * 0.2, s * 0.45, [[0, 'rgba(230,255,255,0.95)'], [0.4, 'rgba(120,220,230,0.6)'], [1, 'rgba(30,80,110,0.85)']]);
+    ctx.fill(dome);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x - s * 0.08, y - s * 0.25, s * 0.26, Math.PI * 1.1, Math.PI * 1.45); ctx.stroke();
+    ctx.restore();
+    // Hull: two chrome discs.
+    const hull = ellipse(x, y, s, s * 0.26);
+    ctx.fillStyle = linear(ctx, x - s, y - s * 0.26, x + s, y + s * 0.26, [[0, '#7d8794'], [0.18, '#f4f7fb'], [0.32, '#9aa5b3'], [0.5, '#e6ebf2'], [0.68, '#6d7785'], [0.85, '#cfd6df'], [1, '#59626e']]);
+    ctx.fill(hull);
+    ctx.fillStyle = linear(ctx, 0, y, 0, y + s * 0.26, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,20,0.45)']]); ctx.fill(hull);
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1; ctx.stroke(ellipse(x, y - s * 0.02, s * 0.98, s * 0.22));
+    // Rim lights.
+    const lights = ['#ff6b5e', '#ffd34d', '#5dffd9', '#ff6b5e', '#ffd34d', '#5dffd9', '#ff6b5e'];
+    lights.forEach((c, i) => {
+      const a = Math.PI * (0.12 + i * 0.127);
+      const lx = x + Math.cos(a) * s * 0.82; const ly = y + Math.sin(a) * s * 0.12 + s * 0.06;
+      layer(ctx, { blur: 3 }, () => { ctx.fillStyle = c; ctx.fill(circle(lx, ly, s * 0.07)); });
+      ctx.fillStyle = '#fff'; ctx.fill(circle(lx, ly, s * 0.025));
+    });
+  }
+
+  /** A 70s gas station on an asteroid: a striped canopy over two pumps, a
+      rounded kiosk with a glowing window, fuel tanks, a FUEL sign on a pylon
+      and an antenna with a beacon. (x, y) is the centre of the asteroid's top. */
+  function gasStation(ctx, x, y, s) {
+    const random = rng(1977);
+    const STRIPES = ['#F5A623', '#F0643C', '#C2410C', '#7C2D12'];
+    // The asteroid.
+    const rock = new Path2D();
+    const n = 22;
+    for (let i = 0; i <= n; i++) {
+      const a = Math.PI + (i / n) * Math.PI; // the bottom half: a rough underside
+      const rx = s * 1.55 * random.range(0.92, 1.05); const ry = s * 0.75 * random.range(0.8, 1.1);
+      const px = x + Math.cos(a) * rx; const py = y - Math.sin(a) * ry;
+      if (i) rock.lineTo(px, py); else rock.moveTo(px, py);
+    }
+    rock.lineTo(x + s * 1.5, y - s * 0.06);
+    for (let i = 0; i <= 8; i++) rock.lineTo(x + s * 1.5 - (i / 8) * s * 3, y - s * 0.06 + random.range(-s * 0.05, s * 0.03));
+    rock.closePath();
+    layer(ctx, { blur: s * 0.25 }, () => { ctx.fillStyle = 'rgba(255,170,90,0.18)'; ctx.fill(ellipse(x, y + s * 0.2, s * 1.9, s * 0.9)); });
+    ctx.fillStyle = linear(ctx, x - s, y - s * 0.2, x + s, y + s * 0.8, [[0, '#a89580'], [0.45, '#6b5a4a'], [1, '#2a2119']]);
+    ctx.fill(rock);
+    ctx.save(); ctx.clip(rock);
+    for (let i = 0; i < 12; i++) {
+      const cx = x + random.range(-s * 1.3, s * 1.3); const cy = y + random.range(s * 0.05, s * 0.6); const cr = random.range(s * 0.04, s * 0.14);
+      ctx.fillStyle = 'rgba(30,22,16,0.45)'; ctx.fill(ellipse(cx + cr * 0.2, cy + cr * 0.15, cr, cr * 0.7));
+      ctx.strokeStyle = 'rgba(220,200,175,0.35)'; ctx.lineWidth = cr * 0.2; ctx.beginPath(); ctx.ellipse(cx, cy, cr, cr * 0.7, 0, Math.PI * 0.95, Math.PI * 1.7); ctx.stroke();
+    }
+    ctx.restore();
+    // The concrete deck.
+    ctx.fillStyle = linear(ctx, 0, y - s * 0.12, 0, y, [[0, '#d9d2c4'], [1, '#8f877a']]);
+    ctx.beginPath(); ctx.roundRect(x - s * 1.35, y - s * 0.12, s * 2.7, s * 0.12, s * 0.03); ctx.fill();
+    ctx.fillStyle = '#F5A623'; ctx.fillRect(x - s * 1.2, y - s * 0.075, s * 0.25, s * 0.02); ctx.fillRect(x - s * 0.1, y - s * 0.075, s * 0.25, s * 0.02);
+    const deck = y - s * 0.12;
+    // Fuel tanks: two spheres on legs at the back left.
+    for (const [tx, tr] of [[x - s * 1.12, s * 0.2], [x - s * 0.82, s * 0.16]]) {
+      ctx.strokeStyle = '#59626e'; ctx.lineWidth = s * 0.025;
+      ctx.beginPath(); ctx.moveTo(tx - tr * 0.6, deck); ctx.lineTo(tx - tr * 0.3, deck - tr); ctx.moveTo(tx + tr * 0.6, deck); ctx.lineTo(tx + tr * 0.3, deck - tr); ctx.stroke();
+      ctx.fillStyle = radial(ctx, tx - tr * 0.4, deck - tr * 1.6, 0, tx, deck - tr * 1.2, tr * 1.1, [[0, '#ffffff'], [0.45, '#e2e7ee'], [1, '#7d8794']]);
+      ctx.fill(circle(tx, deck - tr * 1.25, tr));
+      ctx.fillStyle = '#F0643C'; ctx.fillRect(tx - tr, deck - tr * 1.3, tr * 2, tr * 0.14);
+    }
+    // The kiosk: a rounded 70s pod with a band of warm windows.
+    const kx = x - s * 0.55; const kw = s * 0.95; const kh = s * 0.5; const ky = deck - kh;
+    ctx.fillStyle = linear(ctx, kx, ky, kx + kw, ky + kh, [[0, '#f6efdd'], [1, '#c9bfa8']]);
+    ctx.beginPath(); ctx.roundRect(kx, ky, kw, kh, [kh * 0.5, kh * 0.5, s * 0.04, s * 0.04]); ctx.fill();
+    layer(ctx, { blur: s * 0.06 }, () => { ctx.fillStyle = 'rgba(255,214,120,0.8)'; ctx.fillRect(kx + kw * 0.12, ky + kh * 0.28, kw * 0.76, kh * 0.32); });
+    ctx.fillStyle = linear(ctx, 0, ky + kh * 0.28, 0, ky + kh * 0.6, [[0, '#fff3c4'], [1, '#ffb347']]);
+    ctx.beginPath(); ctx.roundRect(kx + kw * 0.12, ky + kh * 0.28, kw * 0.76, kh * 0.32, s * 0.03); ctx.fill();
+    ctx.strokeStyle = 'rgba(90,55,20,0.6)'; ctx.lineWidth = s * 0.012;
+    for (let i = 1; i < 4; i++) { const wx = kx + kw * 0.12 + (kw * 0.76) * i / 4; ctx.beginPath(); ctx.moveTo(wx, ky + kh * 0.28); ctx.lineTo(wx, ky + kh * 0.6); ctx.stroke(); }
+    STRIPES.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(kx, ky + kh * 0.7 + i * kh * 0.06, kw, kh * 0.06); });
+    // The canopy over the pumps, with stripes and lights underneath.
+    const cx0 = x + s * 0.15; const cw = s * 1.15; const cy0 = deck - s * 0.62;
+    ctx.fillStyle = '#9aa5b3';
+    for (const px of [cx0 + cw * 0.12, cx0 + cw * 0.88]) ctx.fillRect(px - s * 0.02, cy0, s * 0.04, deck - cy0);
+    layer(ctx, { blur: s * 0.1 }, () => { ctx.fillStyle = 'rgba(255,240,200,0.5)'; ctx.fill(ellipse(cx0 + cw / 2, deck - s * 0.1, cw * 0.55, s * 0.08)); });
+    ctx.beginPath(); ctx.roundRect(cx0 - s * 0.08, cy0 - s * 0.14, cw + s * 0.16, s * 0.16, s * 0.08); ctx.fillStyle = '#f6efdd'; ctx.fill();
+    ctx.save(); ctx.clip(); STRIPES.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(cx0 - s * 0.1, cy0 - s * 0.07 + i * s * 0.022, cw + s * 0.2, s * 0.022); }); ctx.restore();
+    for (let i = 0; i < 4; i++) { ctx.fillStyle = '#fffbe6'; ctx.fill(circle(cx0 + cw * (0.2 + i * 0.2), cy0 + s * 0.035, s * 0.022)); }
+    // Two pumps.
+    for (const px of [cx0 + cw * 0.33, cx0 + cw * 0.67]) {
+      const pw = s * 0.16; const ph = s * 0.32;
+      ctx.fillStyle = linear(ctx, px - pw / 2, 0, px + pw / 2, 0, [[0, '#c9bfa8'], [0.4, '#fbf5e6'], [1, '#a9a08c']]);
+      ctx.beginPath(); ctx.roundRect(px - pw / 2, deck - ph, pw, ph, [pw * 0.4, pw * 0.4, 1, 1]); ctx.fill();
+      ctx.fillStyle = '#F0643C'; ctx.beginPath(); ctx.roundRect(px - pw / 2, deck - ph, pw, ph * 0.25, [pw * 0.4, pw * 0.4, 0, 0]); ctx.fill();
+      ctx.fillStyle = '#123'; ctx.fillRect(px - pw * 0.3, deck - ph * 0.65, pw * 0.6, ph * 0.16);
+      ctx.fillStyle = '#7dffb0'; ctx.fillRect(px - pw * 0.24, deck - ph * 0.62, pw * 0.48, ph * 0.1);
+      ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = s * 0.018;
+      ctx.beginPath(); ctx.moveTo(px + pw / 2, deck - ph * 0.5); ctx.quadraticCurveTo(px + pw * 1.1, deck - ph * 0.1, px + pw * 0.75, deck - ph * 0.75); ctx.stroke();
+    }
+    // The sign: a round FUEL sign on a tall pylon, glowing.
+    const sx = x + s * 1.38; const sy = deck - s * 1.15; const sr = s * 0.24;
+    ctx.fillStyle = '#7d8794'; ctx.fillRect(sx - s * 0.025, sy, s * 0.05, deck - sy);
+    layer(ctx, { blur: s * 0.18 }, () => { ctx.fillStyle = 'rgba(245,166,35,0.6)'; ctx.fill(circle(sx, sy, sr * 1.3)); });
+    ctx.fillStyle = linear(ctx, sx - sr, sy - sr, sx + sr, sy + sr, [[0, '#f4f7fb'], [0.5, '#8f9aa9'], [1, '#e2e7ee']]); ctx.fill(circle(sx, sy, sr));
+    ctx.fillStyle = radial(ctx, sx - sr * 0.3, sy - sr * 0.3, 0, sx, sy, sr * 0.85, [[0, '#ffd27a'], [1, '#F0643C']]); ctx.fill(circle(sx, sy, sr * 0.85));
+    // A little ringed planet logo and the word.
+    ctx.strokeStyle = '#fff6e0'; ctx.lineWidth = sr * 0.06; ctx.stroke(ellipse(sx, sy - sr * 0.28, sr * 0.38, sr * 0.1, -0.3));
+    ctx.fillStyle = '#fff6e0'; ctx.fill(circle(sx, sy - sr * 0.28, sr * 0.18));
+    ctx.font = `800 ${Math.round(sr * 0.42)}px "Arial Rounded MT Bold", "Helvetica Rounded", Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff6e0'; ctx.fillText('FUEL', sx, sy + sr * 0.3);
+    // The antenna and its red beacon.
+    const ax = kx + kw * 0.75;
+    ctx.strokeStyle = '#9aa5b3'; ctx.lineWidth = s * 0.018;
+    ctx.beginPath(); ctx.moveTo(ax, ky + kh * 0.1); ctx.lineTo(ax, ky - s * 0.45); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax - s * 0.08, ky - s * 0.25); ctx.lineTo(ax + s * 0.08, ky - s * 0.25); ctx.moveTo(ax - s * 0.05, ky - s * 0.35); ctx.lineTo(ax + s * 0.05, ky - s * 0.35); ctx.stroke();
+    layer(ctx, { blur: s * 0.05 }, () => { ctx.fillStyle = '#ff4a4a'; ctx.fill(circle(ax, ky - s * 0.47, s * 0.05)); });
+    ctx.fillStyle = '#ffd0d0'; ctx.fill(circle(ax, ky - s * 0.47, s * 0.018));
+  }
+
+
+  /** A window onto deep space framed by hull plating and a chrome rim: teal and
+      violet nebulae, a starfield with bright spiked stars, and (on wide
+      pictures, below the header row) a spiral galaxy, a 70s gas station on an
+      asteroid, a ringed gas giant with a cratered moon, and a chrome saucer
+      with its beam on. */
   function spaceScene(ctx, w, h, seedText) {
     hullPlating(ctx, w, h);
     const inset = Math.min(14, w * 0.05);
@@ -423,45 +668,28 @@ const ThemeArt = (() => {
     const windowPath = roundRect(inset, inset, vw, vh, radius);
     ctx.save();
     ctx.clip(windowPath);
-    ctx.fillStyle = linear(ctx, 0, 0, w, h, [[0, '#050816'], [0.5, '#0D1838'], [1, '#1C1242']]);
-    ctx.fill(windowPath);
+    ctx.fillStyle = linear(ctx, 0, 0, w, h, [[0, '#03050f'], [0.5, '#0a1230'], [1, '#170c33']]);
+    ctx.fillRect(0, 0, w, h);
     const random = rng(Math.imul(seedOf(seedText), 31) + 77);
-    const scale = Math.max(w, h) / 1100;
-    layer(ctx, { blur: Math.min(60, Math.max(w, h) * 0.08) }, () => {
-      [[ATOMIC.teal, 0.28], [ATOMIC.orange, 0.2], [ATOMIC.pink, 0.18], [ATOMIC.teal, 0.18], ['#6A4CFF', 0.25]].forEach(([color, alpha]) => {
-        const rw = random.range(120, 260) * scale;
-        const rh = random.range(80, 180) * scale;
-        const rot = random.range(0, 3);
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = color;
-        ctx.fill(ellipse(random.range(0, w), random.range(0, h), rw, rh, rot));
-      });
-    });
-    const stars = Math.floor(w * h / 1500);
-    for (let i = 0; i < stars; i++) {
-      const r = random.range(0.3, 1.4);
-      const x = random.range(0, w); const y = random.range(0, h);
-      const tint = random.next() < 0.12 ? 0xBBFFFF : 0xFFFFFF;
-      ctx.fillStyle = rgba(tint, random.range(0.25, 0.95));
-      ctx.fill(circle(x, y, r));
-    }
-    for (let i = 0; i < 18; i++) {
-      const x = random.range(0, w); const y = random.range(0, h);
-      const size = random.range(4, 9);
-      ctx.fillStyle = random.next() < 0.5 ? '#fff' : [ATOMIC.teal, ATOMIC.mustard, ATOMIC.pink][Math.floor(random.next() * 3) % 3];
-      ctx.fill(sparkle(x, y, size));
-    }
+    nebula(ctx, w, h, random, [[ATOMIC.teal, 0.22, 3], ['#6A4CFF', 0.25, 3], [ATOMIC.pink, 0.12, 2], ['#1d54d6', 0.2, 2]]);
+    starfield(ctx, w, h, random);
     // The big pieces stay out of the header row (y ≥ 170) and off narrow
     // pictures (the sidebar, a phone), where buttons fill the width.
     if (w >= 560) {
-      layer(ctx, { alpha: 0.7 }, () => planet(ctx, w * 0.9, Math.max(170, h * 0.66), Math.max(14, Math.min(w, h) * 0.07), -0.35));
-      layer(ctx, { alpha: 0.7 }, () => saucer(ctx, w * 0.12, Math.max(260, h * 0.8), Math.min(30, w * 0.1)));
-      layer(ctx, { alpha: 0.45 }, () => atom(ctx, w * 0.55, h * 0.88, 30, ATOMIC.cream));
+      spiralGalaxy(ctx, w * 0.3, Math.max(200, h * 0.3), Math.min(150, w * 0.1), -0.4);
+      gasStation(ctx, w * 0.5, Math.max(330, h * 0.66), Math.min(110, w * 0.07));
+      const R = Math.max(30, Math.min(w, h) * 0.13);
+      gasGiant(ctx, w * 0.84, Math.max(240, h * 0.66), R, -0.32, ['#e9a96b', '#c97a44', '#f3d1a2', '#a8582e', '#f7e2c0', '#b5643a'], [ATOMIC.cream, '#d8c6a3', '#9aa5b3']);
+      moon(ctx, w * 0.72, Math.max(200, h * 0.5), R * 0.22, 7);
+      saucer(ctx, w * 0.14, Math.max(300, h * 0.72), Math.min(44, w * 0.04), true);
     }
     ctx.restore();
-    ctx.strokeStyle = '#2C3440'; ctx.lineWidth = 5; ctx.stroke(windowPath);
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5;
-    ctx.stroke(roundRect(inset - 3, inset - 3, vw + 6, vh + 6, radius + 2));
+    // A chrome window frame.
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = linear(ctx, 0, 0, w, h, [[0, '#e9eef5'], [0.3, '#6b778a'], [0.5, '#dfe5ee'], [0.75, '#4f5967'], [1, '#c3cbd6']]);
+    ctx.stroke(windowPath);
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.stroke(roundRect(inset + 3.5, inset + 3.5, vw - 7, vh - 7, radius - 3));
   }
 
   /** A 50s atomic panel: dark navy with a cream outline, an offset colour shadow,
