@@ -590,7 +590,20 @@ const Kits = (() => {
     });
   }
 
-  window.addEventListener('resize', () => { if (activeKit()) renderBoard(); });
+  // Sections are placed in pixels from the board's width, so re-place them
+  // whenever that width changes: a window resize, but also the sidebar
+  // being hidden or shown, or a scrollbar coming and going.
+  let boardWidth = 0;
+  new ResizeObserver(() => {
+    const kit = activeKit();
+    const width = $('#kit-board').clientWidth;
+    if (!kit || !width || width === boardWidth) return;
+    boardWidth = width;
+    for (const s of kit.sections) {
+      const node = $('#kit-board').querySelector(`.kit-section[data-id="${CSS.escape(s.id)}"]`);
+      if (node) place(node, s);
+    }
+  }).observe($('#kit-board'));
 
   // ---------- Section menu ----------
 
