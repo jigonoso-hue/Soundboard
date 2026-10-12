@@ -108,7 +108,7 @@ struct LiveView: View {
             }
         } footer: {
             Text(live.mode == .local
-                 ? "Listeners on the same Wi-Fi find your session under Tune In."
+                 ? "Listeners on the same Wi‑Fi find your session under Tune In."
                  : "Listeners anywhere join with a code.")
         }
         playerSoundsSection
@@ -170,7 +170,7 @@ struct LiveView: View {
                 Button("Remove Picture", role: .destructive) { live.setAvatar("") }
             }
         }
-        Section("Sessions on this Wi-Fi") {
+        Section("Sessions on this Wi‑Fi") {
             if live.found.isEmpty {
                 HStack(spacing: 10) {
                     ProgressView()
@@ -280,7 +280,7 @@ struct LiveView: View {
                     .buttonStyle(.bordered)
                     .padding(.top, 4)
                 } else {
-                    Text("Listeners on the same Wi-Fi open Live → Tune In and pick this session.")
+                    Text("Listeners on the same Wi‑Fi open Live → Tune In and pick this session.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

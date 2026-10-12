@@ -1233,7 +1233,7 @@ const Live = (() => {
       body.append(field('Session name', textInput(settings.sessionName, 'e.g. Friday Night Game', (v) => { settings.sessionName = v; }, 40)));
       const modes = el('div', 'live-modes');
       for (const [id, title, hint] of [
-        ['local', 'At the table', 'Listeners on the same Wi-Fi find your session.'],
+        ['local', 'At the table', 'Listeners on the same Wi‑Fi find your session.'],
         ['online', 'Online', 'Listeners anywhere join with a code.'],
       ]) {
         const option = el('label', `live-mode${settings.mode === id ? ' selected' : ''}`);
@@ -1287,7 +1287,7 @@ const Live = (() => {
       pictureRow.append(remove);
     }
     body.append(pictureRow);
-    body.append(el('div', 'live-subhead', 'Sessions on this Wi-Fi'));
+    body.append(el('div', 'live-subhead', 'Sessions on this Wi‑Fi'));
     const list = el('div', 'live-list');
     if (!sessions.length) list.append(el('p', 'muted small', 'Looking for sessions on this network…'));
     for (const session of sessions) {
@@ -1338,7 +1338,7 @@ const Live = (() => {
       share.append(codeBtn, invite);
       head.append(share);
     } else {
-      head.append(el('div', 'muted small', 'Listeners on the same Wi-Fi open Live → Tune In and pick this session.'));
+      head.append(el('div', 'muted small', 'Listeners on the same Wi‑Fi open Live → Tune In and pick this session.'));
     }
     if (status.reconnecting) head.append(el('div', 'live-error', 'Reconnecting to the relay…'));
     body.append(head);

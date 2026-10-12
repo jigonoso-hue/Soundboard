@@ -132,17 +132,34 @@ struct TagChip: View {
     var small = false
     /// Text to show instead of the tag name (the colour still comes from the tag).
     var label: String? = nil
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         let color = TagStyle.color(tag)
+        // In the themes: ink close to the theme's text, on a solid backing, so
+        // tags stay readable over parchment, glass and the playing effects.
+        let ink = theme.ink.map { color.blended(with: $0, amount: 0.55) } ?? color
         Text(label ?? tag)
             .font(small ? .caption2.weight(.semibold) : .caption.weight(.semibold))
             .lineLimit(1)
             .padding(.horizontal, small ? 6 : 9)
             .padding(.vertical, small ? 2 : 4)
-            .foregroundStyle(selected ? Color.black : color)
-            .background(Capsule().fill(selected ? color : color.opacity(0.16)))
-            .overlay(Capsule().strokeBorder(color.opacity(selected ? 0 : 0.45), lineWidth: 1))
+            .foregroundStyle(selected ? Color.black : ink)
+            .background(Capsule().fill(selected ? color : color.opacity(0.18)))
+            .background(Capsule().fill(selected ? Color.clear : (theme.panelColor ?? Color.clear)))
+            .overlay(Capsule().strokeBorder(color.opacity(selected ? 0 : 0.55), lineWidth: 1))
+    }
+}
+
+extension Color {
+    /// This colour mixed with another (amount 0 = this, 1 = the other).
+    func blended(with other: Color, amount: CGFloat) -> Color {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        UIColor(self).getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        UIColor(other).getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        let t = min(1, max(0, amount))
+        return Color(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, opacity: a1 + (a2 - a1) * t)
     }
 }
 

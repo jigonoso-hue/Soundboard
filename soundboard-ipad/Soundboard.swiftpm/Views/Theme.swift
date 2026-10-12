@@ -86,6 +86,26 @@ enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Stop and delete: a red that belongs to the theme (the same as the Mac's --danger).
+    var danger: Color {
+        switch self {
+        case .tavern: return Color(hex: 0xA3271C)
+        case .academia: return Color(hex: 0xE2646F)
+        default: return .red
+        }
+    }
+
+    /// The theme's solid page colour, behind small labels like tag chips (nil: none).
+    var panelColor: Color? {
+        switch self {
+        case .tavern: return Color(hex: 0xF3E6C8)
+        case .spaceAge: return Color(hex: 0x0C142C)
+        case .scifi: return Color(hex: 0x061A30)
+        case .academia: return Color(hex: 0x0E1035)
+        default: return nil
+        }
+    }
+
     /// Quieter text: captions, timers, icons.
     var secondaryInk: Color {
         switch self {

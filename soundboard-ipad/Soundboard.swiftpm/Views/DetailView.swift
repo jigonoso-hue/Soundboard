@@ -151,7 +151,7 @@ struct DetailView: View {
                 } label: {
                     Label("Stop All", systemImage: "stop.fill")
                 }
-                .tint(.red)
+                .tint(themes.theme.danger)
             }
         } else if kit != nil {
             // In a scene kit: just the master volume, Live and Stop All.
@@ -177,7 +177,7 @@ struct DetailView: View {
                 } label: {
                     Label("Stop All", systemImage: "stop.fill")
                 }
-                .tint(.red)
+                .tint(themes.theme.danger)
             }
         } else {
             libraryToolbar
@@ -244,7 +244,7 @@ struct DetailView: View {
             } label: {
                 Label("Stop All", systemImage: "stop.fill")
             }
-            .tint(.red)
+            .tint(themes.theme.danger)
         }
     }
 

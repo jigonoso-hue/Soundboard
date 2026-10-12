@@ -451,9 +451,13 @@ const ThemeArt = (() => {
       ctx.fillStyle = random.next() < 0.5 ? '#fff' : [ATOMIC.teal, ATOMIC.mustard, ATOMIC.pink][Math.floor(random.next() * 3) % 3];
       ctx.fill(sparkle(x, y, size));
     }
-    planet(ctx, w * 0.84, h * 0.2, Math.max(14, Math.min(w, h) * 0.1), -0.35);
-    saucer(ctx, w * 0.14, h * 0.8, Math.min(34, w * 0.12));
-    if (w > 400) layer(ctx, { alpha: 0.7 }, () => atom(ctx, w * 0.55, h * 0.88, 30, ATOMIC.cream));
+    // The big pieces stay out of the header row (y ≥ 170) and off narrow
+    // pictures (the sidebar, a phone), where buttons fill the width.
+    if (w >= 560) {
+      layer(ctx, { alpha: 0.7 }, () => planet(ctx, w * 0.9, Math.max(170, h * 0.66), Math.max(14, Math.min(w, h) * 0.07), -0.35));
+      layer(ctx, { alpha: 0.7 }, () => saucer(ctx, w * 0.12, Math.max(260, h * 0.8), Math.min(30, w * 0.1)));
+      layer(ctx, { alpha: 0.45 }, () => atom(ctx, w * 0.55, h * 0.88, 30, ATOMIC.cream));
+    }
     ctx.restore();
     ctx.strokeStyle = '#2C3440'; ctx.lineWidth = 5; ctx.stroke(windowPath);
     ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5;
@@ -494,7 +498,7 @@ const ThemeArt = (() => {
       for (let i = 0; i < count; i++) {
         const edge = Math.floor(random.next() * 4) % 4;
         let x; let y;
-        if (edge === 0) { x = random.range(20, Math.max(21, w - 20)); y = random.range(10, 34); }
+        if (edge === 0) { x = random.range(20, Math.max(21, w * 0.45)); y = random.range(6, 12); }
         else if (edge === 1) { x = random.range(Math.max(12, w - 40), Math.max(13, w - 12)); y = random.range(20, Math.max(21, h - 20)); }
         else if (edge === 2) { x = random.range(20, Math.max(21, w - 20)); y = random.range(Math.max(10, h - 34), Math.max(11, h - 10)); }
         else { x = random.range(10, 34); y = random.range(40, Math.max(41, h - 20)); }
@@ -502,13 +506,13 @@ const ThemeArt = (() => {
         ctx.fill(sparkle(x, y, random.range(8, 18)));
       }
     });
-    if (w > 220 && h > 140) {
+    // Bigger ornaments sit low in tall panels, never in the header row where the buttons are.
+    if (w > 220 && h > 260) {
       const angle = random.range(-0.5, 0.3);
       const color = PALETTE[Math.floor(random.next() * 3) % 3];
-      layer(ctx, { alpha: 0.55 }, () => boomerang(ctx, w - 75, h - 45, 50, angle, color, ATOMIC.cream));
+      layer(ctx, { alpha: 0.35 }, () => boomerang(ctx, w - 75, h - 45, 50, angle, color, ATOMIC.cream));
     }
-    if (w > 200 && h > 110) layer(ctx, { alpha: 0.6 }, () => atom(ctx, w - 40, 36, 24, ATOMIC.cream));
-    if (h > 300) layer(ctx, { alpha: 0.5 }, () => starburst(ctx, 40, h - 46, 26, ATOMIC.cream));
+    if (h > 320) layer(ctx, { alpha: 0.35 }, () => starburst(ctx, 40, h - 46, 26, ATOMIC.cream));
     ctx.restore();
     ctx.strokeStyle = ATOMIC.cream;
     ctx.lineWidth = 2.5;
@@ -800,11 +804,16 @@ const ThemeArt = (() => {
     astrolabe(ctx, w * 0.6, h * 0.5, short * 0.42);
 
     const g = gold(ctx, 0, 0, w, h);
-    const mr = Math.max(12, short * 0.05);
-    layer(ctx, { blur: 14 }, () => crescent(ctx, w * 0.9, h * 0.12, mr, 'rgba(246,220,143,0.7)'));
-    crescent(ctx, w * 0.9, h * 0.12, mr, '#E8C46A');
+    // On narrow pictures (the sidebar, a phone) buttons fill the width: stars and the sigil only.
+    const wide = w >= 560;
+    if (wide) {
+      const mr = Math.max(12, short * 0.045);
+      const my = Math.max(190, h * 0.66);
+      layer(ctx, { blur: 14 }, () => crescent(ctx, w * 0.95, my, mr, 'rgba(246,220,143,0.5)'));
+      layer(ctx, { alpha: 0.75 }, () => crescent(ctx, w * 0.95, my, mr, '#E8C46A'));
+    }
 
-    [[[[0, 0], [1, 0.4], [2, 0.2], [2.8, 1], [3.6, 0.7]], w * 0.36, h * 0.07],
+    if (wide) [[[[0, 0], [1, 0.4], [2, 0.2], [2.8, 1], [3.6, 0.7]], w * 0.62, h * 0.62],
       [[[0, 0], [0.6, 1], [1.5, 1.2], [2.1, 0.4], [0, 0]], w * 0.8, h * 0.8]].forEach(([points, ox, oy]) => {
       const line = new Path2D();
       const stars = new Path2D();
@@ -817,11 +826,13 @@ const ThemeArt = (() => {
       ctx.fillStyle = '#F6DC8F'; ctx.fill(stars);
     });
 
-    layer(ctx, { alpha: 0.5 }, () => {
-      ctx.strokeStyle = g;
-      ctx.lineWidth = 1.4; ctx.stroke(hourglass(w * 0.95, h * 0.55, 16));
-      ctx.lineWidth = 1.6; key(ctx, w * 0.3, h * 0.93, 22, -0.4);
-    });
+    if (wide) {
+      layer(ctx, { alpha: 0.35 }, () => {
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 1.4; ctx.stroke(hourglass(w * 0.985, h * 0.7, 14));
+        ctx.lineWidth = 1.6; key(ctx, w * 0.3, h * 0.97, 20, -0.4);
+      });
+    }
     layer(ctx, { alpha: 0.8 }, () => {
       const p = new Path2D();
       for (let i = 0; i < 14; i++) star(random.range(0, w), random.range(0, h), random.range(4, 9), p);
@@ -870,8 +881,10 @@ const ThemeArt = (() => {
     ctx.lineWidth = 1; ctx.stroke(curls);
 
     if (w > 260 && h > 120) {
-      layer(ctx, { alpha: 0.75 }, () => {
-        const cx = x + w / 2; const cy = y + 18;
+      layer(ctx, { alpha: 0.85 }, () => {
+        const cx = x + w / 2; const cy = b;
+        // A small dark plate breaks the frame line behind them.
+        ctx.save(); ctx.fillStyle = 'rgba(12,13,48,1)'; ctx.fillRect(cx - 34, cy - 5, 68, 10); ctx.restore();
         for (let i = 0; i < 5; i++) {
           const px = cx + (i - 2) * 12;
           ctx.lineWidth = 0.7;
@@ -893,13 +906,15 @@ const ThemeArt = (() => {
       const crest = new Path2D();
       diamond(tx, y, 6, crest);
       thorn(tx, y, 0, -1, 12, crest);
-      diamond(tx, b, 5, crest);
+      if (!(w > 260 && h > 120)) diamond(tx, b, 5, crest);
       ctx.fill(crest);
       ctx.beginPath();
       ctx.moveTo(tx - 38, y + 1); ctx.quadraticCurveTo(tx - 16, y - 9, tx - 7, y);
       ctx.moveTo(tx + 38, y + 1); ctx.quadraticCurveTo(tx + 16, y - 9, tx + 7, y);
-      ctx.moveTo(tx - 26, b - 1); ctx.quadraticCurveTo(tx - 12, b + 8, tx - 6, b);
-      ctx.moveTo(tx + 26, b - 1); ctx.quadraticCurveTo(tx + 12, b + 8, tx + 6, b);
+      if (!(w > 260 && h > 120)) {
+        ctx.moveTo(tx - 26, b - 1); ctx.quadraticCurveTo(tx - 12, b + 8, tx - 6, b);
+        ctx.moveTo(tx + 26, b - 1); ctx.quadraticCurveTo(tx + 12, b + 8, tx + 6, b);
+      }
       ctx.lineWidth = 1.4; ctx.stroke();
     }
     if (h > 200) {

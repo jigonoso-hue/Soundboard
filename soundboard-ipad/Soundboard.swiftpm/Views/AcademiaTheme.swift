@@ -249,18 +249,26 @@ struct ArcaneBackdrop: View, Equatable {
         context.stroke(ring.lines, with: .color(Color(hex: 0xD4A94A).opacity(0.22)), lineWidth: 1)
         context.fill(ring.marks, with: .color(Color(hex: 0xD4A94A).opacity(0.35)))
 
-        // A glowing crescent moon.
-        let moon = Arcane.crescent(at: CGPoint(x: w * 0.9, y: h * 0.12), radius: max(12, short * 0.05))
-        var moonGlow = context
-        moonGlow.addFilter(.blur(radius: 14))
-        moonGlow.fill(moon, with: .color(Color(hex: 0xF6DC8F).opacity(0.7)))
-        context.fill(moon, with: gold)
+        // On narrow pictures (the sidebar, an iPhone) buttons fill the width:
+        // stars and the sigil only. (The same rule as the Mac's theme-art.js.)
+        let wide = w >= 560
+
+        // A glowing crescent moon, below the header row.
+        if wide {
+            let moon = Arcane.crescent(at: CGPoint(x: w * 0.95, y: max(190, h * 0.66)), radius: max(12, short * 0.045))
+            var moonGlow = context
+            moonGlow.addFilter(.blur(radius: 14))
+            moonGlow.fill(moon, with: .color(Color(hex: 0xF6DC8F).opacity(0.5)))
+            var moonFill = context
+            moonFill.opacity = 0.75
+            moonFill.fill(moon, with: gold)
+        }
 
         // Constellations.
-        let constellations: [([(CGFloat, CGFloat)], CGPoint)] = [
-            ([(0, 0), (1, 0.4), (2, 0.2), (2.8, 1), (3.6, 0.7)], CGPoint(x: w * 0.36, y: h * 0.07)),
+        let constellations: [([(CGFloat, CGFloat)], CGPoint)] = wide ? [
+            ([(0, 0), (1, 0.4), (2, 0.2), (2.8, 1), (3.6, 0.7)], CGPoint(x: w * 0.62, y: h * 0.62)),
             ([(0, 0), (0.6, 1), (1.5, 1.2), (2.1, 0.4), (0, 0)], CGPoint(x: w * 0.8, y: h * 0.8)),
-        ]
+        ] : []
         for (points, origin) in constellations {
             let stars = Arcane.constellation(points, origin: origin, scale: 28)
             context.stroke(stars.line, with: .color(Color(hex: 0xF6DC8F).opacity(0.35)), style: StrokeStyle(lineWidth: 0.8, dash: [3, 4]))
@@ -269,9 +277,11 @@ struct ArcaneBackdrop: View, Equatable {
 
         // An hourglass and a key.
         var faint = context
-        faint.opacity = 0.5
-        faint.stroke(Arcane.hourglass(at: CGPoint(x: w * 0.95, y: h * 0.55), size: 16), with: gold, lineWidth: 1.4)
-        faint.stroke(Arcane.key(at: CGPoint(x: w * 0.3, y: h * 0.93), size: 22, angle: -0.4), with: gold, lineWidth: 1.6)
+        faint.opacity = 0.35
+        if wide {
+            faint.stroke(Arcane.hourglass(at: CGPoint(x: w * 0.985, y: h * 0.7), size: 14), with: gold, lineWidth: 1.4)
+            faint.stroke(Arcane.key(at: CGPoint(x: w * 0.3, y: h * 0.97), size: 20, angle: -0.4), with: gold, lineWidth: 1.6)
+        }
 
         var sparkles = context
         sparkles.opacity = 0.8
@@ -345,11 +355,14 @@ struct GildedPanel: View, Equatable {
             }
         }
 
-        // Moon phases under the top ornament of wide panels.
-        if w > 260 && h > 120 {
-            let phases = Arcane.moonPhases(center: CGPoint(x: r.midX, y: r.minY + 18), radius: 3.2, spacing: 12)
+        // Moon phases on the bottom frame line of wide panels (not over the panel's title).
+        let phasesShown = w > 260 && h > 120
+        if phasesShown {
+            let center = CGPoint(x: r.midX, y: r.maxY)
+            context.fill(Path(CGRect(x: center.x - 34, y: center.y - 5, width: 68, height: 10)), with: .color(Color(hex: 0x0C0D30)))
+            let phases = Arcane.moonPhases(center: center, radius: 3.2, spacing: 12)
             var faint = context
-            faint.opacity = 0.75
+            faint.opacity = 0.85
             faint.fill(phases.filled, with: gold)
             faint.stroke(phases.outline, with: gold, lineWidth: 0.7)
         }
@@ -364,12 +377,15 @@ struct GildedPanel: View, Equatable {
             swirls.addQuadCurve(to: CGPoint(x: top.x - 7, y: top.y), control: CGPoint(x: top.x - 16, y: top.y - 9))
             swirls.move(to: CGPoint(x: top.x + 38, y: top.y + 1))
             swirls.addQuadCurve(to: CGPoint(x: top.x + 7, y: top.y), control: CGPoint(x: top.x + 16, y: top.y - 9))
-            let bottom = CGPoint(x: r.midX, y: r.maxY)
-            context.fill(Arcane.diamond(at: bottom, size: 5), with: gold)
-            swirls.move(to: CGPoint(x: bottom.x - 26, y: bottom.y - 1))
-            swirls.addQuadCurve(to: CGPoint(x: bottom.x - 6, y: bottom.y), control: CGPoint(x: bottom.x - 12, y: bottom.y + 8))
-            swirls.move(to: CGPoint(x: bottom.x + 26, y: bottom.y - 1))
-            swirls.addQuadCurve(to: CGPoint(x: bottom.x + 6, y: bottom.y), control: CGPoint(x: bottom.x + 12, y: bottom.y + 8))
+            // The bottom crest makes way for the moon phases when they're there.
+            if !phasesShown {
+                let bottom = CGPoint(x: r.midX, y: r.maxY)
+                context.fill(Arcane.diamond(at: bottom, size: 5), with: gold)
+                swirls.move(to: CGPoint(x: bottom.x - 26, y: bottom.y - 1))
+                swirls.addQuadCurve(to: CGPoint(x: bottom.x - 6, y: bottom.y), control: CGPoint(x: bottom.x - 12, y: bottom.y + 8))
+                swirls.move(to: CGPoint(x: bottom.x + 26, y: bottom.y - 1))
+                swirls.addQuadCurve(to: CGPoint(x: bottom.x + 6, y: bottom.y), control: CGPoint(x: bottom.x + 12, y: bottom.y + 8))
+            }
             context.stroke(swirls, with: gold, lineWidth: 1.4)
         }
         // Diamonds halfway down the sides of tall panels.

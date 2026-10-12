@@ -244,11 +244,18 @@ struct SpaceScene: View, Equatable {
             space.fill(Atomic.sparkle(at: point, size: sparkleSize), with: .color(color))
         }
 
-        drawPlanet(&space, at: CGPoint(x: w * 0.84, y: h * 0.2), radius: max(14, min(w, h) * 0.1), tilt: -0.35)
-        drawSaucer(&space, at: CGPoint(x: w * 0.14, y: h * 0.8), size: min(34, w * 0.12))
-        if w > 400 {
+        // The big pieces stay out of the header row (y ≥ 170) and off narrow
+        // pictures (the sidebar, an iPhone), where buttons fill the width.
+        // (The same rule as the Mac's theme-art.js.)
+        if w >= 560 {
+            var planet = space
+            planet.opacity = 0.7
+            drawPlanet(&planet, at: CGPoint(x: w * 0.9, y: max(170, h * 0.66)), radius: max(14, min(w, h) * 0.07), tilt: -0.35)
+            var saucer = space
+            saucer.opacity = 0.7
+            drawSaucer(&saucer, at: CGPoint(x: w * 0.12, y: max(260, h * 0.8)), size: min(30, w * 0.1))
             var atom = space
-            atom.opacity = 0.7
+            atom.opacity = 0.45
             Atomic.drawAtom(&atom, at: CGPoint(x: w * 0.55, y: h * 0.88), size: 30, line: Atomic.cream)
         }
 
@@ -355,7 +362,7 @@ struct AtomicPanel: View, Equatable {
             let edge = Int(random.next() * 4) % 4
             let point: CGPoint
             switch edge {
-            case 0: point = CGPoint(x: random.range(20, max(21, w - 20)), y: random.range(10, 34))
+            case 0: point = CGPoint(x: random.range(20, max(21, w * 0.45)), y: random.range(6, 12))
             case 1: point = CGPoint(x: random.range(max(12, w - 40), max(13, w - 12)), y: random.range(20, max(21, h - 20)))
             case 2: point = CGPoint(x: random.range(20, max(21, w - 20)), y: random.range(max(10, h - 34), max(11, h - 10)))
             default: point = CGPoint(x: random.range(10, 34), y: random.range(40, max(41, h - 20)))
@@ -364,24 +371,18 @@ struct AtomicPanel: View, Equatable {
             sparkles.fill(Atomic.sparkle(at: point, size: random.range(8, 18)), with: .color(color))
         }
 
-        // A boomerang in the bottom-right corner of bigger panels.
-        if w > 220 && h > 140 {
+        // Bigger ornaments sit low in tall panels, never in the header row where the buttons are.
+        if w > 220 && h > 260 {
             var faint = context
-            faint.opacity = 0.55
+            faint.opacity = 0.35
             let shape = Atomic.boomerang(at: CGPoint(x: w - 75, y: h - 45), size: 50, angle: random.range(-0.5, 0.3))
             faint.fill(shape, with: .color(Atomic.palette[Int(random.next() * 3) % 3]))
             faint.stroke(shape, with: .color(Atomic.cream), lineWidth: 2)
         }
-        // An atom in the top-right corner.
-        if w > 200 && h > 110 {
-            var faint = context
-            faint.opacity = 0.6
-            Atomic.drawAtom(&faint, at: CGPoint(x: w - 40, y: 36), size: 24, line: Atomic.cream)
-        }
         // A starburst low on tall panels.
-        if h > 300 {
+        if h > 320 {
             var faint = context
-            faint.opacity = 0.5
+            faint.opacity = 0.35
             Atomic.drawStarburst(&faint, at: CGPoint(x: 40, y: h - 46), size: 26, line: Atomic.cream)
         }
     }

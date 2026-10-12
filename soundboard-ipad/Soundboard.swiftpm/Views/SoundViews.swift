@@ -40,7 +40,7 @@ struct SoundTile: View {
         let book = theme == .academia
         let shape = book
             ? AnyShape(UnevenRoundedRectangle(topLeadingRadius: 3, bottomLeadingRadius: 3, bottomTrailingRadius: 8, topTrailingRadius: 8))
-            : AnyShape(RoundedRectangle(cornerRadius: 14))
+            : AnyShape(RoundedRectangle(cornerRadius: theme == .tavern ? 6 : 14))
         Button {
             playSound(sound, store: store, player: player, ui: ui, gain: gain)
         } label: {
@@ -125,6 +125,32 @@ struct SoundTile: View {
     /// The tile's colour, edge and (in Sci-Fi) glow and synth wave.
     @ViewBuilder
     private func plainTile(color: Color, isPlaying: Bool, scifi: Bool) -> some View {
+        if theme == .tavern {
+            tavernTile(color: color, isPlaying: isPlaying)
+        } else {
+            glassTile(color: color, isPlaying: isPlaying, scifi: scifi)
+        }
+    }
+
+    /// Tavern: a parchment card with a coloured ink edge (the same as the Mac's styles.css).
+    @ViewBuilder
+    private func tavernTile(color: Color, isPlaying: Bool) -> some View {
+        let parchment = Color(hex: 0xF3E4C2)
+        RoundedRectangle(cornerRadius: 6)
+            .fill(parchment)
+        RoundedRectangle(cornerRadius: 6)
+            .fill(color.opacity(isPlaying ? 0.26 : 0.12))
+        Rectangle()
+            .fill(color.blended(with: Color(hex: 0x3D2712), amount: 0.3))
+            .frame(width: 5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        RoundedRectangle(cornerRadius: 6)
+            .strokeBorder(color.blended(with: Color(hex: isPlaying ? 0x3D2712 : 0x6B4423), amount: isPlaying ? 0.3 : 0.6),
+                          lineWidth: isPlaying ? 2 : 1)
+    }
+
+    @ViewBuilder
+    private func glassTile(color: Color, isPlaying: Bool, scifi: Bool) -> some View {
         RoundedRectangle(cornerRadius: 14)
             .fill(scifi ? Color(hex: 0x081E36).opacity(0.35) : theme.tileBase)
         RoundedRectangle(cornerRadius: 14)
@@ -178,6 +204,7 @@ struct TrackRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(sound.name)
                             .font(size == .l ? Font.headline : Font.subheadline.weight(.semibold))
+                            .italic(theme == .academia)
                             .lineLimit(1)
                         if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
                             HStack(spacing: 4) {

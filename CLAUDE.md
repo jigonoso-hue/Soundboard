@@ -67,6 +67,13 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 - Wrapping rows of chips (tags, icon categories, themes, accent colours,
   colour swatches) use FlowLayout on iPhone (`AnyLayout.wrappedInScroll`)
   rather than a sideways ScrollView.
+- Theme art (planets, moons, hourglasses, atoms, ornaments) never sits behind
+  buttons or titles: big pieces stay out of the header row (y ≥ 170) and off
+  narrow pictures (under 560 wide: sidebars, phones), panel ornaments go on
+  the frame or in low corners, and buttons on a themed backdrop get a solid
+  sheet. Same rule in `theme-art.js` and `SpaceTheme.swift`/`AcademiaTheme.swift`.
+- Each theme has its own danger red (`--danger`, `AppTheme.danger`), readable
+  at 4.5:1 as text on its pages and 3:1 behind a white icon.
 - Before calling UI work done, check it at phone size: run the Mac app at
   390×844 and check for overflow, overlaps and cramped rows, as well as at
   its usual size.
