@@ -40,10 +40,13 @@ jobs:
       # No Developer ID yet, so the app is ad-hoc signed ("-"). Without any
       # signature, macOS calls a downloaded app "damaged" and won't open it;
       # ad-hoc signed, it asks once ("Open Anyway") and then opens normally.
+      # Hardened runtime is for notarization; with an ad-hoc signature it can
+      # stop the app's own libraries from loading, so it's off until there's a
+      # Developer ID.
       - name: Build the DMGs (Apple Silicon and Intel)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --mac dmg --arm64 --x64 --publish never -c.mac.identity=-
+        run: npx electron-builder --mac dmg --arm64 --x64 --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false
 
       # Every app in every DMG must have a valid signature, or don't publish.
       - name: Check the signatures
