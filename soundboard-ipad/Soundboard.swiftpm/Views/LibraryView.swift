@@ -30,7 +30,7 @@ struct LibraryView: View {
                     ContentUnavailableView(
                         "No sounds yet",
                         systemImage: "speaker.wave.3",
-                        description: Text("Tap + to add audio from Files or a video from Photos, or choose + → Online to clip a sound from a YouTube video.")
+                        description: Text("Tap + to add audio from Files, record a sound, or pick a video from Photos.")
                     )
                     .padding(.top, 60)
                 }

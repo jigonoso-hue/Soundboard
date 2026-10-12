@@ -3,7 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var store = SoundStore()
     @StateObject private var player = SoundPlayer()
-    @StateObject private var youtube = YouTubeController()
+    @StateObject private var browser = OnlineBrowser()
     @StateObject private var ambience = AmbienceMixer()
     @StateObject private var bashes = BashStore()
     @StateObject private var bashPlayer = BashPlayer()
@@ -43,7 +43,7 @@ struct ContentView: View {
                 // On a full-width iPad the browser sits beside the board, like on the Mac.
                 if showBrowser && sizeClass == .regular {
                     Divider()
-                    YouTubePanel(controller: youtube)
+                    OnlinePanel(browser: browser)
                         .frame(minWidth: 320, maxWidth: .infinity)
                 }
             }
@@ -51,7 +51,7 @@ struct ContentView: View {
         // In Slide Over, narrow Split View or on iPhone it opens full screen instead.
         .fullScreenCover(isPresented: compactBrowser) {
             NavigationStack {
-                YouTubePanel(controller: youtube)
+                OnlinePanel(browser: browser)
                     .navigationTitle("Online")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -121,7 +121,7 @@ struct ContentView: View {
         .environmentObject(bashPlayer)
         .environmentObject(kits)
         .environmentObject(ui)
-        .environmentObject(youtube)
+        .environmentObject(browser)
         .environmentObject(themes)
         .environmentObject(live)
         .environmentObject(music)
@@ -155,9 +155,6 @@ struct ContentView: View {
             player.live = live
             bashPlayer.live = live
             music.attach(store: store, player: player, ambience: ambience, live: live)
-            youtube.onCaptured = { file, name, source in
-                _ = try store.addFile(at: file, name: name, source: source)
-            }
         }
         .onChange(of: store.sounds) { _, _ in ambience.syncWithLibrary() }
         .onChange(of: selection) { old, destination in
@@ -211,7 +208,7 @@ struct ContentView: View {
             store.recentlyAdded = []
             return
         }
-        // A full-screen YouTube browser would hide the sheet; wait until it closes.
+        // A full-screen browser would hide the sheet; wait until it closes.
         guard tagging == nil, !store.recentlyAdded.isEmpty, !compactBrowser.wrappedValue else { return }
         Task {
             try? await Task.sleep(nanoseconds: 700_000_000)

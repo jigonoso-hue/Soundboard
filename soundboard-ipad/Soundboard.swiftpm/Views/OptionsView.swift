@@ -1,5 +1,4 @@
 import SwiftUI
-import WebKit
 
 /// Options: appearance, playback, library and online settings, and storage.
 struct OptionsView: View {
@@ -11,7 +10,7 @@ struct OptionsView: View {
     @EnvironmentObject private var bashes: BashStore
     @EnvironmentObject private var kits: KitStore
     @EnvironmentObject private var ui: AppUI
-    @EnvironmentObject private var youtube: YouTubeController
+    @EnvironmentObject private var browser: OnlineBrowser
     @EnvironmentObject private var live: LiveSession
 
     @State private var storageText = "Measuring…"
@@ -150,16 +149,14 @@ struct OptionsView: View {
 
     private var online: some View {
         Section {
-            Label("Ads are always blocked", systemImage: "checkmark.shield")
-                .foregroundStyle(.secondary)
-            Button(signedOut ? "Signed out" : "Sign out of YouTube and clear its data", role: .destructive) {
+            Button(signedOut ? "Signed out" : "Sign out and clear browsing data", role: .destructive) {
                 confirmSignOut = true
             }
             .disabled(signedOut)
-            .confirmationDialog("Sign out of YouTube?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+            .confirmationDialog("Sign out and clear browsing data?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Sign Out and Clear", role: .destructive) { clearWebData() }
             } message: {
-                Text("This clears YouTube's cookies, history and cache in the Online browser. Your sounds aren't affected.")
+                Text("This signs you out of Google, YouTube and other sites in the Online browser and clears its history and cache. Your sounds aren't affected.")
             }
         } header: {
             Text("Online")
@@ -167,13 +164,7 @@ struct OptionsView: View {
     }
 
     private func clearWebData() {
-        let store = WKWebsiteDataStore.default()
-        store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
-            Task { @MainActor in
-                youtube.goHome()
-                signedOut = true
-            }
-        }
+        browser.clearData { signedOut = true }
     }
 
     // MARK: Storage

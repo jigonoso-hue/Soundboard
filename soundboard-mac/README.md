@@ -168,7 +168,7 @@ The YouTube browser always blocks ads. It works in three ways:
 - **Skips ads that still play:** they're muted, jumped to the end, and their **Skip** button is pressed.
 - **Hides banner and feed ads,** and blocks requests to ad and ad-tracking servers.
 
-The iPad app uses the same blocker; `tools/sync-adblock.py` copies it across after changes.
+The iPhone/iPad app has no clipper or ad blocker (App Store rules); its Online panel is a plain browser.
 
 ## Ambience
 

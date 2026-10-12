@@ -85,6 +85,7 @@ iPhone in portrait first (about 390×844 points, down to an iPhone SE at
 - iPhone only: Shake to roll (the motion sensors). Everywhere else, tap or hold Roll.
 - Recordings are saved as M4A on the iPad and WAV on the Mac (Chromium can't record AAC); both play everywhere.
 - Options: the iPad keeps playback and library settings on its Options screen; the Mac keeps them in the sidebar and the toolbar.
+- Online: the Mac app (personal use) has the YouTube clipper, full-audio saving and ad blocker. The iPhone/iPad app's Online panel is a plain browser that opens on Google with a YouTube bookmark (`Views/OnlinePanel.swift`): no saving audio, no ad blocking (App Store 5.2.3 and YouTube's terms). Don't bring them back to the phone apps.
 - Premium: the iPhone/iPad and Android apps have free limits and Premium (`PREMIUM.md`); the Mac app is always unlocked. A new broadcaster feature that's Premium gets the same lock on both phone apps (`Premium.require` / `Premium.shared.require`).
 
 ## Other rules
@@ -119,7 +120,7 @@ The original plan, for reference:
   the dice and the games carry over. Rebuild natively, as Capacitor plugins,
   what Electron's main process does: the sound library and files, recording,
   background audio (a foreground service, so a locked phone keeps playing),
-  the Live host and listener engines, local Wi-Fi discovery, YouTube capture.
+  the Live host and listener engines, local Wi-Fi discovery.
 - **Possibly a web listener first**: tune in from a browser with a code (online
   sessions only), served by the relay.
 - **Choose the permanent package ID up front and turn on Play App Signing**,
