@@ -125,6 +125,29 @@ struct KitChoice: Identifiable {
 
 // MARK: - Small shared pieces
 
+/// A sound's tags on one line: as many as fit, then "+N" for the rest (the
+/// Mac's tagLine/fitTagLine).
+struct TagLine: View {
+    let tags: [String]
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            ForEach(Array(stride(from: tags.count, through: 1, by: -1)), id: \.self) { shown in
+                HStack(spacing: 4) {
+                    ForEach(tags.prefix(shown), id: \.self) { TagChip(tag: $0, small: true) }
+                    if shown < tags.count {
+                        Text("+\(tags.count - shown)")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .fixedSize()
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// A small coloured pill for a tag.
 struct TagChip: View {
     let tag: String

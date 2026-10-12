@@ -45,6 +45,7 @@
           </button>
           <button id="tag-mode" class="mini" title="Whether a sound needs any or all of the selected tags">Match any</button>
         </div>
+        <input id="tag-search" class="tag-search" type="search" placeholder="Find a tag…" aria-label="Find a tag" autocomplete="off">
         <div id="tag-filters" class="tag-filters"></div>
         <form id="new-tag-form" class="new-tag">
           <input id="new-tag" maxlength="24" placeholder="+ New tag">
@@ -53,7 +54,7 @@
       </div>
 
       <div class="side-footer">
-        <label class="stack">Master volume <input id="master-volume" type="range" min="0" max="1" step="0.01" value="1"></label>
+        <label id="master-volume-home" class="stack">Master volume <input id="master-volume" type="range" min="0" max="1" step="0.01" value="1"></label>
         <label class="stack">Output
           <select id="output-device"><option value="">System default</option></select>
         </label>
@@ -66,6 +67,7 @@
 
     <section id="board">
       <header class="titlebar">
+        <button id="sidebar-toggle" class="sidebar-toggle" aria-pressed="false" aria-controls="sidebar" title="Hide the sidebar (⌘\)"><i data-icon="sidebar"></i></button>
         <input id="filter" type="search" placeholder="Search sounds and tags…  ⌘F">
         <select id="sort" title="Sort sounds">
           <option value="custom">My order</option>
@@ -73,6 +75,8 @@
           <option value="newest">Newest first</option>
           <option value="longest">Longest first</option>
         </select>
+        <!-- While the sidebar is hidden, the master volume slider moves here. -->
+        <label id="top-volume" class="top-volume hidden" title="Master volume"><i data-icon="speaker"></i></label>
         <span class="spacer"></span>
         <button id="add-menu-btn" class="primary" aria-haspopup="menu" aria-expanded="false" aria-controls="add-menu" title="Add sounds: files, record or YouTube"><i data-icon="plus"></i> Add</button>
         <button id="whisper-btn" class="hidden" title="Whisper: the next sound goes only to the listeners you tick"><i data-icon="speech"></i> <span id="whisper-label">Whisper</span></button>

@@ -64,9 +64,7 @@ struct SoundTile: View {
                         .multilineTextAlignment(book ? .center : .leading)
                         .shadow(color: book ? .black.opacity(0.6) : .clear, radius: 2, y: 1)
                     if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
-                        HStack(spacing: 4) {
-                            ForEach(sound.tagList.prefix(2), id: \.self) { TagChip(tag: $0, small: true) }
-                        }
+                        TagLine(tags: sound.tagList)
                     }
                     if let gap = sound.repeatGap {
                         HStack(spacing: 4) {
@@ -209,9 +207,7 @@ struct TrackRow: View {
                             .italic(theme == .academia)
                             .lineLimit(1)
                         if ui.showTagsOnTiles && !sound.tagList.isEmpty && size != .s {
-                            HStack(spacing: 4) {
-                                ForEach(sound.tagList.prefix(5), id: \.self) { TagChip(tag: $0, small: true) }
-                            }
+                            TagLine(tags: sound.tagList)
                         }
                     }
                     Spacer(minLength: 8)

@@ -422,6 +422,10 @@ enum IconData {
             IconShape(path: "M 6 5 L 16 12 L 6 19 Z"),
             IconShape(path: "M 18 5 L 18 19"),
         ]),
+        IconDefinition(id: "sidebar", name: "Sidebar", category: "Interface", shapes: [
+            IconShape(path: "M 5 4.5 L 19 4.5 C 20.105 4.5 21 5.395 21 6.5 L 21 17.5 C 21 18.605 20.105 19.5 19 19.5 L 5 19.5 C 3.895 19.5 3 18.605 3 17.5 L 3 6.5 C 3 5.395 3.895 4.5 5 4.5 Z"),
+            IconShape(path: "M 9 4.5 L 9 19.5"),
+        ]),
         IconDefinition(id: "bookmark", name: "Bookmark", category: "Interface", shapes: [
             IconShape(path: "M 6.5 3.5 L 17.5 3.5 L 17.5 20.5 L 12 16.5 L 6.5 20.5 Z"),
         ]),

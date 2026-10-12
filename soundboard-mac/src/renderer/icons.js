@@ -114,6 +114,7 @@
     ['stop', 'Stop', 'Interface', '<rect x="6" y="6" width="12" height="12" rx="1.5"/>'],
     ['previous', 'Previous', 'Interface', '<path d="M18 5l-10 7 10 7z"/><path d="M6 5v14"/>'],
     ['next', 'Next', 'Interface', '<path d="M6 5l10 7-10 7z"/><path d="M18 5v14"/>'],
+    ['sidebar', 'Sidebar', 'Interface', '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M9 4.5v15"/>'],
     ['bookmark', 'Bookmark', 'Interface', '<path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/>'],
     ['shuffle', 'Shuffle', 'Interface', '<path d="M3 7h3.5c2 0 3.2.9 4.3 2.6l2.4 4.8c1.1 1.7 2.3 2.6 4.3 2.6H21M3 17h3.5c1.4 0 2.4-.4 3.2-1.2M14.3 8.2c.8-.8 1.8-1.2 3.2-1.2H21"/><path d="M18 4l3 3-3 3M18 14l3 3-3 3"/>'],
     ['repeat', 'Repeat', 'Interface', '<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/>'],

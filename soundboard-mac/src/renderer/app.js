@@ -14,7 +14,7 @@ const playing = new Map(); // sound id -> Set<HTMLAudioElement>
 // ---------- Preferences (per-machine conveniences) ----------
 
 function loadPrefs() {
-  const defaults = { master: 1, noOverlap: false, outputDevice: '', browserOpen: false, view: 'all', tagFilter: [], tagMode: 'any', sort: 'custom', tagsOpen: false };
+  const defaults = { master: 1, noOverlap: false, outputDevice: '', browserOpen: false, view: 'all', tagFilter: [], tagMode: 'any', sort: 'custom', tagsOpen: false, sidebarHidden: false };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem('prefs') || '{}') }; } catch { return defaults; }
 }
 function savePrefs() {
@@ -289,7 +289,10 @@ function renderTagFilters() {
   }
   const all = Tags.list().all;
   const custom = new Set(all.filter((t) => !Tags.list().premade.includes(t)));
-  for (const tag of all) {
+  // The "Find a tag" box narrows the list (the active filters always stay in it).
+  const query = $('#tag-search').value.trim().toLowerCase();
+  const matches = (tag) => !query || tag.toLowerCase().includes(query) || prefs.tagFilter.includes(tag);
+  for (const tag of all.filter(matches)) {
     const row = document.createElement('div');
     row.className = 'tag-filter' + (prefs.tagFilter.includes(tag) ? ' active' : '') + (counts.get(tag) ? '' : ' unused');
     row.style.setProperty('--chip-color', Tags.color(tag));
@@ -331,7 +334,13 @@ function renderTagFilters() {
   btn.appendChild(count);
   btn.addEventListener('click', () => toggleTagFilter(UNTAGGED));
   row.appendChild(btn);
-  host.appendChild(row);
+  if (matches('untagged') || prefs.tagFilter.includes(UNTAGGED)) host.appendChild(row);
+  if (!host.children.length) {
+    const none = document.createElement('p');
+    none.className = 'muted small tag-none';
+    none.textContent = `No tags match “${query}”.`;
+    host.appendChild(none);
+  }
   $('#tag-mode').textContent = prefs.tagMode === 'all' ? 'Match all' : 'Match any';
   // Collapsible: hidden until opened, but always say when filters are on.
   const open = !!prefs.tagsOpen;
@@ -371,6 +380,13 @@ function toggleTagFilter(tag) {
 for (const btn of document.querySelectorAll('.side-nav .view-btn')) {
   btn.addEventListener('click', () => { prefs.view = btn.dataset.view; savePrefs(); render(); });
 }
+$('#tag-search').addEventListener('input', renderTagFilters);
+$('#tag-search').addEventListener('keydown', (e) => {
+  // Enter turns on the first match.
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  $('#tag-filters .tag-filter:not(.active) .tag-filter-btn')?.click();
+});
 $('#tags-toggle').addEventListener('click', () => { prefs.tagsOpen = !prefs.tagsOpen; savePrefs(); render(); });
 $('#tag-mode').addEventListener('click', () => { prefs.tagMode = prefs.tagMode === 'all' ? 'any' : 'all'; savePrefs(); render(); });
 $('#sort').value = prefs.sort;
@@ -388,20 +404,68 @@ $('#new-tag-form').addEventListener('submit', async (e) => {
   }
 });
 
-// Small tag chips shown on tiles and rows.
-function tagLine(sound, max) {
+// Small tag chips shown on tiles and rows: as many as fit on one line, then
+// "+N" for the rest (fitTagLine, re-run whenever the line changes size).
+function tagLine(sound) {
   const line = document.createElement('div');
   line.className = 'tag-line';
-  const tags = sound.tags || [];
-  for (const tag of tags.slice(0, max)) line.appendChild(Tags.chip(tag, { small: true }));
-  if (tags.length > max) {
-    const more = document.createElement('span');
-    more.className = 'muted small';
-    more.textContent = `+${tags.length - max}`;
-    line.appendChild(more);
-  }
+  for (const tag of sound.tags || []) line.appendChild(Tags.chip(tag, { small: true }));
+  const more = document.createElement('span');
+  more.className = 'tag-more muted small';
+  more.hidden = true;
+  line.appendChild(more);
+  fitObserver.observe(line);
   return line;
 }
+
+function fitTagLine(line) {
+  const chips = [...line.querySelectorAll('.chip')];
+  const more = line.querySelector('.tag-more');
+  if (!chips.length || !more) return;
+  for (const chip of chips) chip.hidden = false;
+  more.hidden = true;
+  const top = chips[0].offsetTop;
+  if (!chips.some((chip) => chip.offsetTop > top)) return;
+  // Hide the ones that wrapped, then make room for the "+N".
+  let shown = chips.filter((chip) => chip.offsetTop === top);
+  for (const chip of chips) chip.hidden = !shown.includes(chip);
+  more.hidden = false;
+  const label = () => { more.textContent = `+${chips.length - shown.length}`; };
+  label();
+  while (shown.length > 1 && more.offsetTop > top) {
+    shown.pop().hidden = true;
+    label();
+  }
+}
+
+// A tile: if its name and tags don't both fit, the name drops to one line,
+// and then the tags step aside, rather than overlapping.
+function fitTile(tile) {
+  const name = tile.querySelector(':scope > .tile-name');
+  if (!name) return;
+  const line = tile.querySelector(':scope > .tag-line');
+  name.style.webkitLineClamp = '';
+  if (line) { line.hidden = false; fitTagLine(line); }
+  const room = tile.clientHeight - parseFloat(getComputedStyle(tile).paddingBottom || '0');
+  const over = () => {
+    let bottom = 0;
+    for (const child of tile.children) {
+      if (child.hidden || getComputedStyle(child).position === 'absolute') continue;
+      bottom = Math.max(bottom, child.offsetTop + child.offsetHeight);
+    }
+    return bottom > room + 1;
+  };
+  if (over()) name.style.webkitLineClamp = '1';
+  if (over() && line) line.hidden = true;
+}
+
+const fitObserver = new ResizeObserver((entries) => {
+  for (const { target } of entries) {
+    if (target.classList.contains('tile')) fitTile(target);
+    else if (target.closest('.tile')) continue; // its tile fits it
+    else fitTagLine(target);
+  }
+});
 
 // Full sounds: a row with play button, name, tags, timer and progress.
 // onPlay: what clicking it does instead of playing it (a playlist starts from it).
@@ -425,7 +489,7 @@ function makeTrack(sound, { reorder = true, onPlay = null, gain = 1 } = {}) {
   const name = document.createElement('div');
   name.className = 'track-name';
   name.textContent = sound.name;
-  info.append(name, tagLine(sound, 5));
+  info.append(name, tagLine(sound));
 
   const meta = document.createElement('div');
   meta.className = 'track-meta';
@@ -535,7 +599,8 @@ function makeTile(sound, { reorder = true, gain = 1 } = {}) {
   name.className = 'tile-name';
   name.textContent = sound.name;
   tile.appendChild(name);
-  if ((sound.tags || []).length) tile.appendChild(tagLine(sound, 2));
+  if ((sound.tags || []).length) tile.appendChild(tagLine(sound));
+  fitObserver.observe(tile);
 
   if (sound.hotkey || sound.repeat || sound.gmOnly) {
     const badges = document.createElement('div');
@@ -782,6 +847,31 @@ api.onHotkey(play);
   new MutationObserver((changes) => { if (changes.some((c) => c.target !== bar)) fit(); })
     .observe(bar, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
 })();
+
+// ---------- Hiding the sidebar (Mac) ----------
+// The master volume slider moves to the top bar while the sidebar is hidden.
+// (On Android the sidebar is a drawer, opened from the top bar's menu button.)
+
+function applySidebar() {
+  const hidden = !!prefs.sidebarHidden && !document.documentElement.classList.contains('android');
+  $('#app').classList.toggle('sidebar-hidden', hidden);
+  (hidden ? $('#top-volume') : $('#master-volume-home')).appendChild($('#master-volume'));
+  $('#top-volume').classList.toggle('hidden', !hidden);
+  const button = $('#sidebar-toggle');
+  const label = hidden ? 'Show the sidebar' : 'Hide the sidebar';
+  button.title = `${label} (⌘\\)`;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-pressed', String(hidden));
+}
+$('#sidebar-toggle').addEventListener('click', () => {
+  prefs.sidebarHidden = !prefs.sidebarHidden;
+  savePrefs();
+  applySidebar();
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === '\\') { e.preventDefault(); $('#sidebar-toggle').click(); }
+});
+applySidebar();
 
 // ---------- Edit dialog ----------
 

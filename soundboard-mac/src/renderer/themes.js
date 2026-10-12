@@ -141,7 +141,8 @@ const Themes = (() => {
   }
 
   function clearArt(el) {
-    if (!el.dataset.artKey) return;
+    // (paintAll(true) has already dropped artKey, so check the picture too.)
+    if (!el.dataset.artKey && !el.style.backgroundImage) return;
     delete el.dataset.artKey;
     el.style.backgroundImage = '';
     el.style.backgroundSize = '';

@@ -4,7 +4,7 @@ A desktop soundboard for your Mac. You can:
 
 - **Add your own sounds.** Click **+ Add → Audio or video files…** or drag audio files (mp3, wav, m4a, aac, ogg, opus, flac, aiff, caf, webm) onto the board. You're asked to tag them as they're added.
 - **Clips and Full Sounds.** Short effects are *Clips*, shown as tiles. Songs and long tracks are *Full Sounds*, shown as rows with a play button, a timer and a progress bar.
-- **Tags and filters.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic, creature, weather, nature, tavern, music, victory, sad, mystery) plus your own. A sound can have several. Filter from the sidebar by one or more tags, search names and tags, and sort.
+- **Tags and filters.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic, creature, weather, nature, tavern, music, victory, sad, mystery) plus your own. A sound can have several, and tiles and rows show as many as fit on one line, then "+N". Filter from the sidebar by one or more tags (with **Find a tag** to search the list), search names and tags, and sort.
 - **Scene Kits.** Collect clips, full songs and Bashes from your whole library into a kit for a scene, such as "Tavern Brawl" or "Dragon's Lair", and open it from the sidebar.
 - **Bashes.** Named groups of sounds that play together with one click, each with a cover image or icon. Every Bash opens in its own editor window, with a timeline for choosing when each sound starts and layering sounds.
 - **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer, such as a song you saved from YouTube.
@@ -49,12 +49,12 @@ The app plays the selected range once and records the video's audio while it pla
 
 ## Layout
 
-- **Sidebar (left):**
+- **Sidebar (left):** the button at the start of the top bar (or **⌘\\**) hides and shows it. While it's hidden, the **Master volume** slider moves into the top bar.
   - **Scene Kits**, with an item count for each.
   - **Library** views: **All**, **Clips**, **Full Sounds**, **Bashes**.
-  - **Tags**, a dropdown: click **Tags** to show or hide the tag filters. When it's collapsed with filters on, it shows how many are active (for example "Tags · 2 active").
+  - **Tags**, a dropdown: click **Tags** to show or hide the tag filters. **Find a tag** narrows the list as you type (Enter turns on the first match). When it's collapsed with filters on, it shows how many are active (for example "Tags · 2 active").
   - **Master volume**, **Output** device and **Restart instead of overlap**.
-- **Top bar:** search, sort, **+ Add** (a menu: **Audio or video files…**, **Record…** and **YouTube**), **Dice** (in green, so it's easy to find), **Live** and **■ Stop All**.
+- **Top bar:** the sidebar button, search, sort, **+ Add** (a menu: **Audio or video files…**, **Record…** and **YouTube**), **Dice** (in green, so it's easy to find), **Live** and **■ Stop All**.
 - **Main area:** Bashes, then Clips (tiles), then Full Sounds (rows).
 - **Ambience:** a mixer docked at the bottom. Click its title to collapse it.
 

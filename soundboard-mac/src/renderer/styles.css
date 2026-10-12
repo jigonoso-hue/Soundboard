@@ -556,6 +556,9 @@ dialog label.inline input[type="checkbox"] { width: auto; }
 /* ---------- Tile tag line ---------- */
 
 .tag-line { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; overflow: hidden; max-height: 20px; }
+.tag-line > [hidden], .tag-line[hidden] { display: none; }
+.tag-more { flex: none; line-height: 16px; }
+.tile > .tile-name, .tile > .tag-line { flex-shrink: 0; }
 .tile .tag-line { margin-top: 2px; }
 .tile { justify-content: flex-start; gap: 4px; }
 .tile .tile-badges { margin-top: auto; }
@@ -1850,7 +1853,8 @@ body.handout-open .game-screen { visibility: hidden; }
    moves under its name so the name has room. */
 .kit-section { container-type: inline-size; }
 @container (max-width: 460px) {
-  .kit-section-head { flex-wrap: wrap; }
+  /* Only a header with a player wraps (the player takes its own row). */
+  .kit-section-head:has(.section-player) { flex-wrap: wrap; }
   .section-player { order: 10; flex: 0 0 100%; }
   .section-player .player-btn { flex: 1; justify-content: center; min-height: 32px; }
   .player-transport { flex: 1.6; margin-left: 6px; }
@@ -1942,3 +1946,19 @@ body.handout-open .game-screen { visibility: hidden; }
   font-weight: 600;
 }
 #dice-btn:hover:not(:disabled) { background: linear-gradient(160deg, #1b9a55, #0f7340); border-color: #0b5a31; color: #fff; }
+
+/* Hiding the sidebar (Mac): a toggle at the start of the top bar; the master
+   volume slider moves into the top bar while it's hidden. */
+.sidebar-toggle { flex: none; padding-left: 9px; padding-right: 9px; }
+#app.sidebar-hidden #sidebar { display: none; }
+html:not(.android) #app.sidebar-hidden .titlebar { padding-left: 84px; } /* the window's traffic lights */
+.top-volume { display: flex; align-items: center; gap: 6px; flex: 0 1 150px; min-width: 96px; color: var(--muted); }
+.top-volume.hidden { display: none; }
+.top-volume input { flex: 1; min-width: 56px; width: auto; }
+.has-backdrop .titlebar .top-volume { color: #f4ecdc; }
+.android .sidebar-toggle, .android .top-volume { display: none !important; }
+
+/* Finding a tag in the sidebar's Tags list. */
+.tag-search { margin: 2px 10px 6px; width: calc(100% - 20px); font-size: 12px; padding: 5px 8px; }
+#tags-section.collapsed .tag-search { display: none; }
+.tag-none { padding: 4px 12px; margin: 0; }

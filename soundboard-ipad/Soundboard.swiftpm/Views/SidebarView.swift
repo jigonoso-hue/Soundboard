@@ -9,6 +9,8 @@ struct SidebarView: View {
     @EnvironmentObject private var themes: ThemeSettings
     @Binding var selection: Destination?
     @State private var newTag = ""
+    /// "Find a tag": narrows the Tags list (the active filters always stay in it).
+    @State private var tagSearch = ""
     @State private var deletingTag: String?
     @State private var deletingKit: SoundKit?
 
@@ -158,8 +160,19 @@ struct SidebarView: View {
 
     private var tagFilters: some View {
         VStack(alignment: .leading, spacing: 10) {
+            TextField("Find a tag", text: $tagSearch)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+            let query = tagSearch.trimmingCharacters(in: .whitespaces).lowercased()
+            let shownTags = store.allTags.filter { query.isEmpty || $0.lowercased().contains(query) || ui.tagFilter.contains($0) }
+            if shownTags.isEmpty {
+                Text("No tags match “\(tagSearch)”.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             FlowLayout(spacing: 6) {
-                ForEach(store.allTags, id: \.self) { tag in
+                ForEach(shownTags, id: \.self) { tag in
                     let used = store.sounds.filter { $0.tagList.contains(tag) }.count
                     Button {
                         ui.toggleTag(tag)
