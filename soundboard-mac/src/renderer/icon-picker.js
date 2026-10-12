@@ -72,7 +72,7 @@ const IconPicker = (() => {
     searchBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
     const tabs = document.createElement('div');
     tabs.className = 'ip-tabs';
-    for (const name of ['All', ...Icons.categories]) {
+    for (const name of ['All', ...Icons.artCategories]) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = name;
@@ -88,7 +88,7 @@ const IconPicker = (() => {
     function renderGrid() {
       for (const b of tabs.children) b.classList.toggle('active', b.dataset.category === category);
       grid.textContent = '';
-      const matches = Icons.list.filter((i) => (category === 'All' || i.category === category)
+      const matches = Icons.art.filter((i) => (category === 'All' || i.category === category)
         && (!search || i.name.toLowerCase().includes(search) || i.id.includes(search) || i.category.toLowerCase().includes(search)));
       for (const icon of matches) {
         const b = document.createElement('button');
@@ -100,7 +100,7 @@ const IconPicker = (() => {
           b.style.background = state.color;
           b.style.color = state.iconColor;
         }
-        b.appendChild(Icons.el(icon.id, { size: 22 }));
+        b.appendChild(Icons.el(icon.id, { size: 24, art: true }));
         b.addEventListener('click', () => { state.icon = icon.id; changed(); });
         grid.appendChild(b);
       }
@@ -112,7 +112,12 @@ const IconPicker = (() => {
       }
     }
 
-    root.append(bg.row, fg.row, tools, grid);
+    // The credit the icons' licence (CC BY 3.0) asks for.
+    const credit = document.createElement('p');
+    credit.className = 'ip-credit muted small';
+    credit.textContent = `Icons by ${Icons.artists.join(', ')} at game-icons.net (CC BY 3.0).`;
+
+    root.append(bg.row, fg.row, tools, grid, credit);
     syncColors();
     renderGrid();
     return { element: root, value: () => ({ ...state }) };

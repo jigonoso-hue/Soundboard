@@ -1924,3 +1924,4 @@ body.handout-open .game-screen { visibility: hidden; }
 .premium-terms { margin: 8px 0 0; line-height: 1.45; }
 .premium-legal { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 0; }
 .premium-link { min-height: 44px; padding: 0 10px; text-decoration: underline; color: var(--muted); }
+.ip-credit { margin: 10px 2px 0; line-height: 1.4; }

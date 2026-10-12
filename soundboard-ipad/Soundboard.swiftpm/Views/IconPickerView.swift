@@ -26,7 +26,7 @@ struct IconPickerView: View {
 
             // iPhone: the categories wrap onto more lines, all in view.
             (sizeClass == .compact ? AnyLayout(FlowLayout(spacing: 6)) : AnyLayout(HStackLayout(spacing: 6))).wrappedInScroll(sizeClass != .compact) {
-                    ForEach(["All"] + Icons.categories, id: \.self) { name in
+                    ForEach(["All"] + Icons.artCategories, id: \.self) { name in
                         Button {
                             category = name
                         } label: {
@@ -47,7 +47,7 @@ struct IconPickerView: View {
                     Button {
                         icon = definition.id
                     } label: {
-                        AppIcon(id: definition.id, size: 24)
+                        AppIcon(id: definition.id, size: 26, art: true)
                             .foregroundStyle(selected ? (Color(hexString: iconColor) ?? .white) : Color.primary.opacity(0.85))
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .background(
@@ -69,12 +69,16 @@ struct IconPickerView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            // The credit the icons' licence (CC BY 3.0) asks for.
+            Text("Icons by \(Icons.artists.joined(separator: ", ")) at game-icons.net (CC BY 3.0).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
     private var matches: [IconDefinition] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return IconData.all.filter { definition in
+        return IconData.art.filter { definition in
             (category == "All" || definition.category == category)
                 && (query.isEmpty || definition.name.lowercased().contains(query) || definition.id.contains(query)
                     || definition.category.lowercased().contains(query))

@@ -92,6 +92,8 @@ test('icons must come from the icon set', () => {
   assert.equal(store.update(kit.id, { icon: 'dragon', iconColor: 'red' }).iconColor, '#ffffff');
   assert.equal(store.get(kit.id).icon, 'dragon');
   assert.equal(store.update(kit.id, { icon: '<svg onload=x>' }).icon, 'mug');
+  // Picture icons from game-icons.net that have no line version are allowed too.
+  assert.equal(store.update(kit.id, { icon: 'wolf-head' }).icon, 'wolf-head');
 });
 
 test('ambience sections hold layers, not items', () => {

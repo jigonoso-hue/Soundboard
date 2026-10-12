@@ -35,7 +35,7 @@ The iPad version of the soundboard: a native SwiftUI app with the same features 
   - **Highlight colour:** pick one of the presets or any colour.
   - **Settings:** volumes, sorting, tag options, whether to ask for tags after adding sounds, and signing out of YouTube.
   - **Storage:** shows how much space your sounds use.
-- **Icons.** The same 100 tabletop-game icons as the Mac app, for bash covers and scene kits. Search them, browse by group, and pick any background colour and icon colour.
+- **Icons.** The same 343 tabletop-game picture icons as the Mac app (from game-icons.net, by Lorc, Delapouite and other artists, CC BY 3.0), for bash covers and scene kits. Search them, browse by group, and pick any background colour and icon colour.
 - **Your own sounds.** Tap **+** to add audio from the Files app, or pick a video from Files or Photos and trim out the part you want.
 - **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer.
 - **Save full audio from YouTube.** Save a whole video's audio, such as a song or a tavern mix, to your library.
@@ -149,7 +149,7 @@ Sounds are stored in the app's Documents/Sounds folder. Deleting the app deletes
 | `Model/Sound.swift` | Sound, kinds, tag colours |
 | `Model/Bash.swift` | Bashes and their storage (`bashes.json` + `covers/`) |
 | `Model/SceneKit.swift` | Scene kits, sections and layout (`kits.json`) |
-| `Model/Icons.swift`, `Model/IconData.swift` | The icon set. `IconData.swift` is generated from the Mac app's icons by `tools/generate-ios-icons.py` |
+| `Model/Icons.swift`, `Model/IconData.swift` | The icon set. `IconData.swift` is generated from the Mac app's icons (and picture icons) by `tools/generate-ios-icons.py` |
 | `Audio/BashPlayer.swift` | Bash playback, timed on the audio clock |
 | `Audio/SoundPlayer.swift` | Playback, volumes, progress |
 | `Audio/AudioFiles.swift` | Streaming .m4a encoding of captures and trimming audio out of videos |

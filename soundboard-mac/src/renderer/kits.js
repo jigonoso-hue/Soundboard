@@ -66,7 +66,7 @@ const Kits = (() => {
     const el = document.createElement('span');
     el.className = `kit-badge ${size}`;
     el.style.setProperty('--kit-color', kit.color);
-    el.appendChild(Icons.el(kit.icon, { size: size === 'large' ? 44 : 15, color: kit.iconColor || '#ffffff' }));
+    el.appendChild(Icons.el(kit.icon, { size: size === 'large' ? 44 : 15, color: kit.iconColor || '#ffffff', art: true }));
     return el;
   }
 

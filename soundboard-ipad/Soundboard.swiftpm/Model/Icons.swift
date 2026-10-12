@@ -13,10 +13,14 @@ struct IconDefinition: Identifiable {
     let name: String
     let category: String
     let shapes: [IconShape]
+    /// Who drew it (picture icons from game-icons.net).
+    var artist: String? = nil
 }
 
-/// The app's own 100-icon set (the same icons as the Mac app), used for the
-/// interface and for decorating bashes and scene kits.
+/// The app's icons (the same as the Mac app's icons.js): line icons for the
+/// interface, and picture icons from game-icons.net (CC BY 3.0) for bash
+/// covers and scene kits. The picture set reuses the original tabletop line
+/// icons' ids, so older bashes and kits show the art.
 enum Icons {
     static let fallback = "sparkle"
 
@@ -32,10 +36,30 @@ enum Icons {
         return out
     }()
 
+    static let artById: [String: IconDefinition] = {
+        var map: [String: IconDefinition] = [:]
+        for icon in IconData.art { map[icon.id] = icon }
+        return map
+    }()
+
+    /// The picture icons' categories, for the icon picker.
+    static let artCategories: [String] = {
+        var out: [String] = []
+        for icon in IconData.art where !out.contains(icon.category) { out.append(icon.category) }
+        return out
+    }()
+
+    /// The picture icons' artists, for the credit their licence asks for.
+    static let artists: [String] = {
+        var out: [String] = []
+        for icon in IconData.art { if let artist = icon.artist, !out.contains(artist) { out.append(artist) } }
+        return out
+    }()
+
     /// A known icon id; old emoji are mapped to their icon.
     static func resolve(_ id: String?) -> String {
         guard let id else { return fallback }
-        if byId[id] != nil { return id }
+        if byId[id] != nil || artById[id] != nil { return id }
         if let mapped = IconData.fromEmoji[id] { return mapped }
         return fallback
     }
@@ -53,6 +77,22 @@ enum Icons {
         }
         return map
     }()
+
+    static let artParsed: [String: [Parsed]] = {
+        var map: [String: [Parsed]] = [:]
+        for icon in IconData.art {
+            map[icon.id] = icon.shapes.map { Parsed(path: parse($0.path), fill: $0.fill, opacity: $0.opacity) }
+        }
+        return map
+    }()
+
+    /// The shapes to draw for `id`: the picture version when `art` is set and
+    /// there is one, otherwise the line icon (or the picture, for picture-only icons).
+    static func shapes(for id: String?, art: Bool) -> [Parsed] {
+        let key = resolve(id)
+        if art, let picture = artParsed[key] { return picture }
+        return parsed[key] ?? artParsed[key] ?? []
+    }
 
     /// Reads "M x y L x y C x1 y1 x2 y2 x y Z".
     static func parse(_ d: String) -> Path {
@@ -100,9 +140,11 @@ struct AppIcon: View {
     let id: String?
     var size: CGFloat? = 18
     var lineWidth: CGFloat = 1.8
+    /// The picture version, where there is one (bash covers, scene kits).
+    var art = false
 
     var body: some View {
-        let shapes = Icons.parsed[Icons.resolve(id)] ?? []
+        let shapes = Icons.shapes(for: id, art: art)
         Canvas { context, canvasSize in
             let side = min(canvasSize.width, canvasSize.height)
             let scale = side / 24
@@ -143,7 +185,7 @@ struct IconBadge: View {
             )
             .background(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(Color.black))
             .overlay(
-                AppIcon(id: icon, size: size * 0.58, lineWidth: size >= 48 ? 1.6 : 1.9)
+                AppIcon(id: icon, size: size * 0.62, lineWidth: size >= 48 ? 1.6 : 1.9, art: true)
                     .foregroundStyle(Color(hexString: iconColor) ?? .white)
                     .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
             )

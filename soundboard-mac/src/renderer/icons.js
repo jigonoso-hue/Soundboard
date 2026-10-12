@@ -1,6 +1,8 @@
-// The app's own icon set: 100 line icons on a 24×24 grid, drawn with
-// `currentColor` so they take any colour. Used for the interface and for
-// customizing bashes and scene kits.
+// The app's icons, drawn with `currentColor` so they take any colour:
+// - line icons on a 24×24 grid, for the interface;
+// - picture icons from game-icons.net (game-icons.js, CC BY 3.0), for bash
+//   covers and scene kits: el(id, { art: true }). The picture set reuses the
+//   original tabletop line icons' ids, so older bashes and kits show the art.
 (function (root) {
   const F = 'class="f"'; // filled detail
   // [id, name, category, svg markup]
@@ -134,8 +136,12 @@
   const byId = new Map(ALL.map(([id, name, category, svg]) => [id, { id, name, category, svg }]));
   const CATEGORIES = [...new Set(ALL.map((i) => i[2]))];
 
-  // Icons offered for decorating bashes and scene kits (interface icons included).
-  const PICKABLE = ALL.map(([id]) => id);
+  // The picture icons, offered for decorating bashes and scene kits.
+  /* global GameIcons */
+  const ART = typeof GameIcons !== 'undefined' ? GameIcons : (typeof require !== 'undefined' ? require('./game-icons.js') : []);
+  const artById = new Map(ART.map(([id, name, category, artist, d]) => [id, { id, name, category, artist, d, art: true }]));
+  const ART_CATEGORIES = [...new Set(ART.map((i) => i[2]))];
+  const PICKABLE = ART.map(([id]) => id);
 
   // Old emoji choices → icon ids, for bashes and kits made before the icon set.
   const FROM_EMOJI = {
@@ -146,18 +152,24 @@
   };
 
   function resolve(id) {
-    if (byId.has(id)) return id;
+    if (byId.has(id) || artById.has(id)) return id;
     if (FROM_EMOJI[id]) return FROM_EMOJI[id];
     return 'sparkle';
   }
 
   // An <svg> element for icon `id`. `size` in px; colour comes from CSS
   // `color` unless `color` is given.
-  function el(id, { size = 18, color, title, className = '' } = {}) {
-    const icon = byId.get(resolve(id));
+  // `art`: the picture version where there is one (bash covers, scene kits).
+  function el(id, { size = 18, color, title, className = '', art = false } = {}) {
+    const key = resolve(id);
+    const picture = artById.get(key);
     const span = document.createElement('span');
     span.className = `icon ${className}`.trim();
-    span.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon.svg}</svg>`;
+    if (picture && (art || !byId.has(key))) {
+      span.innerHTML = `<svg viewBox="0 0 512 512" width="${size}" height="${size}" fill="currentColor" aria-hidden="true"><path d="${picture.d}"/></svg>`;
+    } else {
+      span.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${byId.get(key).svg}</svg>`;
+    }
     if (color) span.style.color = color;
     if (title) { span.title = title; span.setAttribute('role', 'img'); span.setAttribute('aria-label', title); }
     return span;
@@ -185,7 +197,17 @@
     }
   }
 
-  const api = { list: ALL.map(([id, name, category]) => ({ id, name, category })), categories: CATEGORIES, pickable: PICKABLE, get: (id) => byId.get(resolve(id)), resolve, el, set, hydrate, FROM_EMOJI };
+  const api = {
+    list: ALL.map(([id, name, category]) => ({ id, name, category })),
+    categories: CATEGORIES,
+    // The picture icons for the icon picker, and their artists (for the credit).
+    art: ART.map(([id, name, category, artist]) => ({ id, name, category, artist })),
+    artCategories: ART_CATEGORIES,
+    artists: [...new Set(ART.map((i) => i[3]))],
+    pickable: PICKABLE,
+    get: (id) => byId.get(resolve(id)) || artById.get(resolve(id)),
+    resolve, el, set, hydrate, FROM_EMOJI,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else {
     root.Icons = api;

@@ -201,7 +201,7 @@
     const icon = bash.cover.icon || ICONS[0];
     const color = bash.cover.color || ICON_COLORS[0];
     el.style.background = `linear-gradient(140deg, ${color}, color-mix(in srgb, ${color} 45%, #111))`;
-    el.appendChild(Icons.el(icon, { size: 24, color: bash.cover.iconColor || '#ffffff', className: 'cover-icon' }));
+    el.appendChild(Icons.el(icon, { size: 24, color: bash.cover.iconColor || '#ffffff', className: 'cover-icon', art: true }));
   }
 
   // Min/max peaks for drawing a waveform `columns` wide.

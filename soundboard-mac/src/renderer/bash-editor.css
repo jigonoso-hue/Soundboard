@@ -161,6 +161,11 @@ body.editor { display: flex; flex-direction: column; height: 100vh; }
   gap: 8px;
 }
 
+/* Phones: the cover picker spans the screen instead of running off its edge. */
+@media (max-width: 560px) {
+  .popover { left: 8px; right: 8px; width: auto; top: 64px; max-height: calc(100vh - 76px); }
+}
+
 .cover-upload { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 
 /* Repeats */

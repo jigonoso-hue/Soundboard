@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""Converts the Mac app's icon set (soundboard-mac/src/renderer/icons.js) into
-Swift data for the iPad app (soundboard-ipad/.../Model/IconData.swift).
+"""Converts the Mac app's icon set (soundboard-mac/src/renderer/icons.js) and
+its picture icons from game-icons.net (game-icons.js, made by
+tools/import-game-icons.py) into Swift data for the iPad app
+(soundboard-ipad/.../Model/IconData.swift). Picture icons are scaled from
+their 512×512 grid to the same 24×24 grid.
 
 Every SVG shape (path, circle, ellipse, rect) becomes an absolute path using
 only M, L, C and Z, so the Swift side needs a very small parser.
@@ -86,7 +89,7 @@ def arc_to_cubics(x1, y1, rx, ry, phi, large, sweep, x2, y2):
     return out
 
 
-def normalize_path(d, tx=0.0, ty=0.0):
+def normalize_path(d, tx=0.0, ty=0.0, scale=1.0, places=3):
     toks = tokenize(d)
     i = 0
     out = []
@@ -112,7 +115,7 @@ def normalize_path(d, tx=0.0, ty=0.0):
         return int(float(t))
 
     def emit(c, *pts):
-        out.append(c + ' ' + ' '.join(f'{v + (tx if k % 2 == 0 else ty):.3f}'.rstrip('0').rstrip('.') for k, v in enumerate(pts)) if pts else c)
+        out.append(c + ' ' + ' '.join(f'{(v + (tx if k % 2 == 0 else ty)) * scale:.{places}f}'.rstrip('0').rstrip('.') for k, v in enumerate(pts)) if pts else c)
 
     while i < len(toks):
         if re.match(r'[A-Za-z]', toks[i]):
@@ -259,6 +262,16 @@ def main():
             lines.append(f'            {p},')
         lines.append('        ]),')
     lines += ['    ]', '']
+    # The picture icons (game-icons.net, CC BY 3.0), filled, on the 24×24 grid.
+    art = json.loads(subprocess.check_output(['node', '-e', f"console.log(JSON.stringify(require({json.dumps(str(ICONS_JS.parent / 'game-icons.js'))})))"]))
+    lines.append('    /// Picture icons for bash covers and scene kits, from game-icons.net')
+    lines.append(f"    /// by {', '.join(sorted({a[3] for a in art}))} (CC BY 3.0).")
+    lines.append('    static let art: [IconDefinition] = [')
+    for icon_id, name, category, artist, d in art:
+        path = normalize_path(d, scale=24 / 512, places=2)
+        lines.append(f'        IconDefinition(id: {swift_string(icon_id)}, name: {swift_string(name)}, category: {swift_string(category)}, '
+                     f'shapes: [IconShape(path: {swift_string(path)}, fill: true)], artist: {swift_string(artist)}),')
+    lines += ['    ]', '']
     # Same emoji → icon map as the Mac app, for consistency in shared data.
     emoji = json.loads(subprocess.check_output(['node', '-e', f"console.log(JSON.stringify(require({json.dumps(str(ICONS_JS))}).FROM_EMOJI))"]))
     lines.append('    static let fromEmoji: [String: String] = [')
@@ -266,7 +279,7 @@ def main():
         lines.append(f'        {swift_string(k)}: {swift_string(v)},')
     lines += ['    ]', '}', '']
     OUT.write_text('\n'.join(lines))
-    print(f'Wrote {len(data)} icons to {OUT.relative_to(ROOT)}')
+    print(f'Wrote {len(data)} icons and {len(art)} picture icons to {OUT.relative_to(ROOT)} ({OUT.stat().st_size // 1024} KB)')
 
 
 if __name__ == '__main__':
