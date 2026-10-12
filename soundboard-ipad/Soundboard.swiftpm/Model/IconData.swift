@@ -414,6 +414,21 @@ enum IconData {
         IconDefinition(id: "stop", name: "Stop", category: "Interface", shapes: [
             IconShape(path: "M 7.5 6 L 16.5 6 C 17.328 6 18 6.672 18 7.5 L 18 16.5 C 18 17.328 17.328 18 16.5 18 L 7.5 18 C 6.672 18 6 17.328 6 16.5 L 6 7.5 C 6 6.672 6.672 6 7.5 6 Z"),
         ]),
+        IconDefinition(id: "previous", name: "Previous", category: "Interface", shapes: [
+            IconShape(path: "M 18 5 L 8 12 L 18 19 Z"),
+            IconShape(path: "M 6 5 L 6 19"),
+        ]),
+        IconDefinition(id: "next", name: "Next", category: "Interface", shapes: [
+            IconShape(path: "M 6 5 L 16 12 L 6 19 Z"),
+            IconShape(path: "M 18 5 L 18 19"),
+        ]),
+        IconDefinition(id: "bookmark", name: "Bookmark", category: "Interface", shapes: [
+            IconShape(path: "M 6.5 3.5 L 17.5 3.5 L 17.5 20.5 L 12 16.5 L 6.5 20.5 Z"),
+        ]),
+        IconDefinition(id: "shuffle", name: "Shuffle", category: "Interface", shapes: [
+            IconShape(path: "M 3 7 L 6.5 7 C 8.5 7 9.7 7.9 10.8 9.6 L 13.2 14.4 C 14.3 16.1 15.5 17 17.5 17 L 21 17 M 3 17 L 6.5 17 C 7.9 17 8.9 16.6 9.7 15.8 M 14.3 8.2 C 15.1 7.4 16.1 7 17.5 7 L 21 7"),
+            IconShape(path: "M 18 4 L 21 7 L 18 10 M 18 14 L 21 17 L 18 20"),
+        ]),
         IconDefinition(id: "repeat", name: "Repeat", category: "Interface", shapes: [
             IconShape(path: "M 17 2 L 20 5 L 17 8"),
             IconShape(path: "M 4 11 L 4 9 C 4 6.791 5.791 5 8 5 L 20 5"),

@@ -105,7 +105,7 @@ While a kit with an ambience section is open, the ambience strip at the bottom o
 
 Click **Done** to lock the layout, so nothing moves by accident during a session.
 
-**Playlists.** In a sound section's **⋯** menu, choose **Play songs one after another**. Its songs (full sounds) then play in order, each crossfading into the next a few seconds before it ends, and start again from the top after the last. **Play** / **Stop** sits in the section's title bar, and clicking a song starts the playlist from it. **Shuffle** (in the same menu) plays them in a random order, a new one each time round. **Stop All** stops the playlist too.
+**Player.** In a sound section's **⋯** menu, choose **Player**. Its title bar gets a player (in a narrow section, on its own row): **Play** plays its songs (full sounds) in order and **Shuffle** in a random order, a new one each time round. Each song crossfades into the next a few seconds before it ends, and after the last it starts again. While it plays, **Back** (the start of the song, or the one before), **Stop** and **Next** work. Clicking a song starts the player from it. In a section with no songs, **Shuffle** plays a random sound or bash, never the same one twice in a row. **Stop All** stops the player too.
 
 **Scene changes.** In **Edit**, tick **Start its music and ambience when opened**. Opening the kit is then a scene change: the music and ambience that are playing fade out over 3 seconds while the kit's first playlist and its ambience layers fade in: the layers you had on when you last left the kit (the first time, all of them). Listeners hear the same fades.
 
@@ -116,7 +116,6 @@ Click **Done** to lock the layout, so nothing moves by accident during a session
 - **Item size:** Small, Medium or Large.
 - **Meant for:** sets which items the add panel shows first (clips, full sounds, Bashes or anything).
 - **Volume slider:** a slider under the title that adjusts everything played from the section, including what's already playing.
-- **Shuffle button** (sound sections): plays a random sound or Bash from the section, never the same one twice in a row.
 - **Remove section.**
 
 **Kit options:** **Edit** (name, icon, icon colour, background colour), **Duplicate** and **Delete** are at the top of the kit, and on its right-click menu in the sidebar. You can also add a single sound with **Add to Scene Kit…** in its editor, or a Bash from its **⋯** menu. These go into the section that suits them.

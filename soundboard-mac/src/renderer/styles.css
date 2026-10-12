@@ -1115,7 +1115,7 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
 
 /* Themed backdrops: buttons get a solid sheet, so the pictures behind
    (planets, moons, stars) never show through them. */
-.has-backdrop :is(#board, #sidebar, .kit-header, .kit-section-head) button:not(.primary):not(.plain):not(.chip):not(.danger):not(.block-title):not(.layer-name):not(.titlebar *):not(.tile *):not(.track *):not(.bash-card *):not(.layer *):not(.view-btn):not(.kit-btn):not(.bookmark-btn):not(.tag-filter-btn):not(#tags-toggle) {
+.has-backdrop :is(#board, #sidebar, .kit-header, .kit-section-head) button:not(.primary):not(.plain):not(.chip):not(.danger):not(.block-title):not(.layer-name):not(.titlebar *):not(.tile *):not(.track *):not(.bash-card *):not(.layer *):not(.view-btn):not(.kit-btn):not(.bookmark-btn):not(.tag-filter-btn):not(#tags-toggle):not(.player-btn.on) {
   background: color-mix(in srgb, var(--panel) 94%, var(--text));
 }
 
@@ -1764,7 +1764,12 @@ body.game-locked { overflow: hidden; }
 .dice-layer.rolling .dice-ui { opacity: 0; visibility: hidden; pointer-events: none; }
 
 /* ---- Playlists, scene autoplay, now-and-then layers ---- */
-.section-playlist.on { background: var(--accent-fill); color: var(--on-accent); border-color: transparent; }
+/* A section's player: Play and Shuffle, then Back, Stop and Next. In a narrow
+   section it takes its own row under the title. */
+.section-player { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.player-transport { display: inline-flex; gap: 2px; margin-left: 4px; }
+.section-player .player-btn { padding: 3px 8px; }
+.section-player .player-btn.on { background: var(--accent-fill); color: var(--on-accent); border-color: transparent; }
 .track.playlist-current { box-shadow: inset 3px 0 0 var(--accent); }
 .layer-every { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; opacity: 0.85; background: rgba(255,255,255,0.12); vertical-align: middle; white-space: nowrap; }
 .menu-note { max-width: 240px; padding: 6px 10px 8px; line-height: 1.35; }
@@ -1815,15 +1820,19 @@ body.handout-open .game-screen { visibility: hidden; }
 .track-volume { display: none; flex: 0 0 100%; align-items: center; gap: 8px; padding: 2px 4px 0 48px; color: var(--muted); }
 .track.playing .track-volume { display: flex; }
 .track-volume input[type="range"] { flex: 1; min-width: 0; accent-color: var(--tile-color); }
-/* A scene kit section's volume slider and shuffle button. */
+/* A scene kit section's volume slider. */
 .kit-section-volume { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
-.section-shuffle { margin-left: auto; padding: 2px 7px; }
-.section-shuffle + .section-add { margin-left: 0; }
 .kit-section-volume input[type="range"] { flex: 1; min-width: 0; }
 
 /* Narrow scene kit sections: icon-only header buttons, and a song's timer
    moves under its name so the name has room. */
 .kit-section { container-type: inline-size; }
+@container (max-width: 460px) {
+  .kit-section-head { flex-wrap: wrap; }
+  .section-player { order: 10; flex: 0 0 100%; }
+  .section-player .player-btn { flex: 1; justify-content: center; min-height: 32px; }
+  .player-transport { flex: 1.6; margin-left: 6px; }
+}
 @container (max-width: 320px) {
   .kit-section-head .icon-label { display: none; }
   .kit-section-head { gap: 6px; }

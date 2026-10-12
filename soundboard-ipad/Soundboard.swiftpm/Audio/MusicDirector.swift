@@ -146,6 +146,29 @@ final class MusicDirector: ObservableObject {
         publish()
     }
 
+    /// Next (step 1) or back (step -1) in a playing playlist. Back restarts the
+    /// song if it's more than 3 seconds in, like a music player.
+    func skip(_ sectionId: UUID, by step: Int) {
+        guard let list = lists[sectionId] else { return }
+        let fade = 0.6
+        if step > 0 {
+            list.failures = 0
+            advance(list, fade: fade)
+            return
+        }
+        let old = (id: list.current, token: list.token)
+        var restart = false
+        if let id = old.id, let token = old.token, let copy = player?.playingCopies.first(where: { $0.id == id && $0.token == token }) {
+            restart = copy.time > 3
+        }
+        let index = restart ? list.index : (list.index - 1 + list.order.count) % list.order.count
+        list.token = nil
+        startTrack(list, at: index, fadeIn: fade)
+        if let id = old.id, let token = old.token, player?.isPlaying(id, token: token) == true {
+            player?.release(id, token: token, fade: fade)
+        }
+    }
+
     /// Starts a playlist section (from one of its songs, if given), fading in
     /// over `fade` seconds and fading out what it was playing.
     /// seek: seconds into that song to start from (a bookmark).

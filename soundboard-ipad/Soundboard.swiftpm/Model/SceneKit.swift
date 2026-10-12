@@ -71,18 +71,19 @@ struct KitSection: Identifiable, Codable, Equatable {
     var layers: [KitLayer]
     /// The section's own volume slider: nil when the section doesn't show one.
     var volume: Double? = nil
-    /// Shows a shuffle button that plays a random item from the section.
+    /// Older kits' shuffle button; it's part of the player now (see isPlaylist).
     var shuffle: Bool? = nil
-    /// A playlist: its full sounds play one after another, crossfading.
+    /// The section's player (play, shuffle, back, stop, next): its full
+    /// sounds play one after another, crossfading.
     var playlist: Bool? = nil
-    /// The playlist plays in a random order.
+    /// The player's songs play in a random order (its Shuffle button).
     var playlistShuffle: Bool? = nil
 
     var isAmbience: Bool { kind == .ambience }
     /// Level applied to everything played from this section.
     var gain: Double { volume ?? 1 }
-    var hasShuffle: Bool { shuffle == true && !isAmbience }
-    var isPlaylist: Bool { playlist == true && !isAmbience }
+    /// The section shows a player (the menu's Player option).
+    var isPlaylist: Bool { (playlist == true || shuffle == true) && !isAmbience }
     var count: Int { isAmbience ? layers.count : items.count }
 
     /// Voice name for one of this section's layers in the ambience mixer.

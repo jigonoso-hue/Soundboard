@@ -84,6 +84,20 @@ const Music = (() => {
     notify();
   }
 
+  // Next (step 1) or back (step -1) in a playing playlist. Back restarts the
+  // song if it's more than 3 seconds in, like a music player.
+  function skip(sectionId, step) {
+    const list = lists.get(sectionId);
+    if (!list) return;
+    const fade = 0.6;
+    if (step > 0) { list.failures = 0; advance(list, fade); return; }
+    const old = { id: list.id, audio: list.audio };
+    const restart = old.audio && (old.audio.currentTime || 0) > 3;
+    const index = restart ? list.index : (list.index - 1 + list.order.length) % list.order.length;
+    startTrack(list, index, fade);
+    if (old.audio && playing.get(old.id)?.has(old.audio)) release(old.id, old.audio, fade);
+  }
+
   // Starts a playlist section (from one of its songs, if given), fading in
   // over `fade` seconds and fading out what it was playing.
   // seek: seconds into that song to start from (a bookmark).
@@ -209,6 +223,7 @@ const Music = (() => {
     SCENE_FADE,
     start,
     stop: stopList,
+    skip,
     capture,
     restore,
     // The section's volume slider moved: the songs still to come play at the new level.

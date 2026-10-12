@@ -237,11 +237,11 @@ function normalizeSection(section, index) {
     layers: section.kind === 'ambience' ? cleanLayers(section.layers) : [],
     // The section's own volume slider (absent when it doesn't show one).
     ...(Number.isFinite(section.volume) ? { volume: Math.min(1, Math.max(0, section.volume)) } : {}),
-    // A shuffle button that plays a random item.
-    ...(section.kind !== 'ambience' && section.shuffle ? { shuffle: true } : {}),
-    // A playlist: its full sounds play one after another.
-    ...(section.kind !== 'ambience' && section.playlist ? { playlist: true } : {}),
-    ...(section.kind !== 'ambience' && section.playlist && section.playlistShuffle ? { playlistShuffle: true } : {}),
+    // The section's player (play, shuffle, back, stop, next): its full sounds
+    // play one after another, in order or shuffled. Older kits' separate
+    // shuffle button is now the player.
+    ...(section.kind !== 'ambience' && (section.playlist || section.shuffle) ? { playlist: true } : {}),
+    ...(section.kind !== 'ambience' && (section.playlist || section.shuffle) && section.playlistShuffle ? { playlistShuffle: true } : {}),
   };
 }
 

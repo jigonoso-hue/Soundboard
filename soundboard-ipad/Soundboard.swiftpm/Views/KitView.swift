@@ -64,8 +64,8 @@ struct KitView: View {
             }
             .onDisappear { ui.kitDrawerOpen = false }
             .sheet(isPresented: $creatingSection) {
-                NewSectionView { title, kind, volumeSlider, shuffle in
-                    addSection(to: kit, kind: kind, title: title, volume: volumeSlider ? 1 : nil, shuffle: shuffle)
+                NewSectionView { title, kind, volumeSlider, player in
+                    addSection(to: kit, kind: kind, title: title, volume: volumeSlider ? 1 : nil, player: player)
                 }
             }
             .alert("Section name", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -357,7 +357,7 @@ struct KitView: View {
         drawerOpen = true
     }
 
-    private func addSection(to kit: SoundKit, kind: SectionKind, title: String? = nil, volume: Double? = nil, shuffle: Bool = false) {
+    private func addSection(to kit: SoundKit, kind: SectionKind, title: String? = nil, volume: Double? = nil, player: Bool = false) {
         let bottom = kit.sections.reduce(0) { max($0, $1.y + $1.h) }
         let ambienceKind = kind == .ambience
         let name = (title ?? "").trimmingCharacters(in: .whitespaces)
@@ -373,7 +373,7 @@ struct KitView: View {
             items: [],
             layers: [],
             volume: volume,
-            shuffle: ambienceKind ? nil : (shuffle ? true : nil)
+            playlist: ambienceKind ? nil : (player ? true : nil)
         )
         change(kit) { $0.sections.append(section) }
         // A named section from the sheet is ready; an automatic one gets a name now.
@@ -480,6 +480,11 @@ struct KitSectionView: View {
     var body: some View {
         VStack(spacing: 0) {
             head
+            if section.isPlaylist && sizeClass == .compact {
+                playerBar
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 8)
+            }
             if section.volume != nil {
                 volumeRow
             }
@@ -571,36 +576,11 @@ struct KitSectionView: View {
                 .disabled(!anyOn)
                 .accessibilityLabel("Stop this section's ambience")
             }
-            if section.isPlaylist {
-                let on = music.isPlaying(section.id)
-                Button {
-                    if on { music.stop(section.id, fade: 2) } else { music.start(kit: kit, section: section) }
-                } label: {
-                    IconLabel(on ? "Stop" : "Play", icon: on ? "stop" : "play", size: 10)
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .foregroundStyle(on ? Color.white : Color.accentColor)
-                        .background(on ? Color.accentColor : Color.accentColor.opacity(0.14), in: Capsule())
-                        .frame(minHeight: hit)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(music.songs(in: section).isEmpty)
-                .accessibilityLabel(on ? "Stop the playlist" : "Play the playlist")
+            // On iPad the player sits in the title bar; on iPhone it has its own row below.
+            if section.isPlaylist && sizeClass != .compact {
+                playerBar
             }
             Spacer(minLength: 4)
-            if section.hasShuffle {
-                Button(action: shufflePlay) {
-                    Image(systemName: "shuffle")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(width: hit, height: hit)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .disabled(section.items.isEmpty)
-                .accessibilityLabel("Play a random item")
-            }
             Button(action: onAdd) {
                 AppIcon(id: "plus", size: 16)
                     .frame(width: hit, height: hit)
@@ -618,29 +598,16 @@ struct KitSectionView: View {
                     applyGain(s.gain)
                 }))
                 if !section.isAmbience {
-                    Toggle("Shuffle Button", isOn: Binding(get: { section.shuffle == true }, set: { on in
+                    Toggle("Player", isOn: Binding(get: { section.isPlaylist }, set: { on in
                         var s = section
-                        s.shuffle = on ? true : nil
+                        s.playlist = on ? true : nil
+                        if !on {
+                            s.shuffle = nil
+                            s.playlistShuffle = nil
+                            music.stop(section.id, fade: 2)
+                        }
                         onChange(s)
                     }))
-                    Section("Playlist") {
-                        Toggle("Play Songs One After Another", isOn: Binding(get: { section.isPlaylist }, set: { on in
-                            var s = section
-                            s.playlist = on ? true : nil
-                            if !on {
-                                s.playlistShuffle = nil
-                                music.stop(section.id, fade: 2)
-                            }
-                            onChange(s)
-                        }))
-                        if section.isPlaylist {
-                            Toggle("Shuffle", isOn: Binding(get: { section.playlistShuffle == true }, set: { on in
-                                var s = section
-                                s.playlistShuffle = on ? true : nil
-                                onChange(s)
-                            }))
-                        }
-                    }
                 }
                 if !section.isAmbience {
                     Picker("Item size", selection: Binding(get: { section.size }, set: { size in
@@ -677,7 +644,60 @@ struct KitSectionView: View {
         .background(section.isAmbience ? ambienceColor.opacity(0.07) : Color.clear)
     }
 
-    // MARK: Section volume and shuffle
+    // MARK: Player
+
+    /// The section's player (the menu's Player option): Play and Shuffle start
+    /// its songs one after another, in order or shuffled; Back, Stop and Next
+    /// work while it plays. With no songs in it, Shuffle plays a random clip or
+    /// bash. The same as the Mac's kits.js makePlayer.
+    private var playerBar: some View {
+        let on = music.isPlaying(section.id)
+        let hasSongs = !music.songs(in: section).isEmpty
+        let shuffled = section.playlistShuffle == true
+        return HStack(spacing: sizeClass == .compact ? 6 : 4) {
+            playerButton("Play", icon: "play", showLabel: true, active: on && !shuffled, disabled: !hasSongs) {
+                startPlayer(shuffled: false)
+            }
+            playerButton("Shuffle", icon: "shuffle", showLabel: true, active: on && shuffled, disabled: section.items.isEmpty) {
+                if hasSongs { startPlayer(shuffled: true) } else { shufflePlay() }
+            }
+            HStack(spacing: 2) {
+                playerButton("Back", icon: "previous", disabled: !on) { music.skip(section.id, by: -1) }
+                playerButton("Stop", icon: "stop", disabled: !on) { music.stop(section.id, fade: 2) }
+                playerButton("Next", icon: "next", disabled: !on) { music.skip(section.id, by: 1) }
+            }
+            .padding(.leading, 4)
+        }
+    }
+
+    private func startPlayer(shuffled: Bool) {
+        var s = section
+        s.playlistShuffle = shuffled ? true : nil
+        onChange(s)
+        music.start(kit: kit, section: s)
+    }
+
+    private func playerButton(_ label: String, icon: String, showLabel: Bool = false, active: Bool = false,
+                              disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        let compact = sizeClass == .compact
+        return Button(action: action) {
+            Group {
+                if showLabel { IconLabel(label, icon: icon, size: 11) } else { AppIcon(id: icon, size: 12) }
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, showLabel ? 10 : 8)
+            .frame(maxWidth: compact ? .infinity : nil, minHeight: compact ? hit : 26)
+            .foregroundStyle(active ? AccentFill.ink : Color.accentColor)
+            .background(active ? AccentFill.fill : Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.45 : 1)
+        .accessibilityLabel(label)
+    }
+
+    // MARK: Section volume
 
     /// The section's own volume: scales everything played from it.
     private var volumeRow: some View {
@@ -1027,13 +1047,13 @@ struct EveryMenu: View {
 /// "+ Section": name, type and options for a new section.
 struct NewSectionView: View {
     @Environment(\.dismiss) private var dismiss
-    /// (title, kind, volume slider, shuffle button)
+    /// (title, kind, volume slider, player)
     let onCreate: (String, SectionKind, Bool, Bool) -> Void
 
     @State private var title = ""
     @State private var kind: SectionKind = .mixed
     @State private var volumeSlider = false
-    @State private var shuffle = false
+    @State private var player = false
 
     var body: some View {
         NavigationStack {
@@ -1057,7 +1077,7 @@ struct NewSectionView: View {
                 Section("Options") {
                     Toggle("Volume slider", isOn: $volumeSlider)
                     if kind != .ambience {
-                        Toggle("Shuffle button", isOn: $shuffle)
+                        Toggle("Player", isOn: $player)
                     }
                 }
             }
@@ -1069,7 +1089,7 @@ struct NewSectionView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        onCreate(title, kind, volumeSlider, kind != .ambience && shuffle)
+                        onCreate(title, kind, volumeSlider, kind != .ambience && player)
                         dismiss()
                     }
                 }

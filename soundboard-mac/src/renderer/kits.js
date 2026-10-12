@@ -200,35 +200,14 @@ const Kits = (() => {
     Icons.set(add, 'plus', 'Add', { size: 12 });
     add.title = isAmbience(section) ? 'Add looping layers to this section' : 'Add sounds and bashes to this section';
     add.addEventListener('click', (e) => { e.stopPropagation(); openDrawer(section.id); });
-    // A shuffle button: a random item from the section.
-    const shuffle = !isAmbience(section) && section.shuffle ? document.createElement('button') : null;
-    if (shuffle) {
-      shuffle.className = 'mini section-shuffle';
-      Icons.set(shuffle, 'shuffle', '', { size: 13 });
-      shuffle.title = 'Play a random item from this section';
-      shuffle.setAttribute('aria-label', 'Play a random item');
-      shuffle.disabled = !section.items.length;
-      shuffle.addEventListener('click', (e) => { e.stopPropagation(); shufflePlay(section); });
-    }
     const more = document.createElement('button');
     more.className = 'mini section-more';
     Icons.set(more, 'more', '', { size: 14 });
     more.title = 'Section options';
     more.addEventListener('click', (e) => { e.stopPropagation(); openSectionMenu(kit, section, more); });
-    if (!isAmbience(section) && section.playlist) {
+    if (hasPlayer(section)) {
       title.prepend(Icons.el('note', { size: 14, className: 'section-kind-icon' }));
-      const on = Music.isPlaying(section.id);
-      const songs = Music.songsIn(section).length;
-      const toggle = document.createElement('button');
-      toggle.className = 'mini section-playlist' + (on ? ' on' : '');
-      Icons.set(toggle, on ? 'stop' : 'play', on ? 'Stop' : 'Play', { size: 11 });
-      toggle.title = on ? 'Fade out the playlist' : (section.playlistShuffle ? 'Play the songs in a random order, one after another' : 'Play the songs in order, one after another');
-      toggle.disabled = !songs;
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (Music.isPlaying(section.id)) Music.stop(section.id, 2); else Music.start(kit, section);
-      });
-      head.append(title, count, toggle, ...(shuffle ? [shuffle] : []), add, more);
+      head.append(title, count, makePlayer(kit, section), add, more);
     } else if (isAmbience(section)) {
       title.prepend(Icons.el('layers', { size: 14, className: 'section-kind-icon' }));
       const stop = document.createElement('button');
@@ -243,7 +222,7 @@ const Kits = (() => {
       });
       head.append(title, count, stop, add, more);
     } else {
-      head.append(title, count, ...(shuffle ? [shuffle] : []), add, more);
+      head.append(title, count, add, more);
     }
     head.addEventListener('pointerdown', (e) => {
       if (!editing || e.button !== 0 || e.target.closest('button')) return;
@@ -653,6 +632,51 @@ const Kits = (() => {
     if (state && section.items.some((i) => i.type === 'bash' && i.id === state.bashId)) Bashes.player.setGain(gain);
   }
 
+  // The section's player (the menu's Player option): Play and Shuffle start its
+  // songs one after another, in order or shuffled; Back, Stop and Next work
+  // while it plays. With no songs in it, Shuffle plays a random clip or bash.
+  // (Older kits' separate shuffle button became the player.)
+  const hasPlayer = (section) => !isAmbience(section) && !!(section.playlist || section.shuffle);
+
+  function makePlayer(kit, section) {
+    const bar = document.createElement('div');
+    bar.className = 'section-player';
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', `${section.title} player`);
+    const on = Music.isPlaying(section.id);
+    const songs = Music.songsIn(section).length;
+    const button = (icon, label, title, fn, { disabled = false, active = false, showLabel = false } = {}) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mini player-btn' + (active ? ' on' : '');
+      Icons.set(b, icon, showLabel ? label : '', { size: 12 });
+      b.title = title;
+      b.setAttribute('aria-label', label);
+      b.disabled = disabled;
+      b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+      bar.append(b);
+      return b;
+    };
+    const startIn = (shuffled) => {
+      if (shuffled) section.playlistShuffle = true; else delete section.playlistShuffle;
+      saveSections(kit);
+      Music.start(kit, section);
+    };
+    button('play', 'Play', 'Play the songs in order, one after another', () => startIn(false),
+      { disabled: !songs, active: on && !section.playlistShuffle, showLabel: true });
+    button('shuffle', 'Shuffle', songs ? 'Play the songs in a random order, one after another' : 'Play a random item from this section',
+      () => (songs ? startIn(true) : shufflePlay(section)),
+      { disabled: !section.items.length, active: on && !!section.playlistShuffle, showLabel: true });
+    const transport = document.createElement('span');
+    transport.className = 'player-transport';
+    bar.append(transport);
+    const move = (b) => transport.append(b);
+    move(button('previous', 'Back', 'Back: the start of this song, or the one before', () => Music.skip(section.id, -1), { disabled: !on }));
+    move(button('stop', 'Stop', 'Fade out the music', () => Music.stop(section.id, 2), { disabled: !on }));
+    move(button('next', 'Next', 'Next song', () => Music.skip(section.id, 1), { disabled: !on }));
+    return bar;
+  }
+
   // Plays a random sound or bash from the section (not the same one twice in a row).
   const lastShuffled = new Map();
   function shufflePlay(section) {
@@ -692,11 +716,14 @@ const Kits = (() => {
       renderBoard();
     }, section.volume !== undefined ? 'checked' : '');
     if (!isAmbience(section)) {
-      add('Shuffle button', () => {
-        if (section.shuffle) delete section.shuffle; else section.shuffle = true;
+      add('Player', () => {
+        if (hasPlayer(section)) {
+          delete section.playlist; delete section.playlistShuffle; delete section.shuffle;
+          Music.stop(section.id, 2);
+        } else section.playlist = true;
         saveSections(kit, true);
         renderBoard();
-      }, section.shuffle ? 'checked' : '');
+      }, hasPlayer(section) ? 'checked' : '');
       heading('Item size');
       for (const [size, label] of [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) {
         add(label, () => { section.size = size; saveSections(kit, true); renderBoard(); }, section.size === size ? 'checked' : '');
@@ -704,19 +731,6 @@ const Kits = (() => {
       heading('Meant for');
       for (const kind of ['clips', 'full', 'bashes', 'mixed']) {
         add(KINDS[kind][1], () => { section.kind = kind; saveSections(kit, true); }, section.kind === kind ? 'checked' : '', KINDS[kind][0]);
-      }
-      heading('Playlist');
-      add('Play songs one after another', () => {
-        if (section.playlist) { delete section.playlist; delete section.playlistShuffle; Music.stop(section.id, 2); } else section.playlist = true;
-        saveSections(kit, true);
-        renderBoard();
-      }, section.playlist ? 'checked' : '');
-      if (section.playlist) {
-        add('Shuffle', () => {
-          if (section.playlistShuffle) delete section.playlistShuffle; else section.playlistShuffle = true;
-          saveSections(kit, true);
-          renderBoard();
-        }, section.playlistShuffle ? 'checked' : '');
       }
     }
     add('Remove section', () => {
