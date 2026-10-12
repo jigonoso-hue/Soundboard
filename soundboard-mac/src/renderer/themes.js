@@ -74,8 +74,21 @@ const Themes = (() => {
     root.style.setProperty('--accent-fill', fill);
     root.style.setProperty('--accent-fill-hover', `color-mix(in srgb, ${fill} 88%, ${ink === '#fff' ? '#fff' : '#000'})`);
     root.style.setProperty('--on-accent', ink);
+    if (theme === 'academia') root.style.setProperty('--wood', woodTexture());
     paintAll(true);
     listeners.forEach((fn) => fn(theme));
+  }
+
+  // Dark hardwood for Dark Academia's toolbar, full sounds and bashes (styles.css).
+  let wood = null;
+  function woodTexture() {
+    if (!wood) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 900; canvas.height = 152;
+      ThemeArt.hardwood(canvas.getContext('2d'), 900, 152, 'trim');
+      wood = `url(${canvas.toDataURL('image/jpeg', 0.88)})`;
+    }
+    return wood;
   }
 
   matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (theme === 'system') apply(); });
@@ -130,7 +143,14 @@ const Themes = (() => {
         if (page) { ctx.save(); ctx.translate(8, 8); ThemeArt.parchment(ctx, w - 16, h - 16, page); ctx.restore(); }
       } else if (name === 'spaceAge') ThemeArt.spaceScene(ctx, w, h, page || 'board');
       else if (name === 'scifi') ThemeArt.hudBackdrop(ctx, w, h);
-      else if (name === 'academia') ThemeArt.arcaneBackdrop(ctx, w, h);
+      else if (name === 'academia') {
+        // The sidebar is a bookcase; the board, a night sky in a hardwood frame.
+        if (page === 'sidebar') ThemeArt.libraryShelves(ctx, w, h);
+        else {
+          ThemeArt.arcaneBackdrop(ctx, w, h);
+          if (page !== 'stage') ThemeArt.woodFrame(ctx, w, h, w >= 560 ? 12 : 7);
+        }
+      }
     };
   }
 
@@ -190,7 +210,7 @@ const Themes = (() => {
     syncFx();
   }
 
-  // ---------- Tiles: book covers (Dark Academia) and animated effects ----------
+  // ---------- Tiles: book covers (Dark Academia), scrap paper (Tavern) and animated effects ----------
 
   const coverCache = new Map();
   const tileObserver = new ResizeObserver((entries) => entries.forEach((e) => decorateTile(e.target)));
@@ -201,7 +221,7 @@ const Themes = (() => {
   }
 
   function decorateTile(tile) {
-    if (theme !== 'academia') {
+    if (theme !== 'academia' && theme !== 'tavern') {
       if (tile.dataset.cover) { delete tile.dataset.cover; tile.style.backgroundImage = ''; }
       return;
     }
@@ -212,7 +232,7 @@ const Themes = (() => {
     const color = tileColor(tile);
     const id = tile.dataset.soundId || tile.dataset.id || '';
     const emblem = h >= 110;
-    const key = `${id}|${color}|${w}x${h}|${emblem}`;
+    const key = `${theme}|${id}|${color}|${w}x${h}|${emblem}`;
     if (tile.dataset.cover === key) return;
     tile.dataset.cover = key;
     let url = coverCache.get(key);
@@ -223,7 +243,8 @@ const Themes = (() => {
       canvas.height = Math.round(h * scale);
       const ctx = canvas.getContext('2d');
       ctx.scale(scale, scale);
-      ThemeArt.bookCover(ctx, w, h, id, color, emblem);
+      if (theme === 'academia') ThemeArt.bookCover(ctx, w, h, id, color, emblem);
+      else ThemeArt.scrapPaper(ctx, w, h, id, color);
       url = canvas.toDataURL('image/png');
       if (coverCache.size > 400) coverCache.clear();
       coverCache.set(key, url);
@@ -236,20 +257,35 @@ const Themes = (() => {
   const fxCanvases = new Set();
   let fxFrame = 0;
 
-  /** Adds or removes the animated layer on playing sounds: synth waves in
-      Sci-Fi, magic in Dark Academia. */
+  // How far the glitter flies out past a book in Dark Academia.
+  const GLITTER_PAD = 26;
+
+  /** The animated layer for a playing sound in the current theme: synth waves in
+      Sci-Fi and the plain themes, a planet and moons in Space Age, glitter and
+      stars in Dark Academia, embers in Tavern. */
+  function fxKind(el) {
+    const track = el.classList.contains('track');
+    if (theme === 'spaceAge') return track ? 'orbit-soft' : 'orbit';
+    if (theme === 'academia') return track ? null : 'glitter';
+    if (theme === 'tavern') return 'embers';
+    return track ? 'wave-soft' : 'wave';
+  }
+
+  /** Adds or removes the animated layer on playing sounds. */
   function syncFx() {
-    const want = new Set();
-    if (theme === 'scifi') document.querySelectorAll('.tile.playing, .track.playing').forEach((el) => want.add(el));
-    if (theme === 'academia') document.querySelectorAll('.tile.playing').forEach((el) => want.add(el));
+    const want = new Map();
+    document.querySelectorAll('.tile.playing, .track.playing').forEach((el) => {
+      const kind = fxKind(el);
+      if (kind) want.set(el, kind);
+    });
     for (const canvas of [...fxCanvases]) {
-      if (!want.has(canvas.parentElement) || !canvas.isConnected) { canvas.remove(); fxCanvases.delete(canvas); }
+      if (want.get(canvas.parentElement) !== canvas.dataset.kind || !canvas.isConnected) { canvas.remove(); fxCanvases.delete(canvas); }
     }
-    for (const el of want) {
+    for (const [el, kind] of want) {
       if (el.querySelector(':scope > canvas.theme-fx')) continue;
       const canvas = document.createElement('canvas');
       canvas.className = 'theme-fx';
-      canvas.dataset.kind = theme === 'academia' ? 'magic' : (el.classList.contains('track') ? 'wave-soft' : 'wave');
+      canvas.dataset.kind = kind;
       el.insertBefore(canvas, el.firstChild);
       fxCanvases.add(canvas);
     }
@@ -263,23 +299,26 @@ const Themes = (() => {
     for (const canvas of fxCanvases) {
       const host = canvas.parentElement;
       if (!host) continue;
+      const kind = canvas.dataset.kind;
+      const pad = kind === 'glitter' ? GLITTER_PAD : 0;
       const w = host.clientWidth;
       const h = host.clientHeight;
       const scale = Math.min(2, window.devicePixelRatio || 1);
-      if (canvas.width !== Math.round(w * scale) || canvas.height !== Math.round(h * scale)) {
-        canvas.width = Math.round(w * scale);
-        canvas.height = Math.round(h * scale);
-      }
+      const cw = Math.round((w + pad * 2) * scale);
+      const ch = Math.round((h + pad * 2) * scale);
+      if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
       const ctx = canvas.getContext('2d');
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
-      ctx.clearRect(0, 0, w, h);
+      ctx.clearRect(0, 0, w + pad * 2, h + pad * 2);
+      ctx.translate(pad, pad);
       const color = tileColor(host);
-      if (canvas.dataset.kind === 'magic') ThemeArt.magicGlow(ctx, w, h, time, color);
+      if (kind === 'glitter') ThemeArt.glitter(ctx, w, h, time, color, pad);
+      else if (kind === 'orbit' || kind === 'orbit-soft') ThemeArt.orbitPlanet(ctx, w, h, time, color, kind === 'orbit-soft');
+      else if (kind === 'embers') ThemeArt.embers(ctx, w, h, time);
       else {
-        ctx.save();
-        ctx.translate(0, canvas.dataset.kind === 'wave' ? 6 : 4);
-        ThemeArt.synthWave(ctx, w, h - (canvas.dataset.kind === 'wave' ? 12 : 8), time, color);
-        ctx.restore();
+        const inset = kind === 'wave' ? 6 : 4;
+        ctx.translate(0, inset);
+        ThemeArt.synthWave(ctx, w, h - inset * 2, time, color);
       }
     }
     if (!reduceMotion.matches) fxFrame = requestAnimationFrame(drawFx);

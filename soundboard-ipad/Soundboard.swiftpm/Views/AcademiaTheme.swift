@@ -4,7 +4,9 @@ import SwiftUI
 // corners, a double gold line, thorned corner stars, filigree curls, crest
 // ornaments, moon phases) on a dark starry night with blue glows, an arcane
 // sigil in an astrolabe ring, a crescent moon, constellations, an hourglass and
-// a key. Sounds are leather-bound book covers that glow with magic as they play.
+// a key, framed in dark hardwood with gold trim; the sidebar is a bookcase.
+// Sounds are leather-bound book covers that throw off glitter and stars as they
+// play; full sounds and bashes sit on hardwood.
 
 enum Arcane {
     static let goldGradient = Gradient(stops: [
@@ -474,51 +476,299 @@ struct BookCover: View, Equatable {
     }
 }
 
-/// Magic over a playing book: a pulsing golden glow along the border and
-/// sparkles drifting up through the cover.
-struct MagicGlow: View {
+/// A playing book: a pulsing gold glow around it, glitter twinkling on the
+/// cover, and stars and glitter flying out from its edges (theme-art.js
+/// glitter). Lay it `pad` points past the book on every side.
+struct Glitter: View {
     let color: Color
+    static let pad: CGFloat = 26
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TimelineView(.animation(paused: reduceMotion)) { timeline in
             Canvas { context, size in
                 let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                MagicGlow.draw(&context, size: size, time: time, color: color)
+                Glitter.draw(&context, size: size, time: time, color: color)
             }
         }
+        .padding(-Glitter.pad)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
     static func draw(_ context: inout GraphicsContext, size: CGSize, time: Double, color: Color) {
-        let w = size.width
-        let h = size.height
+        let pad = Glitter.pad
+        let w = size.width - pad * 2
+        let h = size.height - pad * 2
         guard w > 30, h > 20 else { return }
-        let pulse = 0.65 + 0.35 * sin(time * 3)
+        let t = CGFloat(time.truncatingRemainder(dividingBy: 10_000))
+        var card = context
+        card.translateBy(x: pad, y: pad)
+        let pulse = Double(0.65 + 0.35 * sin(t * 3))
 
         // Glowing border.
         let border = Path(CGRect(x: 16, y: 6, width: w - 25, height: h - 12))
-        var glow = context
+        var glow = card
         glow.addFilter(.blur(radius: 5))
-        glow.stroke(border, with: .color(Color(hex: 0xFFD27A).opacity(pulse)), lineWidth: 5)
-        glow.stroke(border, with: .color(color.opacity(pulse * 0.6)), lineWidth: 9)
+        glow.stroke(border, with: .color(Color(hex: 0xFFD27A).opacity(pulse)), lineWidth: 4)
+        glow.stroke(border, with: .color(color.opacity(pulse * 0.5)), lineWidth: 8)
 
-        // Sparkles rising and fading.
         var random = SeededRandom(7)
-        for i in 0..<14 {
-            let speed = random.range(0.15, 0.35)
-            let offset = random.next()
-            let x0 = random.range(16, w - 6)
-            let sparkleSize = random.range(2, 4.5)
-            let warm = random.next() < 0.5
-            let travel = (CGFloat(time) * speed + offset).truncatingRemainder(dividingBy: 1)
-            let y = h - 4 - travel * (h - 8)
-            let x = x0 + sin(CGFloat(time) * 2 + CGFloat(i)) * 4
-            var mote = context
-            mote.opacity = Double(sin(travel * .pi))
-            mote.fill(Arcane.star(at: CGPoint(x: x, y: y), size: sparkleSize),
-                      with: .color(warm ? Color(hex: 0xFFE7A3) : color))
+        // Glitter on the cover.
+        for i in 0..<16 {
+            let x = random.range(18, w - 8)
+            let y = random.range(8, h - 8)
+            let rate = random.range(2, 4.5)
+            let phase = random.range(0, 6)
+            let s = random.range(2, 4)
+            var twinkle = card
+            twinkle.opacity = Double(pow(max(0, sin(t * rate + phase)), 3))
+            twinkle.fill(Arcane.star(at: CGPoint(x: x, y: y), size: s), with: .color(Color(hex: i % 3 == 0 ? 0xFFD27A : 0xFFF4D2)))
         }
+
+        // Stars and glitter flying out from the edges.
+        let perimeter = 2 * (w + h)
+        for i in 0..<40 {
+            var along = random.range(0, perimeter)
+            var start = CGPoint.zero
+            var normal = CGVector.zero
+            if along < w { start = CGPoint(x: along, y: 0); normal = CGVector(dx: 0, dy: -1) } else {
+                along -= w
+                if along < h { start = CGPoint(x: w, y: along); normal = CGVector(dx: 1, dy: 0) } else {
+                    along -= h
+                    if along < w { start = CGPoint(x: w - along, y: h); normal = CGVector(dx: 0, dy: 1) } else {
+                        along -= w
+                        start = CGPoint(x: 0, y: h - along); normal = CGVector(dx: -1, dy: 0)
+                    }
+                }
+            }
+            let spread = random.range(-0.7, 0.7)
+            let dx = normal.dx + (normal.dy != 0 ? spread : 0)
+            let dy = normal.dy + (normal.dx != 0 ? spread : 0)
+            let period = random.range(1.1, 2.2)
+            let offset = random.next()
+            let reach = pad * random.range(0.55, 0.95)
+            let s = random.range(2.6, 6)
+            let kind = random.next()
+            let travel = (t / period + offset).truncatingRemainder(dividingBy: 1)
+            let p = CGPoint(x: start.x + dx * travel * reach, y: start.y + dy * travel * reach + travel * travel * 4)
+            let alpha = Double((1 - travel * travel) * (0.7 + 0.3 * sin(t * 9 + CGFloat(i) * 1.7)))
+            if kind < 0.55 {
+                let size = s * (1 - travel * 0.4)
+                card.fill(Path(ellipseIn: CGRect(x: p.x - size * 0.55, y: p.y - size * 0.55, width: size * 1.1, height: size * 1.1)),
+                          with: .color(Color(hex: 0xFFD27A).opacity(alpha * 0.45)))
+                card.fill(Arcane.star(at: p, size: size), with: .color((kind < 0.3 ? Color(hex: 0xFFE7A3) : .white).opacity(alpha)))
+            } else {
+                let r = s * 0.28
+                card.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)),
+                          with: .color((kind < 0.8 ? Color(hex: 0xF6DC8F) : color).opacity(alpha)))
+            }
+        }
+    }
+}
+
+/// Dark hardwood: planks of walnut with grain, seams and the odd knot
+/// (theme-art.js hardwood). `vertical` runs the planks top to bottom.
+struct Hardwood: View, Equatable {
+    var seed = "wood"
+    var vertical = false
+
+    var body: some View {
+        Canvas { context, size in
+            Hardwood.draw(&context, size: size, seed: stableSeed(seed), vertical: vertical)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static let shades: [UInt32] = [0x2B190E, 0x24150B, 0x311D11, 0x211208, 0x2E1A0F]
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, seed: UInt64, vertical: Bool = false) {
+        var wood = context
+        var w = size.width
+        var h = size.height
+        if vertical {
+            wood.translateBy(x: w, y: 0)
+            wood.rotate(by: .radians(.pi / 2))
+            swap(&w, &h)
+        }
+        wood.fill(Path(CGRect(x: 0, y: 0, width: w, height: h)), with: .color(Color(hex: 0x22140A)))
+        var random = SeededRandom(seed &+ 11)
+        let plank: CGFloat = 38
+        var y: CGFloat = 0
+        while y < h {
+            // Planks are staggered: each row is cut at different places.
+            var x = -random.range(0, 300)
+            while x < w {
+                let length = random.range(220, 520)
+                let shade = shades[Int(random.next() * CGFloat(shades.count)) % shades.count]
+                wood.fill(Path(CGRect(x: x, y: y, width: length, height: plank)), with: .color(Color(hex: shade)))
+                // Grain: long wavy lines along the plank.
+                for _ in 0..<9 {
+                    let gy = y + random.range(2, plank - 2)
+                    let amp = random.range(0.5, 2.4)
+                    let freq = random.range(0.01, 0.03)
+                    let phase = random.range(0, 6)
+                    var grain = Path()
+                    var gx = x
+                    grain.move(to: CGPoint(x: gx, y: gy + sin(gx * freq + phase) * amp))
+                    while gx < x + length {
+                        gx += 8
+                        grain.addLine(to: CGPoint(x: gx, y: gy + sin(gx * freq + phase) * amp))
+                    }
+                    let dark = random.next() < 0.6
+                    let width = random.range(0.5, 1.3)
+                    wood.stroke(grain, with: .color(dark ? .black.opacity(0.28) : Color(red: 1, green: 0.77, blue: 0.55).opacity(0.06)), lineWidth: width)
+                }
+                if random.next() < 0.25 {
+                    let kx = x + random.range(30, length - 30)
+                    let ky = y + random.range(10, plank - 10)
+                    var knot = Path()
+                    var r: CGFloat = 2
+                    while r < 9 {
+                        knot.addEllipse(in: CGRect(x: kx - r * 1.8, y: ky - r * 0.7, width: r * 3.6, height: r * 1.4))
+                        r += 2.2
+                    }
+                    wood.stroke(knot, with: .color(.black.opacity(0.35)), lineWidth: 0.8)
+                }
+                wood.fill(Path(CGRect(x: x + length - 1, y: y, width: 1.2, height: plank)), with: .color(.black.opacity(0.55)))
+                x += length
+            }
+            wood.fill(Path(CGRect(x: 0, y: y, width: w, height: 1.2)), with: .color(.black.opacity(0.6)))
+            wood.fill(Path(CGRect(x: 0, y: y + 1.2, width: w, height: 1)), with: .color(Color(red: 1, green: 0.78, blue: 0.59).opacity(0.05)))
+            y += plank
+        }
+        // A low sheen of polish across the top.
+        wood.fill(Path(CGRect(x: 0, y: 0, width: w, height: h)), with: .linearGradient(
+            Gradient(stops: [.init(color: Color(red: 1, green: 0.86, blue: 0.67).opacity(0.06), location: 0),
+                             .init(color: .clear, location: 0.5),
+                             .init(color: .black.opacity(0.25), location: 1)]),
+            startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+    }
+}
+
+/// The sidebar in Dark Academia: bookshelves in dark hardwood with gold-edged
+/// shelves, dimmed so text stays easy to read, inside a gold trim
+/// (theme-art.js libraryShelves).
+struct LibraryShelves: View, Equatable {
+    var body: some View {
+        Canvas { context, size in
+            LibraryShelves.draw(&context, size: size)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static let bindings: [UInt32] = [0x5A1A1E, 0x1F3A2A, 0x1A2346, 0x4A2C14, 0x6B4A1A, 0x3A1838, 0x2C2C30, 0x6E2A12]
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize) {
+        let w = size.width
+        let h = size.height
+        Hardwood.draw(&context, size: size, seed: stableSeed("shelves"), vertical: true)
+        var random = SeededRandom(23)
+        let bay: CGFloat = 128
+        let board: CGFloat = 12
+        var top: CGFloat = 6
+        while top < h {
+            let floor = top + bay - board
+            // Books standing on the shelf, with the odd gap and a leaning one.
+            var x: CGFloat = 8
+            while x < w - 10 {
+                if random.next() < 0.07 { x += random.range(10, 24); continue }
+                let bw = random.range(9, 19)
+                let bh = (bay - board - 14) * random.range(0.62, 0.96)
+                let lean = random.next() < 0.06 && x + bw + 10 < w - 10
+                let shade = bindings[Int(random.next() * CGFloat(bindings.count)) % bindings.count]
+                var book = context
+                book.translateBy(x: x, y: floor)
+                if lean { book.rotate(by: .radians(0.16)) }
+                let spine = CGRect(x: 0, y: -bh, width: bw, height: bh)
+                book.fill(Path(spine), with: .color(Color(hex: shade)))
+                book.fill(Path(spine), with: .linearGradient(
+                    Gradient(stops: [.init(color: .black.opacity(0.45), location: 0),
+                                     .init(color: .white.opacity(0.08), location: 0.35),
+                                     .init(color: .black.opacity(0.5), location: 1)]),
+                    startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: bw, y: 0)))
+                if random.next() < 0.7 {
+                    let gold = Arcane.gold(over: spine)
+                    for f: CGFloat in [0.1, 0.14, 0.86, 0.9] {
+                        book.fill(Path(CGRect(x: 1, y: -bh + bh * f, width: bw - 2, height: 1)), with: gold)
+                    }
+                    if random.next() < 0.5 {
+                        book.fill(Path(CGRect(x: bw * 0.3, y: -bh * 0.62, width: bw * 0.4, height: bh * 0.16)), with: gold)
+                    }
+                }
+                x += bw + (lean ? 10 : random.range(0.5, 1.5))
+            }
+            // The shelf: a hardwood board with a gold edge and a shadow below.
+            let shelf = CGRect(x: 0, y: floor, width: w, height: board)
+            context.fill(Path(shelf), with: .color(Color(hex: 0x3A2414)))
+            context.fill(Path(shelf), with: .linearGradient(
+                Gradient(colors: [Color(red: 1, green: 0.82, blue: 0.63).opacity(0.12), .black.opacity(0.45)]),
+                startPoint: CGPoint(x: 0, y: floor), endPoint: CGPoint(x: 0, y: floor + board)))
+            context.fill(Path(CGRect(x: 0, y: floor, width: w, height: 1.5)), with: Arcane.gold(over: CGRect(x: 0, y: floor, width: w, height: 2)))
+            context.fill(Path(CGRect(x: 0, y: floor + board, width: w, height: 4)), with: .color(.black.opacity(0.5)))
+            top += bay
+        }
+        // Dim it all so text on top stays readable.
+        let all = CGRect(origin: .zero, size: size)
+        context.fill(Path(all), with: .color(Color(red: 8 / 255, green: 6 / 255, blue: 12 / 255).opacity(0.62)))
+        var trim = context
+        trim.opacity = 0.75
+        let gold = Arcane.gold(over: all)
+        trim.stroke(Path(all.insetBy(dx: 4.5, dy: 4.5)), with: gold, lineWidth: 1.5)
+        trim.stroke(Path(all.insetBy(dx: 8.5, dy: 8.5)), with: gold, lineWidth: 0.6)
+        for corner in [CGPoint(x: 4.5, y: 4.5), CGPoint(x: w - 4.5, y: 4.5), CGPoint(x: 4.5, y: h - 4.5), CGPoint(x: w - 4.5, y: h - 4.5)] {
+            trim.fill(Arcane.diamond(at: corner, size: 4), with: gold)
+        }
+    }
+}
+
+/// A hardwood frame with gold trim around the night sky (theme-art.js woodFrame).
+struct WoodFrame: View, Equatable {
+    var body: some View {
+        Canvas { context, size in
+            WoodFrame.draw(&context, size: size, thickness: size.width >= 560 ? 12 : 7)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, thickness t: CGFloat) {
+        let w = size.width
+        let h = size.height
+        guard w > t * 4, h > t * 4 else { return }
+        let all = CGRect(origin: .zero, size: size)
+        let inner = all.insetBy(dx: t, dy: t)
+        var ring = Path(all)
+        ring.addRect(inner)
+        var wood = context
+        wood.clip(to: ring, style: FillStyle(eoFill: true))
+        Hardwood.draw(&wood, size: size, seed: stableSeed("frame"))
+        let gold = Arcane.gold(over: all)
+        context.fill(Path(CGRect(x: t, y: t, width: w - t * 2, height: 3)), with: .color(.black.opacity(0.5)))
+        context.stroke(Path(inner.insetBy(dx: -0.75, dy: -0.75)), with: gold, lineWidth: 1.5)
+        var faint = context
+        faint.opacity = 0.6
+        faint.stroke(Path(all.insetBy(dx: 2.5, dy: 2.5)), with: gold, lineWidth: 0.7)
+        for corner in [CGPoint(x: t, y: t), CGPoint(x: w - t, y: t), CGPoint(x: t, y: h - t), CGPoint(x: w - t, y: h - t)] {
+            context.fill(Arcane.diamond(at: corner, size: max(3, t * 0.45)), with: gold)
+        }
+    }
+}
+
+/// Dark Academia: a full sound or bash on dark hardwood with gold trim, the same
+/// as the Mac's styles.css.
+struct WoodTrimCard: View {
+    var cornerRadius: CGFloat = 12
+    var active = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        Hardwood(seed: "trim").equatable()
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Color.black.opacity(0.3), lineWidth: 4))
+            .overlay(shape.inset(by: 3).strokeBorder(Color(hex: active ? 0xF0CF75 : 0xD4A94A).opacity(active ? 0.75 : 0.4), lineWidth: 1))
+            .overlay(shape.strokeBorder(Color(hex: active ? 0xF0CF75 : 0xB8862B), lineWidth: 1))
     }
 }

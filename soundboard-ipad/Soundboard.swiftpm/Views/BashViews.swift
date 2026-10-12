@@ -71,13 +71,18 @@ struct BashCard: View {
                 Spacer(minLength: 0)
             }
             .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(theme.cardFill(active: playing))
-            )
+            .background {
+                // Dark Academia: hardwood with gold trim.
+                if theme == .academia {
+                    WoodTrimCard(cornerRadius: 14, active: playing)
+                } else {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(theme.cardFill(active: playing))
+                }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(playing ? theme.bashColor : theme.cardStroke, lineWidth: 1)
+                    .strokeBorder(playing ? theme.bashColor : theme.cardStroke, lineWidth: theme == .academia && !playing ? 0 : 1)
             )
             .overlay(alignment: .bottomLeading) {
                 if playing {

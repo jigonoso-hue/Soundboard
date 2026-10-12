@@ -66,10 +66,10 @@ const ThemeArt = (() => {
   // ---------- Tavern ----------
 
   /** The outline of a worn sheet: uneven, torn edges with the odd nick. */
-  function tornEdge(w, h, seed) {
+  function tornEdge(w, h, seed, scale = 1) {
     const random = rng(seed);
     const pts = [];
-    const step = 11;
+    const step = 11 * scale;
     function edge(ax, ay, bx, by, ix, iy) {
       const length = Math.max(1, Math.hypot(bx - ax, by - ay));
       const dx = (bx - ax) / length;
@@ -81,12 +81,12 @@ const ThemeArt = (() => {
         const t = i / count;
         const px = ax + (bx - ax) * t;
         const py = ay + (by - ay) * t;
-        const depth = random.range(0, 2.2) + wave * (1 + Math.sin(t * length / 90 + phase)) / 2;
+        const depth = (random.range(0, 2.2) + wave * (1 + Math.sin(t * length / 90 + phase)) / 2) * scale;
         pts.push([px + ix * depth, py + iy * depth]);
         if (random.next() < 0.045) {
-          const cut = random.range(4, 10);
-          pts.push([px + dx * 3 + ix * cut, py + dy * 3 + iy * cut]);
-          pts.push([px + dx * 6 + ix * depth, py + dy * 6 + iy * depth]);
+          const cut = random.range(4, 10) * scale;
+          pts.push([px + dx * 3 * scale + ix * cut, py + dy * 3 * scale + iy * cut]);
+          pts.push([px + dx * 6 * scale + ix * depth, py + dy * 6 * scale + iy * depth]);
         }
       }
     }
@@ -974,36 +974,213 @@ const ThemeArt = (() => {
     }
   }
 
-  // ---------- Animated effects ----------
+  // ---------- Card art: scrap paper (Tavern), hardwood and shelves (Dark Academia) ----------
 
-  /** Magic over a playing book: a pulsing golden glow and rising sparkles. */
-  function magicGlow(ctx, w, h, time, color) {
-    if (w <= 30 || h <= 20) return;
-    const pulse = 0.65 + 0.35 * Math.sin(time * 3);
-    layer(ctx, { blur: 5 }, () => {
-      ctx.globalAlpha = pulse;
-      ctx.strokeStyle = '#FFD27A'; ctx.lineWidth = 5; ctx.strokeRect(16, 6, w - 25, h - 12);
-      ctx.globalAlpha = pulse * 0.6;
-      ctx.strokeStyle = color; ctx.lineWidth = 9; ctx.strokeRect(16, 6, w - 25, h - 12);
+  const DIRT = (a) => `rgba(74,48,20,${a})`;
+
+  /** A sound's card in Tavern: a dirty scrap of paper with torn edges, grime,
+      a mug ring, a fold and a daub of the sound's colour down the left side. */
+  function scrapPaper(ctx, W, H, seedText, color) {
+    const m = 3;
+    const w = W - m * 2; const h = H - m * 2;
+    if (w <= 10 || h <= 10) return;
+    const seed = seedOf(seedText);
+    const random = rng(Math.imul(seed, 13) + 5);
+    ctx.save();
+    ctx.translate(m, m);
+    const outline = tornEdge(w, h, seed, 0.45);
+    ctx.save();
+    ctx.shadowColor = 'rgba(40,22,8,0.55)'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = linear(ctx, 0, 0, w, h, [[0, '#F1EAD6'], [0.55, '#E2D6B8'], [1, '#CDBB93']]);
+    ctx.fill(outline);
+    ctx.restore();
+    ctx.save();
+    ctx.clip(outline);
+    ctx.globalAlpha = 0.1; ctx.fillStyle = color; ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
+
+    // Grime: soft smudges, heavier towards the bottom, and a thumbprint.
+    layer(ctx, { blur: 9 }, () => {
+      for (let i = 0; i < 9; i++) {
+        ctx.fillStyle = DIRT(random.range(0.1, 0.22));
+        ctx.fill(ellipse(random.range(0, w), random.range(h * 0.35, h * 1.1), random.range(14, 40), random.range(8, 22)));
+      }
     });
-    const random = rng(7);
-    for (let i = 0; i < 14; i++) {
-      const speed = random.range(0.15, 0.35);
-      const offset = random.next();
-      const x0 = random.range(16, w - 6);
-      const size = random.range(2, 4.5);
-      const warm = random.next() < 0.5;
-      const travel = (time * speed + offset) % 1;
-      const y = h - 4 - travel * (h - 8);
-      const x = x0 + Math.sin(time * 2 + i) * 4;
-      ctx.globalAlpha = Math.max(0, Math.sin(travel * Math.PI));
-      ctx.fillStyle = warm ? '#FFE7A3' : color;
-      ctx.fill(star(x, y, size));
+    const tx = random.range(w * 0.55, w * 0.9); const ty = random.range(h * 0.55, h * 0.85);
+    layer(ctx, { alpha: 0.2 }, () => {
+      ctx.strokeStyle = DIRT(1); ctx.lineWidth = 0.8;
+      for (let r = 2; r < 9; r += 1.6) ctx.stroke(ellipse(tx, ty, r * 0.75, r, 0.5));
+    });
+    // A mug ring, partly off the edge.
+    if (h > 60 && random.next() < 0.7) {
+      const cx = random.range(w * 0.6, w * 1.05); const cy = random.range(-h * 0.1, h * 0.5);
+      const r = Math.min(h * 0.42, 30);
+      layer(ctx, { blur: 0.8 }, () => {
+        ctx.beginPath(); ctx.arc(cx, cy, r, random.range(0, 2), random.range(4.4, 6.2));
+        ctx.strokeStyle = 'rgba(110,60,20,0.28)'; ctx.lineWidth = 2.2; ctx.stroke();
+      });
+      layer(ctx, { blur: 5 }, () => { ctx.fillStyle = 'rgba(110,60,20,0.06)'; ctx.fill(circle(cx, cy, r - 2)); });
     }
+    // A fold across the scrap: a dark crease and a light ridge.
+    const fy = random.range(h * 0.3, h * 0.75);
+    const lean = random.range(-8, 8);
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(0, fy - lean); ctx.lineTo(w, fy + lean);
+    ctx.strokeStyle = DIRT(0.22); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, fy - lean + 1.2); ctx.lineTo(w, fy + lean + 1.2);
+    ctx.strokeStyle = 'rgba(255,248,226,0.5)'; ctx.stroke();
+    // Specks of dirt.
+    for (let i = 0; i < Math.floor(w * h / 120); i++) {
+      ctx.fillStyle = DIRT(random.range(0.1, 0.4));
+      ctx.fill(circle(random.range(0, w), random.range(0, h), random.range(0.3, 0.9)));
+    }
+    // The sound's colour: a rough brush daub down the left side.
+    const daub = new Path2D();
+    daub.moveTo(2, 0);
+    for (let y = 0; y <= h; y += 6) daub.lineTo(random.range(7, 10), y);
+    daub.lineTo(random.range(7, 10), h);
+    daub.lineTo(0, h); daub.lineTo(0, 0); daub.closePath();
+    ctx.globalAlpha = 0.85; ctx.fillStyle = color; ctx.fill(daub);
+    ctx.globalAlpha = 0.35; ctx.fillStyle = '#3d2712'; ctx.fill(daub);
     ctx.globalAlpha = 1;
+    // Dirty, darkened edges.
+    layer(ctx, { blur: 4 }, () => { ctx.strokeStyle = 'rgba(92,56,20,0.5)'; ctx.lineWidth = 9; ctx.stroke(outline); });
+    ctx.strokeStyle = 'rgba(70,40,12,0.55)'; ctx.lineWidth = 1.2; ctx.stroke(outline);
+    ctx.restore();
+    // A dog-eared corner, top right.
+    if (w > 70 && h > 40) {
+      const k = Math.min(14, h * 0.18);
+      const ear = new Path2D();
+      ear.moveTo(w - k, 0); ear.lineTo(w - k * 0.9, k * 0.95); ear.lineTo(w, k); ear.closePath();
+      ctx.fillStyle = 'rgba(40,22,8,0.25)';
+      ctx.fill(ellipse(w - k * 0.5, k * 0.55, k * 0.6, k * 0.5));
+      ctx.fillStyle = linear(ctx, w - k, 0, w, k, [[0, '#C9B07A'], [1, '#E6D5AC']]);
+      ctx.fill(ear);
+      ctx.strokeStyle = 'rgba(70,40,12,0.5)'; ctx.lineWidth = 0.8; ctx.stroke(ear);
+    }
+    ctx.restore();
   }
 
-  /** Glowing synth waves rippling across a playing sound in Sci-Fi. */
+  const WOOD = [0x2B190E, 0x24150B, 0x311D11, 0x211208, 0x2E1A0F];
+
+  /** Dark hardwood: planks of walnut with grain, seams and the odd knot.
+      `vertical` runs the planks top to bottom (a back panel). */
+  function hardwood(ctx, w, h, seedText = 'wood', vertical = false) {
+    const random = rng(seedOf(seedText) + 11);
+    ctx.save();
+    if (vertical) { ctx.translate(w, 0); ctx.rotate(Math.PI / 2); [w, h] = [h, w]; }
+    ctx.fillStyle = '#22140A'; ctx.fillRect(0, 0, w, h);
+    const plank = 38;
+    for (let y = 0, row = 0; y < h; y += plank, row++) {
+      // Planks are staggered: each row is cut at different places.
+      let x = -random.range(0, 300);
+      while (x < w) {
+        const length = random.range(220, 520);
+        ctx.fillStyle = rgba(WOOD[Math.floor(random.next() * WOOD.length) % WOOD.length]);
+        ctx.fillRect(x, y, length, plank);
+        // Grain: long wavy lines along the plank.
+        for (let g = 0; g < 9; g++) {
+          const gy = y + random.range(2, plank - 2);
+          const amp = random.range(0.5, 2.4); const freq = random.range(0.01, 0.03); const ph = random.range(0, 6);
+          ctx.beginPath();
+          for (let gx = x; gx <= x + length; gx += 8) {
+            const yy = gy + Math.sin(gx * freq + ph) * amp;
+            if (gx === x) ctx.moveTo(gx, yy); else ctx.lineTo(gx, yy);
+          }
+          ctx.strokeStyle = random.next() < 0.6 ? 'rgba(0,0,0,0.28)' : 'rgba(255,196,140,0.06)';
+          ctx.lineWidth = random.range(0.5, 1.3);
+          ctx.stroke();
+        }
+        if (random.next() < 0.25) {
+          const kx = x + random.range(30, length - 30); const ky = y + random.range(10, plank - 10);
+          ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.8;
+          for (let r = 2; r < 9; r += 2.2) ctx.stroke(ellipse(kx, ky, r * 1.8, r * 0.7));
+        }
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x + length - 1, y, 1.2, plank);
+        x += length;
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, y, w, 1.2);
+      ctx.fillStyle = 'rgba(255,200,150,0.05)'; ctx.fillRect(0, y + 1.2, w, 1);
+    }
+    // A low sheen of polish across the top.
+    ctx.fillStyle = linear(ctx, 0, 0, 0, h, [[0, 'rgba(255,220,170,0.06)'], [0.5, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.25)']]);
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  const BINDINGS = [0x5A1A1E, 0x1F3A2A, 0x1A2346, 0x4A2C14, 0x6B4A1A, 0x3A1838, 0x2C2C30, 0x6E2A12];
+
+  /** Bookshelves in dark hardwood with gold-edged shelves, dimmed so the
+      sidebar's text stays easy to read, inside a gold trim. */
+  function libraryShelves(ctx, w, h) {
+    hardwood(ctx, w, h, 'shelves', true);
+    const random = rng(23);
+    const bay = 128;
+    const board = 12;
+    for (let top = 6; top < h; top += bay) {
+      const floor = top + bay - board;
+      // Books standing on the shelf, with the odd gap and a leaning one.
+      let x = 8;
+      while (x < w - 10) {
+        if (random.next() < 0.07) { x += random.range(10, 24); continue; }
+        const bw = random.range(9, 19);
+        const bh = (bay - board - 14) * random.range(0.62, 0.96);
+        const lean = random.next() < 0.06 && x + bw + 10 < w - 10;
+        const c = BINDINGS[Math.floor(random.next() * BINDINGS.length) % BINDINGS.length];
+        ctx.save();
+        ctx.translate(x, floor);
+        if (lean) ctx.rotate(0.16);
+        ctx.fillStyle = rgba(c);
+        ctx.fillRect(0, -bh, bw, bh);
+        ctx.fillStyle = linear(ctx, 0, 0, bw, 0, [[0, 'rgba(0,0,0,0.45)'], [0.35, 'rgba(255,255,255,0.08)'], [1, 'rgba(0,0,0,0.5)']]);
+        ctx.fillRect(0, -bh, bw, bh);
+        if (random.next() < 0.7) {
+          ctx.fillStyle = gold(ctx, 0, -bh, bw, bh);
+          for (const f of [0.1, 0.14, 0.86, 0.9]) ctx.fillRect(1, -bh + bh * f, bw - 2, 1);
+          if (random.next() < 0.5) ctx.fillRect(bw * 0.3, -bh * 0.62, bw * 0.4, bh * 0.16);
+        }
+        ctx.restore();
+        x += bw + (lean ? 10 : random.range(0.5, 1.5));
+      }
+      // The shelf: a hardwood board with a gold edge and a shadow below.
+      ctx.fillStyle = '#3A2414'; ctx.fillRect(0, floor, w, board);
+      ctx.fillStyle = linear(ctx, 0, floor, 0, floor + board, [[0, 'rgba(255,210,160,0.12)'], [1, 'rgba(0,0,0,0.45)']]);
+      ctx.fillRect(0, floor, w, board);
+      ctx.fillStyle = gold(ctx, 0, floor, w, 2); ctx.fillRect(0, floor, w, 1.5);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, floor + board, w, 4);
+    }
+    // Dim it all so text on top stays readable.
+    ctx.fillStyle = 'rgba(8,6,12,0.62)'; ctx.fillRect(0, 0, w, h);
+    const g = gold(ctx, 0, 0, w, h);
+    layer(ctx, { alpha: 0.75 }, () => {
+      ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.strokeRect(4.5, 4.5, w - 9, h - 9);
+      ctx.lineWidth = 0.6; ctx.strokeRect(8.5, 8.5, w - 17, h - 17);
+      const corners = new Path2D();
+      for (const [cx, cy] of [[4.5, 4.5], [w - 4.5, 4.5], [4.5, h - 4.5], [w - 4.5, h - 4.5]]) diamond(cx, cy, 4, corners);
+      ctx.fillStyle = g; ctx.fill(corners);
+    });
+  }
+
+  /** A hardwood frame with gold trim around a picture (the board's night sky). */
+  function woodFrame(ctx, w, h, t) {
+    ctx.save();
+    const ring = new Path2D();
+    ring.rect(0, 0, w, h);
+    ring.rect(t, t, w - t * 2, h - t * 2);
+    ctx.clip(ring, 'evenodd');
+    hardwood(ctx, w, h, 'frame');
+    ctx.restore();
+    const g = gold(ctx, 0, 0, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(t, t, w - t * 2, 3);
+    ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.strokeRect(t - 0.75, t - 0.75, w - t * 2 + 1.5, h - t * 2 + 1.5);
+    layer(ctx, { alpha: 0.6 }, () => { ctx.lineWidth = 0.7; ctx.strokeRect(2.5, 2.5, w - 5, h - 5); });
+    const corners = new Path2D();
+    for (const [cx, cy] of [[t, t], [w - t, t], [t, h - t], [w - t, h - t]]) diamond(cx, cy, Math.max(3, t * 0.45), corners);
+    ctx.fillStyle = g; ctx.fill(corners);
+  }
+
+  // ---------- Animated effects on playing sounds ----------
+
+  /** Glowing synth waves rippling across a playing sound: Sci-Fi and the plain themes. */
   function synthWave(ctx, w, h, time, color) {
     if (w <= 4 || h <= 4) return;
     const waves = [[0.3, 2.2, 3.2, 0.95], [0.2, 3.4, -2.3, 0.6], [0.13, 5.1, 4.1, 0.4]];
@@ -1021,6 +1198,140 @@ const ThemeArt = (() => {
       layer(ctx, { blur: 4, alpha: alpha * 0.8 }, () => { ctx.lineWidth = 4; ctx.stroke(p); });
       ctx.globalAlpha = alpha; ctx.lineWidth = 1.5; ctx.stroke(p); ctx.globalAlpha = 1;
     });
+  }
+
+  /** Space Age: a planet in the sound's colour with moons circling it. `soft`
+      is the smaller one for a full sound's row. */
+  function orbitPlanet(ctx, w, h, time, color, soft) {
+    if (w <= 30 || h <= 20) return;
+    // Clear of the name (top left) and the Stop button (bottom right).
+    const r = Math.max(5, Math.min(h * 0.2, w * 0.11));
+    const cx = w * (soft ? 0.62 : 0.68);
+    const cy = h * (soft ? 0.47 : 0.4);
+    const tilt = -0.28;
+    // (orbit size, speed, moon size, colour)
+    const moons = [[1.9, 1.1, 0.26, ATOMIC.cream], [2.7, -0.7, 0.2, ATOMIC.teal], [3.5, 0.5, 0.17, ATOMIC.mustard]];
+    const spots = moons.map(([k, speed, size, c], i) => {
+      const a = time * speed + i * 2.1;
+      const rx = r * k; const ry = rx * 0.32;
+      const lx = Math.cos(a) * rx; const ly = Math.sin(a) * ry;
+      return { x: cx + lx * Math.cos(tilt) - ly * Math.sin(tilt), y: cy + lx * Math.sin(tilt) + ly * Math.cos(tilt), behind: Math.sin(a) < 0, s: Math.max(1.8, r * size), c, rx, ry };
+    });
+    ctx.save();
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = 'rgba(246,239,221,0.35)'; ctx.lineWidth = 0.8;
+    for (const m of spots) ctx.stroke(ellipse(cx, cy, m.rx, m.ry, tilt));
+    ctx.restore();
+    const moon = (m) => { ctx.fillStyle = m.c; ctx.fill(circle(m.x, m.y, m.s)); };
+    spots.filter((m) => m.behind).forEach(moon);
+    layer(ctx, { blur: 8, alpha: 0.6 }, () => { ctx.fillStyle = color; ctx.fill(circle(cx, cy, r * 1.3)); });
+    const body = circle(cx, cy, r);
+    ctx.fillStyle = color; ctx.fill(body);
+    layer(ctx, { clip: body }, () => {
+      // Bands, a highlight and the night side, turning slowly.
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      for (const b of [-0.45, 0.1, 0.55]) ctx.fillRect(cx - r, cy + r * b + Math.sin(time * 0.8 + b * 4) * r * 0.05, r * 2, r * 0.16);
+      const lit = ctx.createRadialGradient(cx - r * 0.4, cy - r * 0.45, 0, cx - r * 0.4, cy - r * 0.45, r * 1.2);
+      lit.addColorStop(0, 'rgba(255,255,255,0.45)'); lit.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = lit; ctx.fill(body);
+      ctx.fillStyle = 'rgba(0,0,0,0.32)'; ctx.fill(circle(cx + r * 0.4, cy + r * 0.4, r));
+    });
+    spots.filter((m) => !m.behind).forEach(moon);
+    // A few twinkling sparkles around it.
+    const random = rng(31);
+    for (let i = 0; i < 5; i++) {
+      const x = random.range(w * 0.1, w * 0.95); const y = random.range(h * 0.15, h * 0.9);
+      const tw = Math.max(0, Math.sin(time * random.range(1.5, 3) + i * 2));
+      ctx.globalAlpha = tw * 0.9;
+      ctx.fillStyle = i % 2 ? '#fff' : ATOMIC.mustard;
+      ctx.fill(sparkle(x, y, random.range(3, 5)));
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Dark Academia: a pulsing gold glow around a playing book, glitter twinkling
+      on the cover, and stars and glitter flying out from its edges. The canvas
+      reaches `pad` beyond the card on every side; (0, 0) is the card's corner. */
+  function glitter(ctx, w, h, time, color, pad) {
+    if (w <= 30 || h <= 20) return;
+    const pulse = 0.65 + 0.35 * Math.sin(time * 3);
+    layer(ctx, { blur: 5 }, () => {
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = '#FFD27A'; ctx.lineWidth = 4; ctx.strokeRect(16, 6, w - 25, h - 12);
+      ctx.globalAlpha = pulse * 0.5;
+      ctx.strokeStyle = color; ctx.lineWidth = 8; ctx.strokeRect(16, 6, w - 25, h - 12);
+    });
+    const random = rng(7);
+    // Glitter on the cover.
+    for (let i = 0; i < 16; i++) {
+      const x = random.range(18, w - 8); const y = random.range(8, h - 8);
+      const tw = Math.max(0, Math.sin(time * random.range(2, 4.5) + random.range(0, 6)));
+      ctx.globalAlpha = tw ** 3;
+      ctx.fillStyle = i % 3 ? '#FFF4D2' : '#FFD27A';
+      ctx.fill(star(x, y, random.range(2, 4)));
+    }
+    // Stars and glitter flying out from the edges.
+    const perimeter = 2 * (w + h);
+    for (let i = 0; i < 40; i++) {
+      let along = random.range(0, perimeter);
+      let x; let y; let nx; let ny;
+      if (along < w) { x = along; y = 0; nx = 0; ny = -1; }
+      else if ((along -= w) < h) { x = w; y = along; nx = 1; ny = 0; }
+      else if ((along -= h) < w) { x = w - along; y = h; nx = 0; ny = 1; }
+      else { along -= w; x = 0; y = h - along; nx = -1; ny = 0; }
+      const spread = random.range(-0.7, 0.7);
+      const dx = nx + (ny ? spread : 0); const dy = ny + (nx ? spread : 0);
+      const period = random.range(1.1, 2.2);
+      const offset = random.next();
+      const reach = pad * random.range(0.55, 0.95);
+      const size = random.range(2.6, 6);
+      const kind = random.next();
+      const travel = (time / period + offset) % 1;
+      const px = x + dx * travel * reach;
+      const py = y + dy * travel * reach + travel * travel * 4;
+      const a = (1 - travel * travel) * (0.7 + 0.3 * Math.sin(time * 9 + i * 1.7));
+      if (kind < 0.55) {
+        const s = size * (1 - travel * 0.4);
+        ctx.globalAlpha = a * 0.45;
+        ctx.fillStyle = '#FFD27A'; ctx.fill(circle(px, py, s * 0.55));
+        ctx.globalAlpha = a;
+        ctx.fillStyle = kind < 0.3 ? '#FFE7A3' : '#FFFFFF';
+        ctx.fill(star(px, py, s));
+      } else {
+        ctx.globalAlpha = a;
+        ctx.fillStyle = kind < 0.8 ? '#F6DC8F' : color;
+        ctx.fill(circle(px, py, size * 0.28));
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Tavern: candlelight flickering up the card and embers rising off it. */
+  function embers(ctx, w, h, time) {
+    if (w <= 20 || h <= 16) return;
+    const flicker = 0.75 + 0.15 * Math.sin(time * 7.3) + 0.1 * Math.sin(time * 13.1 + 1);
+    const glow = ctx.createRadialGradient(w / 2, h + 8, 0, w / 2, h + 8, Math.max(w, h) * 0.9);
+    glow.addColorStop(0, `rgba(255,140,30,${0.45 * flicker})`);
+    glow.addColorStop(0.6, `rgba(230,100,20,${0.14 * flicker})`);
+    glow.addColorStop(1, 'rgba(230,110,20,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
+    const random = rng(5);
+    const count = Math.max(8, Math.min(22, Math.floor(w / 9)));
+    for (let i = 0; i < count; i++) {
+      const x0 = random.range(6, w - 6);
+      const period = random.range(1.4, 2.8);
+      const offset = random.next();
+      const size = random.range(1.3, 2.6);
+      const sway = random.range(4, 9);
+      const travel = (time / period + offset) % 1;
+      const x = x0 + Math.sin(time * 1.9 + i) * sway * travel;
+      const y = h - 2 - travel * (h + 4);
+      const a = (1 - travel) * (0.6 + 0.4 * Math.sin(time * 11 + i * 2.3));
+      ctx.fillStyle = `rgba(210,70,10,${a * 0.35})`;
+      ctx.fill(circle(x, y, size * 2.6));
+      ctx.fillStyle = `rgba(${Math.round(255 - 40 * travel)},${Math.round(110 + 90 * (1 - travel))},30,${a})`;
+      ctx.fill(circle(x, y, size));
+    }
   }
 
   // ---------- The listener's stage ----------
@@ -1099,6 +1410,7 @@ const ThemeArt = (() => {
     seedOf, rgba,
     parchment, woodTable, spaceScene, hullPlating, atomicPanel,
     hudBackdrop, hudPanel, arcaneBackdrop, gildedPanel, bookCover,
-    magicGlow, synthWave, stage,
+    scrapPaper, hardwood, libraryShelves, woodFrame,
+    synthWave, orbitPlanet, glitter, embers, stage,
   };
 })();

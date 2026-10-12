@@ -246,11 +246,11 @@ While broadcasting, **Games** in the toolbar starts a game for everyone. Startin
 
 Click **Options** at the bottom of the sidebar to pick a theme and a highlight colour. The themes are the same as on the iPhone/iPad:
 
-- **System**, **Dark** and **Light**.
-- **Tavern**: every page on worn parchment on a wooden table.
-- **Space Age**: a starship window onto deep space, with 50s atomic panels.
+- **System**, **Dark** and **Light**. Synth waves ripple through sounds while they play.
+- **Tavern**: every page on worn parchment on a wooden table. Tiles are dirty scraps of paper, and embers rise off them while they play.
+- **Space Age**: a starship window onto deep space, with 50s atomic panels. A planet with circling moons appears on sounds while they play.
 - **Sci-Fi**: a glowing holographic HUD. Tiles are see-through glass with a glowing edge, and synth waves ripple through them while they play.
-- **Dark Academia**: deep indigo pages in gilded frames under a starry night. Tiles are leather-bound book covers that glow with magic while they play.
+- **Dark Academia**: a starry night in a dark hardwood frame, a bookcase for the sidebar, and deep indigo pages in gilded frames. Tiles are leather-bound book covers that throw off glitter and stars while they play. The toolbar, full sounds and bashes are hardwood with gold trim.
 
 The listener's stage in a Live Session takes on the theme too.
 
@@ -299,7 +299,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/table.js` | The broadcaster's table: roll requests, initiative and the turn order, who goes first; listeners' request cards |
 | `src/renderer/dice-geometry.js` | The dice's shapes, numbering, reading a die, advantage and totals, custom and ready-made dice, stats, who won, initiative order (shared with the tests; the iPad has a copy) |
 | `src/renderer/themes.js` | Themes and the Options window: colours, fonts, where backdrops and panels go, book-cover tiles and playing effects |
-| `src/renderer/theme-art.js` | The themes' drawings (parchment, wood, space, HUD, gilded frames, book covers, synth waves, magic, the stage) |
+| `src/renderer/theme-art.js` | The themes' drawings (parchment, wood, space, HUD, gilded frames, book covers, scrap paper, hardwood and bookshelves, and the playing effects: synth waves, planets, glitter and embers; the stage) |
 | `src/renderer/kits.js` | Scene Kits sidebar, kit page (including ambience sections) and dialogs |
 | `src/renderer/icons.js` | The app's 100-icon set |
 | `src/renderer/icon-picker.*` | Icon picker with icon and background colours |

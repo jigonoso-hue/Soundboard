@@ -70,7 +70,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .tavern: return Color(hex: 0x3A2414)
         case .spaceAge: return Color(hex: 0x0B1226)
         case .scifi: return Color(hex: 0x041426)
-        case .academia: return Color(hex: 0x0A0B24)
+        case .academia: return Color(hex: 0x22140A)
         default: return nil
         }
     }
@@ -311,11 +311,13 @@ func stableSeed(_ text: String) -> UInt64 {
 /// The outline of a worn sheet: uneven, torn edges with the odd nick.
 struct TornEdge: Shape {
     let seed: UInt64
+    /// Smaller for a small scrap: finer tears.
+    var scale: CGFloat = 1
 
     func path(in rect: CGRect) -> Path {
         var random = SeededRandom(seed)
         var points: [CGPoint] = []
-        let step: CGFloat = 11
+        let step: CGFloat = 11 * scale
 
         // Walks one edge from a to b; `inward` points into the sheet.
         func edge(from a: CGPoint, to b: CGPoint, inward: CGVector) {
@@ -328,13 +330,13 @@ struct TornEdge: Shape {
                 let t = CGFloat(i) / CGFloat(count)
                 let p = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
                 // Gentle waviness plus small tears.
-                let depth = random.range(0, 2.2) + wave * (1 + sin(t * length / 90 + phase)) / 2
+                let depth = (random.range(0, 2.2) + wave * (1 + sin(t * length / 90 + phase)) / 2) * scale
                 points.append(CGPoint(x: p.x + inward.dx * depth, y: p.y + inward.dy * depth))
                 if random.next() < 0.045 {
                     // A nick: a small V cut into the edge.
-                    let cut = random.range(4, 10)
-                    points.append(CGPoint(x: p.x + along.dx * 3 + inward.dx * cut, y: p.y + along.dy * 3 + inward.dy * cut))
-                    points.append(CGPoint(x: p.x + along.dx * 6 + inward.dx * depth, y: p.y + along.dy * 6 + inward.dy * depth))
+                    let cut = random.range(4, 10) * scale
+                    points.append(CGPoint(x: p.x + along.dx * 3 * scale + inward.dx * cut, y: p.y + along.dy * 3 * scale + inward.dy * cut))
+                    points.append(CGPoint(x: p.x + along.dx * 6 * scale + inward.dx * depth, y: p.y + along.dy * 6 * scale + inward.dy * depth))
                 }
             }
         }
@@ -469,6 +471,193 @@ struct Parchment: View, Equatable {
 
 // MARK: - Tavern table
 
+/// A sound's card in Tavern: a dirty scrap of paper with torn edges, grime, a
+/// mug ring, a fold, a dog-eared corner and a daub of the sound's colour down
+/// the left side. The same as the Mac's theme-art.js scrapPaper.
+struct ScrapPaper: View, Equatable {
+    let seed: String
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            ScrapPaper.draw(&context, size: size, seed: stableSeed(seed), color: color)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private static func dirt(_ alpha: CGFloat) -> Color {
+        Color(red: 74 / 255, green: 48 / 255, blue: 20 / 255).opacity(Double(alpha))
+    }
+
+    private static func oval(_ cx: CGFloat, _ cy: CGFloat, _ rx: CGFloat, _ ry: CGFloat) -> Path {
+        Path(ellipseIn: CGRect(x: cx - rx, y: cy - ry, width: rx * 2, height: ry * 2))
+    }
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, seed: UInt64, color: Color) {
+        let margin: CGFloat = 3
+        let w = size.width - margin * 2
+        let h = size.height - margin * 2
+        guard w > 10, h > 10 else { return }
+        var random = SeededRandom(seed &* 13 &+ 5)
+        var sheet = context
+        sheet.translateBy(x: margin, y: margin)
+        let all = CGRect(x: 0, y: 0, width: w, height: h)
+        let outline = TornEdge(seed: seed, scale: 0.45).path(in: all)
+
+        var shadowed = sheet
+        shadowed.addFilter(.shadow(color: Color(red: 40 / 255, green: 22 / 255, blue: 8 / 255).opacity(0.55), radius: 2.5, y: 2))
+        shadowed.fill(outline, with: .linearGradient(
+            Gradient(stops: [.init(color: Color(hex: 0xF1EAD6), location: 0),
+                             .init(color: Color(hex: 0xE2D6B8), location: 0.55),
+                             .init(color: Color(hex: 0xCDBB93), location: 1)]),
+            startPoint: .zero, endPoint: CGPoint(x: w, y: h)))
+
+        var paper = sheet
+        paper.clip(to: outline)
+        paper.fill(Path(all), with: .color(color.opacity(0.1)))
+
+        // Grime: soft smudges, heavier towards the bottom, and a thumbprint.
+        var grime = paper
+        grime.addFilter(.blur(radius: 9))
+        for _ in 0..<9 {
+            let alpha = random.range(0.1, 0.22)
+            let x = random.range(0, w)
+            let y = random.range(h * 0.35, h * 1.1)
+            let rx = random.range(14, 40)
+            let ry = random.range(8, 22)
+            grime.fill(oval(x, y, rx, ry), with: .color(dirt(alpha)))
+        }
+        let tx = random.range(w * 0.55, w * 0.9)
+        let ty = random.range(h * 0.55, h * 0.85)
+        var thumb = Path()
+        var r: CGFloat = 2
+        while r < 9 {
+            thumb.addPath(Path(ellipseIn: CGRect(x: -r * 0.75, y: -r, width: r * 1.5, height: r * 2))
+                .applying(CGAffineTransform(rotationAngle: 0.5).concatenating(CGAffineTransform(translationX: tx, y: ty))))
+            r += 1.6
+        }
+        paper.stroke(thumb, with: .color(dirt(0.2)), lineWidth: 0.8)
+
+        // A mug ring, partly off the edge.
+        if h > 60 && random.next() < 0.7 {
+            let center = CGPoint(x: random.range(w * 0.6, w * 1.05), y: random.range(-h * 0.1, h * 0.5))
+            let radius = min(h * 0.42, 30)
+            var ring = Path()
+            let start = random.range(0, 2)
+            let end = random.range(4.4, 6.2)
+            ring.addArc(center: center, radius: radius, startAngle: .radians(Double(start)), endAngle: .radians(Double(end)), clockwise: false)
+            var soft = paper
+            soft.addFilter(.blur(radius: 0.8))
+            soft.stroke(ring, with: .color(Color(red: 110 / 255, green: 60 / 255, blue: 20 / 255).opacity(0.28)), lineWidth: 2.2)
+            var wash = paper
+            wash.addFilter(.blur(radius: 5))
+            wash.fill(oval(center.x, center.y, radius - 2, radius - 2), with: .color(Color(red: 110 / 255, green: 60 / 255, blue: 20 / 255).opacity(0.06)))
+        }
+
+        // A fold across the scrap: a dark crease and a light ridge.
+        let fy = random.range(h * 0.3, h * 0.75)
+        let lean = random.range(-8, 8)
+        var crease = Path()
+        crease.move(to: CGPoint(x: 0, y: fy - lean))
+        crease.addLine(to: CGPoint(x: w, y: fy + lean))
+        paper.stroke(crease, with: .color(dirt(0.22)), lineWidth: 0.9)
+        paper.stroke(crease.offsetBy(dx: 0, dy: 1.2), with: .color(Color(red: 1, green: 248 / 255, blue: 226 / 255).opacity(0.5)), lineWidth: 0.9)
+
+        // Specks of dirt.
+        for _ in 0..<Int(w * h / 120) {
+            let alpha = random.range(0.1, 0.4)
+            let x = random.range(0, w)
+            let y = random.range(0, h)
+            let s = random.range(0.3, 0.9)
+            paper.fill(oval(x, y, s, s), with: .color(dirt(alpha)))
+        }
+
+        // The sound's colour: a rough brush daub down the left side.
+        var daub = Path()
+        daub.move(to: CGPoint(x: 2, y: 0))
+        var y: CGFloat = 0
+        while y <= h {
+            daub.addLine(to: CGPoint(x: random.range(7, 10), y: y))
+            y += 6
+        }
+        daub.addLine(to: CGPoint(x: random.range(7, 10), y: h))
+        daub.addLine(to: CGPoint(x: 0, y: h))
+        daub.addLine(to: .zero)
+        daub.closeSubpath()
+        paper.fill(daub, with: .color(color.opacity(0.85)))
+        paper.fill(daub, with: .color(Color(hex: 0x3D2712).opacity(0.35)))
+
+        // Dirty, darkened edges.
+        var burn = paper
+        burn.addFilter(.blur(radius: 4))
+        burn.stroke(outline, with: .color(Color(red: 92 / 255, green: 56 / 255, blue: 20 / 255).opacity(0.5)), lineWidth: 9)
+        paper.stroke(outline, with: .color(Color(red: 70 / 255, green: 40 / 255, blue: 12 / 255).opacity(0.55)), lineWidth: 1.2)
+
+        // A dog-eared corner, top right.
+        if w > 70 && h > 40 {
+            let k = min(14, h * 0.18)
+            var ear = Path()
+            ear.move(to: CGPoint(x: w - k, y: 0))
+            ear.addLine(to: CGPoint(x: w - k * 0.9, y: k * 0.95))
+            ear.addLine(to: CGPoint(x: w, y: k))
+            ear.closeSubpath()
+            sheet.fill(oval(w - k * 0.5, k * 0.55, k * 0.6, k * 0.5), with: .color(Color(red: 40 / 255, green: 22 / 255, blue: 8 / 255).opacity(0.25)))
+            sheet.fill(ear, with: .linearGradient(Gradient(colors: [Color(hex: 0xC9B07A), Color(hex: 0xE6D5AC)]),
+                                                  startPoint: CGPoint(x: w - k, y: 0), endPoint: CGPoint(x: w, y: k)))
+            sheet.stroke(ear, with: .color(Color(red: 70 / 255, green: 40 / 255, blue: 12 / 255).opacity(0.5)), lineWidth: 0.8)
+        }
+    }
+}
+
+/// Tavern: candlelight flickering up a playing sound and embers rising off it
+/// (theme-art.js embers).
+struct Embers: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            Canvas { context, size in
+                let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+                Embers.draw(&context, size: size, time: time)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, time: Double) {
+        let w = size.width
+        let h = size.height
+        guard w > 20, h > 16 else { return }
+        let t = CGFloat(time.truncatingRemainder(dividingBy: 10_000))
+        let flicker = 0.75 + 0.15 * sin(t * 7.3) + 0.1 * sin(t * 13.1 + 1)
+        let center = CGPoint(x: w / 2, y: h + 8)
+        context.fill(Path(CGRect(origin: .zero, size: size)), with: .radialGradient(
+            Gradient(stops: [.init(color: Color(red: 1, green: 140 / 255, blue: 30 / 255).opacity(Double(0.45 * flicker)), location: 0),
+                             .init(color: Color(red: 230 / 255, green: 100 / 255, blue: 20 / 255).opacity(Double(0.14 * flicker)), location: 0.6),
+                             .init(color: Color(red: 230 / 255, green: 100 / 255, blue: 20 / 255).opacity(0), location: 1)]),
+            center: center, startRadius: 0, endRadius: max(w, h) * 0.9))
+        var random = SeededRandom(5)
+        let count = max(8, min(22, Int(w / 9)))
+        for i in 0..<count {
+            let x0 = random.range(6, w - 6)
+            let period = random.range(1.4, 2.8)
+            let offset = random.next()
+            let s = random.range(1.3, 2.6)
+            let sway = random.range(4, 9)
+            let travel = (t / period + offset).truncatingRemainder(dividingBy: 1)
+            let x = x0 + sin(t * 1.9 + CGFloat(i)) * sway * travel
+            let y = h - 2 - travel * (h + 4)
+            let alpha = Double((1 - travel) * (0.6 + 0.4 * sin(t * 11 + CGFloat(i) * 2.3)))
+            context.fill(Path(ellipseIn: CGRect(x: x - s * 2.6, y: y - s * 2.6, width: s * 5.2, height: s * 5.2)),
+                         with: .color(Color(red: 210 / 255, green: 70 / 255, blue: 10 / 255).opacity(alpha * 0.35)))
+            context.fill(Path(ellipseIn: CGRect(x: x - s, y: y - s, width: s * 2, height: s * 2)),
+                         with: .color(Color(red: Double(255 - 40 * travel) / 255, green: Double(110 + 90 * (1 - travel)) / 255, blue: 30 / 255).opacity(alpha)))
+        }
+    }
+}
+
 /// Wooden planks: varied shades, grain, knots and seams.
 struct WoodTable: View, Equatable {
     var body: some View {
@@ -570,7 +759,8 @@ struct ThemePanel<Fallback: View>: View {
 
 extension View {
     /// In the Tavern theme: the table with this screen on its own parchment page, or the
-    /// bare table when `page` is nil. In Space Age: the window onto space. In Sci-Fi: the HUD. In Dark Academia: the starry night.
+    /// bare table when `page` is nil. In Space Age: the window onto space. In Sci-Fi: the HUD. In Dark Academia: the starry night
+    /// in a hardwood frame, or bookshelves for the sidebar.
     @ViewBuilder
     func themedBackground(_ theme: AppTheme, page: String? = "page") -> some View {
         // Fill the screen even when the content is empty, or the backdrop shrinks with it.
@@ -589,9 +779,20 @@ extension View {
                 .scrollContentBackground(.hidden)
                 .background(HUDBackdrop().equatable().ignoresSafeArea())
         case .academia:
+            // The sidebar is a bookcase; other screens, the night sky in a hardwood frame.
             filled
                 .scrollContentBackground(.hidden)
-                .background(ArcaneBackdrop().equatable().ignoresSafeArea())
+                .background {
+                    if page == "sidebar" {
+                        LibraryShelves().equatable().ignoresSafeArea()
+                    } else {
+                        ZStack {
+                            ArcaneBackdrop().equatable()
+                            WoodFrame().equatable()
+                        }
+                        .ignoresSafeArea()
+                    }
+                }
         default:
             self
         }

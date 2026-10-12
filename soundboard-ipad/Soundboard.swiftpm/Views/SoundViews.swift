@@ -34,22 +34,24 @@ struct SoundTile: View {
         let progress = player.progress[sound.id]
         let color = Palette.color(sound.colorIndex)
         let isPlaying = progress != nil
-        // Sci-Fi tiles are see-through glass with a glowing edge and a synth wave while playing.
+        // Sci-Fi tiles are see-through glass with a glowing edge.
         let scifi = theme == .scifi
-        // Dark Academia tiles are leather book covers that glow with magic while playing.
+        // Dark Academia tiles are leather book covers that throw off glitter while playing.
         let book = theme == .academia
+        // Tavern tiles are dirty scraps of paper.
+        let scrap = theme == .tavern
         let shape = book
             ? AnyShape(UnevenRoundedRectangle(topLeadingRadius: 3, bottomLeadingRadius: 3, bottomTrailingRadius: 8, topTrailingRadius: 8))
-            : AnyShape(RoundedRectangle(cornerRadius: theme == .tavern ? 6 : 14))
+            : (scrap ? AnyShape(Rectangle()) : AnyShape(RoundedRectangle(cornerRadius: 14)))
         Button {
             playSound(sound, store: store, player: player, ui: ui, gain: gain)
         } label: {
             ZStack(alignment: .bottomLeading) {
                 if book {
                     BookCover(seed: sound.id.uuidString, color: color, emblem: size == .l).equatable()
-                    if isPlaying {
-                        MagicGlow(color: color)
-                    }
+                } else if scrap {
+                    ScrapPaper(seed: sound.id.uuidString, color: color).equatable()
+                    if isPlaying { Embers() }
                 } else {
                     plainTile(color: color, isPlaying: isPlaying, scifi: scifi)
                 }
@@ -77,7 +79,7 @@ struct SoundTile: View {
                     if sound.gmOnly == true && size != .s { GMBadge() }
                 }
                 .padding(size == .s ? 8 : 10)
-                .padding(.leading, book ? 12 : 0)
+                .padding(.leading, book ? 12 : (scrap ? 6 : 0))
                 .padding(.top, book ? 2 : 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: book ? .top : .topLeading)
                 GeometryReader { geo in
@@ -94,6 +96,10 @@ struct SoundTile: View {
             .shadow(color: book ? (isPlaying ? color.opacity(0.9) : .black.opacity(0.5)) : .clear, radius: book && isPlaying ? 22 : 3, y: book && isPlaying ? 0 : 2)
             .shadow(color: book ? .clear : (scifi ? color.opacity(isPlaying ? 0.8 : 0.35) : (isPlaying ? color.opacity(0.6) : .clear)),
                     radius: scifi ? (isPlaying ? 12 : 6) : 10)
+            .overlay {
+                // Glitter and stars fly out past the book's edges.
+                if book && isPlaying { Glitter(color: color) }
+            }
             .scaleEffect(isPlaying ? 1.02 : 1)
             .animation(.easeOut(duration: 0.15), value: isPlaying)
         }
@@ -120,44 +126,20 @@ struct SoundTile: View {
             }
         }
         .contextMenu { SoundMenu(sound: sound) }
+        // A playing book's glitter flies over its neighbours.
+        .zIndex(isPlaying ? 1 : 0)
     }
 
-    /// The tile's colour, edge and (in Sci-Fi) glow and synth wave.
+    /// The tile's colour and edge, with a glow in Sci-Fi and the theme's
+    /// animation while playing.
     @ViewBuilder
     private func plainTile(color: Color, isPlaying: Bool, scifi: Bool) -> some View {
-        if theme == .tavern {
-            tavernTile(color: color, isPlaying: isPlaying)
-        } else {
-            glassTile(color: color, isPlaying: isPlaying, scifi: scifi)
-        }
-    }
-
-    /// Tavern: a parchment card with a coloured ink edge (the same as the Mac's styles.css).
-    @ViewBuilder
-    private func tavernTile(color: Color, isPlaying: Bool) -> some View {
-        let parchment = Color(hex: 0xF3E4C2)
-        RoundedRectangle(cornerRadius: 6)
-            .fill(parchment)
-        RoundedRectangle(cornerRadius: 6)
-            .fill(color.opacity(isPlaying ? 0.26 : 0.12))
-        Rectangle()
-            .fill(color.blended(with: Color(hex: 0x3D2712), amount: 0.3))
-            .frame(width: 5)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        RoundedRectangle(cornerRadius: 6)
-            .strokeBorder(color.blended(with: Color(hex: isPlaying ? 0x3D2712 : 0x6B4423), amount: isPlaying ? 0.3 : 0.6),
-                          lineWidth: isPlaying ? 2 : 1)
-    }
-
-    @ViewBuilder
-    private func glassTile(color: Color, isPlaying: Bool, scifi: Bool) -> some View {
         RoundedRectangle(cornerRadius: 14)
             .fill(scifi ? Color(hex: 0x081E36).opacity(0.35) : theme.tileBase)
         RoundedRectangle(cornerRadius: 14)
             .fill(color.opacity(scifi ? (isPlaying ? 0.3 : 0.12) : (isPlaying ? 0.55 : 0.26)))
-        if scifi && isPlaying {
-            SynthWave(color: color)
-                .padding(.vertical, 6)
+        if isPlaying {
+            PlayingEffect(theme: theme, color: color)
         }
         if scifi {
             RoundedRectangle(cornerRadius: 14)
@@ -262,18 +244,22 @@ struct TrackRow: View {
                 .padding(.bottom, 8)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(theme.cardFill(active: isPlaying))
-        )
         .background {
-            if theme == .scifi && isPlaying {
-                SynthWave(color: color).opacity(0.5).padding(.vertical, 4)
+            ZStack {
+                if theme == .academia {
+                    WoodTrimCard(active: isPlaying)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(theme.cardFill(active: isPlaying))
+                }
+                if isPlaying {
+                    PlayingEffect(theme: theme, color: color, row: true)
+                }
             }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop ? 1 : 0)
+                .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop && theme != .academia ? 1 : 0)
         )
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2).fill(current ? Color.accentColor : color).frame(width: current ? 4 : 3).padding(.vertical, current ? 0 : 8)
@@ -351,7 +337,30 @@ struct SoundMenu: View {
     }
 }
 
-/// Glowing synth waves that ripple across a playing sound in the Sci-Fi theme.
+/// The animation on a playing sound, for each theme (the Mac's themes.js fxKind):
+/// synth waves in Sci-Fi and the plain themes, a planet and moons in Space Age,
+/// embers in Tavern. Dark Academia's books use Glitter, laid past their edges.
+struct PlayingEffect: View {
+    let theme: AppTheme
+    let color: Color
+    /// A full sound's row: a softer, smaller version.
+    var row = false
+
+    var body: some View {
+        switch theme {
+        case .spaceAge:
+            OrbitPlanet(color: color, soft: row).opacity(row ? 0.5 : 1)
+        case .tavern:
+            Embers().opacity(row ? 0.85 : 1)
+        case .academia:
+            EmptyView()
+        default:
+            SynthWave(color: color).opacity(row ? 0.5 : 1).padding(.vertical, row ? 4 : 6)
+        }
+    }
+}
+
+/// Glowing synth waves that ripple across a playing sound: Sci-Fi and the plain themes.
 struct SynthWave: View {
     let color: Color
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

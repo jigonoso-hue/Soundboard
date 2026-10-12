@@ -387,3 +387,86 @@ struct AtomicPanel: View, Equatable {
         }
     }
 }
+
+/// Space Age: a planet in the sound's colour with moons circling it, over a
+/// playing sound. `soft` is the smaller one for a full sound's row. The same
+/// as the Mac's theme-art.js orbitPlanet.
+struct OrbitPlanet: View {
+    let color: Color
+    var soft = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            Canvas { context, size in
+                let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+                OrbitPlanet.draw(&context, size: size, time: time, color: color, soft: soft)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, time: Double, color: Color, soft: Bool) {
+        let w = size.width
+        let h = size.height
+        guard w > 30, h > 20 else { return }
+        let t = CGFloat(time.truncatingRemainder(dividingBy: 10_000))
+        func disc(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> Path {
+            Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
+        }
+        // Clear of the name (top left) and the Stop button (bottom right).
+        let r = max(5, min(h * 0.2, w * 0.11))
+        let cx = w * (soft ? 0.62 : 0.68)
+        let cy = h * (soft ? 0.47 : 0.4)
+        let tilt: CGFloat = -0.28
+        // (orbit size, speed, moon size, colour)
+        let moons: [(CGFloat, CGFloat, CGFloat, Color)] = [(1.9, 1.1, 0.26, Atomic.cream), (2.7, -0.7, 0.2, Atomic.teal), (3.5, 0.5, 0.17, Atomic.mustard)]
+        struct Moon { let x: CGFloat; let y: CGFloat; let behind: Bool; let size: CGFloat; let color: Color; let rx: CGFloat; let ry: CGFloat }
+        let spots = moons.enumerated().map { i, moon -> Moon in
+            let a = t * moon.1 + CGFloat(i) * 2.1
+            let rx = r * moon.0
+            let ry = rx * 0.32
+            let lx = cos(a) * rx
+            let ly = sin(a) * ry
+            return Moon(x: cx + lx * cos(tilt) - ly * sin(tilt), y: cy + lx * sin(tilt) + ly * cos(tilt),
+                        behind: sin(a) < 0, size: max(1.8, r * moon.2), color: moon.3, rx: rx, ry: ry)
+        }
+        let turn = CGAffineTransform(rotationAngle: tilt).concatenating(CGAffineTransform(translationX: cx, y: cy))
+        for moon in spots {
+            let orbit = Path(ellipseIn: CGRect(x: -moon.rx, y: -moon.ry, width: moon.rx * 2, height: moon.ry * 2)).applying(turn)
+            context.stroke(orbit, with: .color(Atomic.cream.opacity(0.35)), style: StrokeStyle(lineWidth: 0.8, dash: [2, 3]))
+        }
+        for moon in spots where moon.behind { context.fill(disc(moon.x, moon.y, moon.size), with: .color(moon.color)) }
+        var glow = context
+        glow.addFilter(.blur(radius: 8))
+        glow.opacity = 0.6
+        glow.fill(disc(cx, cy, r * 1.3), with: .color(color))
+        let body = disc(cx, cy, r)
+        context.fill(body, with: .color(color))
+        var surface = context
+        surface.clip(to: body)
+        // Bands, a highlight and the night side, turning slowly.
+        for b: CGFloat in [-0.45, 0.1, 0.55] {
+            let y = cy + r * b + sin(t * 0.8 + b * 4) * r * 0.05
+            surface.fill(Path(CGRect(x: cx - r, y: y, width: r * 2, height: r * 0.16)), with: .color(.white.opacity(0.18)))
+        }
+        let light = CGPoint(x: cx - r * 0.4, y: cy - r * 0.45)
+        surface.fill(body, with: .radialGradient(Gradient(colors: [.white.opacity(0.45), .white.opacity(0)]),
+                                                 center: light, startRadius: 0, endRadius: r * 1.2))
+        surface.fill(disc(cx + r * 0.4, cy + r * 0.4, r), with: .color(.black.opacity(0.32)))
+        for moon in spots where !moon.behind { context.fill(disc(moon.x, moon.y, moon.size), with: .color(moon.color)) }
+
+        // A few twinkling sparkles around it.
+        var random = SeededRandom(31)
+        for i in 0..<5 {
+            let x = random.range(w * 0.1, w * 0.95)
+            let y = random.range(h * 0.15, h * 0.9)
+            let rate = random.range(1.5, 3)
+            let s = random.range(3, 5)
+            var sparkle = context
+            sparkle.opacity = Double(max(0, sin(t * rate + CGFloat(i) * 2)) * 0.9)
+            sparkle.fill(Atomic.sparkle(at: CGPoint(x: x, y: y), size: s), with: .color(i % 2 == 1 ? .white : Atomic.mustard))
+        }
+    }
+}
