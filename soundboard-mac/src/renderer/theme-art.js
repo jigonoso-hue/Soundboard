@@ -978,8 +978,9 @@ const ThemeArt = (() => {
 
   const DIRT = (a) => `rgba(74,48,20,${a})`;
 
-  /** A sound's card in Tavern: a dirty scrap of paper with torn edges, grime,
-      a mug ring, a fold and a daub of the sound's colour down the left side. */
+  /** A sound's card in Tavern: a scrap of old paper pinned up with a brass
+      tack, with torn edges, light wear, a mug ring, a fold, a dog-eared corner
+      and a daub of the sound's colour down the left side. */
   function scrapPaper(ctx, W, H, seedText, color) {
     const m = 3;
     const w = W - m * 2; const h = H - m * 2;
@@ -990,23 +991,23 @@ const ThemeArt = (() => {
     ctx.translate(m, m);
     const outline = tornEdge(w, h, seed, 0.45);
     ctx.save();
-    ctx.shadowColor = 'rgba(40,22,8,0.55)'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 2;
-    ctx.fillStyle = linear(ctx, 0, 0, w, h, [[0, '#F1EAD6'], [0.55, '#E2D6B8'], [1, '#CDBB93']]);
+    ctx.shadowColor = 'rgba(60,35,12,0.35)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 3;
+    ctx.fillStyle = linear(ctx, 0, 0, w, h, [[0, '#F8F0DC'], [0.6, '#EFE1C2'], [1, '#E3CFA6']]);
     ctx.fill(outline);
     ctx.restore();
     ctx.save();
     ctx.clip(outline);
     ctx.globalAlpha = 0.1; ctx.fillStyle = color; ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
 
-    // Grime: soft smudges, heavier towards the bottom, and a thumbprint.
-    layer(ctx, { blur: 9 }, () => {
-      for (let i = 0; i < 9; i++) {
-        ctx.fillStyle = DIRT(random.range(0.1, 0.22));
+    // Wear: soft smudges, heavier towards the bottom, and a thumbprint.
+    layer(ctx, { blur: 10 }, () => {
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = DIRT(random.range(0.05, 0.11));
         ctx.fill(ellipse(random.range(0, w), random.range(h * 0.35, h * 1.1), random.range(14, 40), random.range(8, 22)));
       }
     });
     const tx = random.range(w * 0.55, w * 0.9); const ty = random.range(h * 0.55, h * 0.85);
-    layer(ctx, { alpha: 0.2 }, () => {
+    layer(ctx, { alpha: 0.12 }, () => {
       ctx.strokeStyle = DIRT(1); ctx.lineWidth = 0.8;
       for (let r = 2; r < 9; r += 1.6) ctx.stroke(ellipse(tx, ty, r * 0.75, r, 0.5));
     });
@@ -1025,12 +1026,12 @@ const ThemeArt = (() => {
     const lean = random.range(-8, 8);
     ctx.lineWidth = 0.9;
     ctx.beginPath(); ctx.moveTo(0, fy - lean); ctx.lineTo(w, fy + lean);
-    ctx.strokeStyle = DIRT(0.22); ctx.stroke();
+    ctx.strokeStyle = DIRT(0.14); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, fy - lean + 1.2); ctx.lineTo(w, fy + lean + 1.2);
     ctx.strokeStyle = 'rgba(255,248,226,0.5)'; ctx.stroke();
     // Specks of dirt.
-    for (let i = 0; i < Math.floor(w * h / 120); i++) {
-      ctx.fillStyle = DIRT(random.range(0.1, 0.4));
+    for (let i = 0; i < Math.floor(w * h / 220); i++) {
+      ctx.fillStyle = DIRT(random.range(0.06, 0.25));
       ctx.fill(circle(random.range(0, w), random.range(0, h), random.range(0.3, 0.9)));
     }
     // The sound's colour: a rough brush daub down the left side.
@@ -1042,9 +1043,9 @@ const ThemeArt = (() => {
     ctx.globalAlpha = 0.85; ctx.fillStyle = color; ctx.fill(daub);
     ctx.globalAlpha = 0.35; ctx.fillStyle = '#3d2712'; ctx.fill(daub);
     ctx.globalAlpha = 1;
-    // Dirty, darkened edges.
-    layer(ctx, { blur: 4 }, () => { ctx.strokeStyle = 'rgba(92,56,20,0.5)'; ctx.lineWidth = 9; ctx.stroke(outline); });
-    ctx.strokeStyle = 'rgba(70,40,12,0.55)'; ctx.lineWidth = 1.2; ctx.stroke(outline);
+    // Gently aged edges.
+    layer(ctx, { blur: 5 }, () => { ctx.strokeStyle = 'rgba(150,100,45,0.35)'; ctx.lineWidth = 10; ctx.stroke(outline); });
+    ctx.strokeStyle = 'rgba(110,72,30,0.35)'; ctx.lineWidth = 1; ctx.stroke(outline);
     ctx.restore();
     // A dog-eared corner, top right.
     if (w > 70 && h > 40) {
@@ -1055,7 +1056,16 @@ const ThemeArt = (() => {
       ctx.fill(ellipse(w - k * 0.5, k * 0.55, k * 0.6, k * 0.5));
       ctx.fillStyle = linear(ctx, w - k, 0, w, k, [[0, '#C9B07A'], [1, '#E6D5AC']]);
       ctx.fill(ear);
-      ctx.strokeStyle = 'rgba(70,40,12,0.5)'; ctx.lineWidth = 0.8; ctx.stroke(ear);
+      ctx.strokeStyle = 'rgba(110,72,30,0.45)'; ctx.lineWidth = 0.8; ctx.stroke(ear);
+    }
+    // A brass tack pinning it up.
+    if (w > 60) {
+      const px = w / 2; const py = 6;
+      ctx.fillStyle = 'rgba(60,35,12,0.3)'; ctx.fill(ellipse(px + 1.5, py + 2, 4.5, 3.5));
+      const brass = ctx.createRadialGradient(px - 1.3, py - 1.3, 0.5, px, py, 4.5);
+      brass.addColorStop(0, '#FBE7A6'); brass.addColorStop(0.5, '#D9A441'); brass.addColorStop(1, '#8A5A1A');
+      ctx.fillStyle = brass; ctx.fill(circle(px, py, 4));
+      ctx.strokeStyle = 'rgba(90,55,15,0.6)'; ctx.lineWidth = 0.6; ctx.stroke(circle(px, py, 4));
     }
     ctx.restore();
   }

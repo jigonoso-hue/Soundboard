@@ -75,6 +75,7 @@ const Themes = (() => {
     root.style.setProperty('--accent-fill-hover', `color-mix(in srgb, ${fill} 88%, ${ink === '#fff' ? '#fff' : '#000'})`);
     root.style.setProperty('--on-accent', ink);
     if (theme === 'academia') root.style.setProperty('--wood', woodTexture());
+    if (theme === 'tavern') root.style.setProperty('--tavern-wood', tavernWood());
     paintAll(true);
     listeners.forEach((fn) => fn(theme));
   }
@@ -89,6 +90,18 @@ const Themes = (() => {
       wood = `url(${canvas.toDataURL('image/jpeg', 0.88)})`;
     }
     return wood;
+  }
+
+  // Warm planks for Tavern's toolbar.
+  let planks = null;
+  function tavernWood() {
+    if (!planks) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 900; canvas.height = 148;
+      ThemeArt.woodTable(canvas.getContext('2d'), 900, 148);
+      planks = `url(${canvas.toDataURL('image/jpeg', 0.88)})`;
+    }
+    return planks;
   }
 
   matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (theme === 'system') apply(); });
@@ -223,6 +236,7 @@ const Themes = (() => {
   function decorateTile(tile) {
     if (theme !== 'academia' && theme !== 'tavern') {
       if (tile.dataset.cover) { delete tile.dataset.cover; tile.style.backgroundImage = ''; }
+      tile.style.removeProperty('--tilt');
       return;
     }
     if (!tilesObserved.has(tile)) { tilesObserved.add(tile); tileObserver.observe(tile); }
@@ -231,6 +245,9 @@ const Themes = (() => {
     if (w < 10 || h < 10) return;
     const color = tileColor(tile);
     const id = tile.dataset.soundId || tile.dataset.id || '';
+    // Tavern's notes are pinned up a little crooked, each its own way.
+    if (theme === 'tavern') tile.style.setProperty('--tilt', `${((ThemeArt.seedOf(id) % 1000) / 1000 * 2.4 - 1.2).toFixed(2)}deg`);
+    else tile.style.removeProperty('--tilt');
     const emblem = h >= 110;
     const key = `${theme}|${id}|${color}|${w}x${h}|${emblem}`;
     if (tile.dataset.cover === key) return;

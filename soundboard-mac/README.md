@@ -247,7 +247,7 @@ While broadcasting, **Games** in the toolbar starts a game for everyone. Startin
 Click **Options** at the bottom of the sidebar to pick a theme and a highlight colour. The themes are the same as on the iPhone/iPad:
 
 - **System**, **Dark** and **Light**. Synth waves ripple through sounds while they play.
-- **Tavern**: every page on worn parchment on a wooden table. Tiles are dirty scraps of paper, and embers rise off them while they play.
+- **Tavern**: every page on worn parchment on a wooden table, under a plank toolbar. Tiles are scraps of paper pinned up with brass tacks, a little crooked, and embers rise off them while they play. Full sounds, bashes and ambience layers are cream cards, and play buttons are wax seals.
 - **Space Age**: a starship window onto deep space, with 50s atomic panels. A planet with circling moons appears on sounds while they play.
 - **Sci-Fi**: a glowing holographic HUD. Tiles are see-through glass with a glowing edge, and synth waves ripple through them while they play.
 - **Dark Academia**: a starry night in a dark hardwood frame, a bookcase for the sidebar, and deep indigo pages in gilded frames. Tiles are leather-bound book covers that throw off glitter and stars while they play. The toolbar, full sounds and bashes are hardwood with gold trim.

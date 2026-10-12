@@ -120,7 +120,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     /// Fill behind a card (a full sound, bash or ambience layer); stronger while it plays.
     func cardFill(active: Bool = false) -> Color {
         switch self {
-        case .tavern: return Color(hex: 0x7A5228).opacity(active ? 0.28 : 0.16)
+        case .tavern: return active ? Color(hex: 0xF6E7C4).opacity(0.95) : Color(hex: 0xFBF3DF).opacity(0.88)
         case .spaceAge: return Color(hex: 0x0C142C).opacity(active ? 0.95 : 0.82)
         case .scifi: return Color(hex: 0x08203A).opacity(active ? 0.95 : 0.8)
         case .academia: return Color(hex: 0x14164A).opacity(active ? 0.95 : 0.8)
@@ -131,7 +131,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     /// Outline of a card.
     var cardStroke: Color {
         switch self {
-        case .tavern: return Color(hex: 0x5A3A18).opacity(0.55)
+        case .tavern: return Color(hex: 0x78501F).opacity(0.3)
         case .spaceAge: return Color(hex: 0xF6EFDD).opacity(0.55)
         case .scifi: return Color(hex: 0x3FD2FF).opacity(0.55)
         case .academia: return Color(hex: 0xD4A94A).opacity(0.6)
@@ -471,9 +471,10 @@ struct Parchment: View, Equatable {
 
 // MARK: - Tavern table
 
-/// A sound's card in Tavern: a dirty scrap of paper with torn edges, grime, a
-/// mug ring, a fold, a dog-eared corner and a daub of the sound's colour down
-/// the left side. The same as the Mac's theme-art.js scrapPaper.
+/// A sound's card in Tavern: a scrap of old paper pinned up with a brass tack,
+/// with torn edges, light wear, a mug ring, a fold, a dog-eared corner and a
+/// daub of the sound's colour down the left side. The same as the Mac's
+/// theme-art.js scrapPaper.
 struct ScrapPaper: View, Equatable {
     let seed: String
     let color: Color
@@ -506,22 +507,22 @@ struct ScrapPaper: View, Equatable {
         let outline = TornEdge(seed: seed, scale: 0.45).path(in: all)
 
         var shadowed = sheet
-        shadowed.addFilter(.shadow(color: Color(red: 40 / 255, green: 22 / 255, blue: 8 / 255).opacity(0.55), radius: 2.5, y: 2))
+        shadowed.addFilter(.shadow(color: Color(red: 60 / 255, green: 35 / 255, blue: 12 / 255).opacity(0.35), radius: 3, y: 3))
         shadowed.fill(outline, with: .linearGradient(
-            Gradient(stops: [.init(color: Color(hex: 0xF1EAD6), location: 0),
-                             .init(color: Color(hex: 0xE2D6B8), location: 0.55),
-                             .init(color: Color(hex: 0xCDBB93), location: 1)]),
+            Gradient(stops: [.init(color: Color(hex: 0xF8F0DC), location: 0),
+                             .init(color: Color(hex: 0xEFE1C2), location: 0.6),
+                             .init(color: Color(hex: 0xE3CFA6), location: 1)]),
             startPoint: .zero, endPoint: CGPoint(x: w, y: h)))
 
         var paper = sheet
         paper.clip(to: outline)
         paper.fill(Path(all), with: .color(color.opacity(0.1)))
 
-        // Grime: soft smudges, heavier towards the bottom, and a thumbprint.
+        // Wear: soft smudges, heavier towards the bottom, and a thumbprint.
         var grime = paper
-        grime.addFilter(.blur(radius: 9))
-        for _ in 0..<9 {
-            let alpha = random.range(0.1, 0.22)
+        grime.addFilter(.blur(radius: 10))
+        for _ in 0..<6 {
+            let alpha = random.range(0.05, 0.11)
             let x = random.range(0, w)
             let y = random.range(h * 0.35, h * 1.1)
             let rx = random.range(14, 40)
@@ -537,7 +538,7 @@ struct ScrapPaper: View, Equatable {
                 .applying(CGAffineTransform(rotationAngle: 0.5).concatenating(CGAffineTransform(translationX: tx, y: ty))))
             r += 1.6
         }
-        paper.stroke(thumb, with: .color(dirt(0.2)), lineWidth: 0.8)
+        paper.stroke(thumb, with: .color(dirt(0.12)), lineWidth: 0.8)
 
         // A mug ring, partly off the edge.
         if h > 60 && random.next() < 0.7 {
@@ -561,12 +562,12 @@ struct ScrapPaper: View, Equatable {
         var crease = Path()
         crease.move(to: CGPoint(x: 0, y: fy - lean))
         crease.addLine(to: CGPoint(x: w, y: fy + lean))
-        paper.stroke(crease, with: .color(dirt(0.22)), lineWidth: 0.9)
+        paper.stroke(crease, with: .color(dirt(0.14)), lineWidth: 0.9)
         paper.stroke(crease.offsetBy(dx: 0, dy: 1.2), with: .color(Color(red: 1, green: 248 / 255, blue: 226 / 255).opacity(0.5)), lineWidth: 0.9)
 
         // Specks of dirt.
-        for _ in 0..<Int(w * h / 120) {
-            let alpha = random.range(0.1, 0.4)
+        for _ in 0..<Int(w * h / 220) {
+            let alpha = random.range(0.06, 0.25)
             let x = random.range(0, w)
             let y = random.range(0, h)
             let s = random.range(0.3, 0.9)
@@ -588,11 +589,11 @@ struct ScrapPaper: View, Equatable {
         paper.fill(daub, with: .color(color.opacity(0.85)))
         paper.fill(daub, with: .color(Color(hex: 0x3D2712).opacity(0.35)))
 
-        // Dirty, darkened edges.
+        // Gently aged edges.
         var burn = paper
-        burn.addFilter(.blur(radius: 4))
-        burn.stroke(outline, with: .color(Color(red: 92 / 255, green: 56 / 255, blue: 20 / 255).opacity(0.5)), lineWidth: 9)
-        paper.stroke(outline, with: .color(Color(red: 70 / 255, green: 40 / 255, blue: 12 / 255).opacity(0.55)), lineWidth: 1.2)
+        burn.addFilter(.blur(radius: 5))
+        burn.stroke(outline, with: .color(Color(red: 150 / 255, green: 100 / 255, blue: 45 / 255).opacity(0.35)), lineWidth: 10)
+        paper.stroke(outline, with: .color(Color(red: 110 / 255, green: 72 / 255, blue: 30 / 255).opacity(0.35)), lineWidth: 1)
 
         // A dog-eared corner, top right.
         if w > 70 && h > 40 {
@@ -605,8 +606,27 @@ struct ScrapPaper: View, Equatable {
             sheet.fill(oval(w - k * 0.5, k * 0.55, k * 0.6, k * 0.5), with: .color(Color(red: 40 / 255, green: 22 / 255, blue: 8 / 255).opacity(0.25)))
             sheet.fill(ear, with: .linearGradient(Gradient(colors: [Color(hex: 0xC9B07A), Color(hex: 0xE6D5AC)]),
                                                   startPoint: CGPoint(x: w - k, y: 0), endPoint: CGPoint(x: w, y: k)))
-            sheet.stroke(ear, with: .color(Color(red: 70 / 255, green: 40 / 255, blue: 12 / 255).opacity(0.5)), lineWidth: 0.8)
+            sheet.stroke(ear, with: .color(Color(red: 110 / 255, green: 72 / 255, blue: 30 / 255).opacity(0.45)), lineWidth: 0.8)
         }
+
+        // A brass tack pinning it up.
+        if w > 60 {
+            let pin = CGPoint(x: w / 2, y: 6)
+            sheet.fill(oval(pin.x + 1.5, pin.y + 2, 4.5, 3.5), with: .color(Color(red: 60 / 255, green: 35 / 255, blue: 12 / 255).opacity(0.3)))
+            let head = oval(pin.x, pin.y, 4, 4)
+            sheet.fill(head, with: .radialGradient(
+                Gradient(stops: [.init(color: Color(hex: 0xFBE7A6), location: 0),
+                                 .init(color: Color(hex: 0xD9A441), location: 0.5),
+                                 .init(color: Color(hex: 0x8A5A1A), location: 1)]),
+                center: CGPoint(x: pin.x - 1.3, y: pin.y - 1.3), startRadius: 0.5, endRadius: 4.5))
+            sheet.stroke(head, with: .color(Color(red: 90 / 255, green: 55 / 255, blue: 15 / 255).opacity(0.6)), lineWidth: 0.6)
+        }
+    }
+
+    /// How crooked the note is pinned up, in degrees (−1.2 to 1.2), the same
+    /// for a sound every time (themes.js --tilt).
+    static func tilt(_ seed: String) -> Double {
+        Double(stableSeed(seed) % 1000) / 1000 * 2.4 - 1.2
     }
 }
 

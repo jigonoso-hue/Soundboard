@@ -1127,28 +1127,48 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
   border-color: color-mix(in srgb, var(--chip-color) 55%, transparent);
 }
 
-/* Tavern: dirty scraps of paper (drawn by themes.js) with a daub of the sound's
-   colour; embers rise off them while playing. */
+/* Tavern: scraps of paper (drawn by themes.js) pinned up a little crooked, with
+   a daub of the sound's colour; embers rise off them while playing. */
 :root[data-theme="tavern"] .tile {
   background-color: transparent;
   border: none;
   border-radius: 0;
   box-shadow: none;
-  padding: 10px 12px 10px 18px;
+  padding: 12px 12px 10px 18px;
+  transform: rotate(var(--tilt, 0deg));
 }
-:root[data-theme="tavern"] .tile:hover { box-shadow: none; filter: drop-shadow(0 2px 3px rgba(61, 39, 18, 0.45)); }
+:root[data-theme="tavern"] .tile:hover { box-shadow: none; transform: rotate(0deg) translateY(-2px); filter: drop-shadow(0 4px 4px rgba(61, 39, 18, 0.25)); }
+:root[data-theme="tavern"] .tile:active { transform: rotate(0deg) scale(0.97); }
 :root[data-theme="tavern"] .tile.playing {
   background-color: transparent;
   box-shadow: none;
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--tile-color) 70%, #ff8a1a));
+  transform: rotate(0deg) scale(1.03);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--tile-color) 60%, #ffae4a));
 }
-:root[data-theme="tavern"] .track { border-color: rgba(90, 58, 24, 0.45); background: rgba(243, 228, 194, 0.55); }
+/* Full sounds and bashes: cream cards; the play button is a wax seal. */
+:root[data-theme="tavern"] :is(.track, .bash-card) {
+  background: rgba(251, 243, 223, 0.88);
+  border: 1px solid rgba(120, 80, 35, 0.28);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 2px 6px rgba(80, 50, 20, 0.12);
+}
+:root[data-theme="tavern"] :is(.track, .bash-card):hover { border-color: rgba(120, 80, 35, 0.5); }
+:root[data-theme="tavern"] .track.playing {
+  background: color-mix(in srgb, var(--tile-color) 10%, #fbf3df);
+  border-color: color-mix(in srgb, var(--tile-color) 50%, rgba(120, 80, 35, 0.4));
+}
 :root[data-theme="tavern"] .track-play {
-  background: color-mix(in srgb, var(--tile-color) 22%, #f3e4c2);
-  border: 1.5px solid color-mix(in srgb, var(--tile-color) 45%, #6b4423);
-  color: #3d2712;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--tile-color) 55%, #fff) 0, color-mix(in srgb, var(--tile-color) 65%, #5a1e0e) 55%, color-mix(in srgb, var(--tile-color) 45%, #2a0e05) 100%);
+  border: none;
+  color: #fff8ec;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tile-color) 55%, #3d1608), 0 2px 3px rgba(60, 30, 10, 0.35);
 }
-:root[data-theme="tavern"] .bash-card { background: rgba(243, 228, 194, 0.6); border-color: rgba(90, 58, 24, 0.45); }
+:root[data-theme="tavern"] .layer:not(.on) { background: rgba(251, 243, 223, 0.8); border-color: rgba(120, 80, 35, 0.28); }
+:root[data-theme="tavern"] :is(.titlebar, .nav) {
+  background: #4a2e1a var(--tavern-wood) center / cover;
+  border-bottom: 2px solid #8a5a2b;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
 
 /* Dark Academia: the toolbar, full sounds and bashes in dark hardwood with gold trim. */
 :root[data-theme="academia"] :is(.track, .bash-card) {

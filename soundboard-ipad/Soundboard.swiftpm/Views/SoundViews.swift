@@ -100,7 +100,9 @@ struct SoundTile: View {
                 // Glitter and stars fly out past the book's edges.
                 if book && isPlaying { Glitter(color: color) }
             }
-            .scaleEffect(isPlaying ? 1.02 : 1)
+            .scaleEffect(isPlaying ? (scrap ? 1.03 : 1.02) : 1)
+            // Tavern's notes are pinned up a little crooked; straight while playing.
+            .rotationEffect(.degrees(scrap && !isPlaying ? ScrapPaper.tilt(sound.id.uuidString) : 0))
             .animation(.easeOut(duration: 0.15), value: isPlaying)
         }
         .buttonStyle(.plain)
@@ -178,9 +180,23 @@ struct TrackRow: View {
             } label: {
                 HStack(spacing: 12) {
                     ZStack {
-                        Circle().fill(isPlaying ? color : color.opacity(0.22))
-                        AppIcon(id: isPlaying ? "stop" : "play", size: 14)
-                            .foregroundStyle(isPlaying ? Color.black : color)
+                        if theme == .tavern {
+                            // A wax seal in the sound's colour.
+                            Circle()
+                                .fill(RadialGradient(
+                                    colors: [color.blended(with: .white, amount: 0.45),
+                                             color.blended(with: Color(hex: 0x5A1E0E), amount: 0.35),
+                                             color.blended(with: Color(hex: 0x2A0E05), amount: 0.55)],
+                                    center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: size == .l ? 24 : 19))
+                                .overlay(Circle().strokeBorder(color.blended(with: Color(hex: 0x3D1608), amount: 0.45), lineWidth: 2))
+                                .shadow(color: Color(hex: 0x3C1E0A).opacity(0.35), radius: 1.5, y: 2)
+                            AppIcon(id: isPlaying ? "stop" : "play", size: 14)
+                                .foregroundStyle(Color(hex: 0xFFF8EC))
+                        } else {
+                            Circle().fill(isPlaying ? color : color.opacity(0.22))
+                            AppIcon(id: isPlaying ? "stop" : "play", size: 14)
+                                .foregroundStyle(isPlaying ? Color.black : color)
+                        }
                     }
                     .frame(width: size == .l ? 40 : 32, height: size == .l ? 40 : 32)
                     VStack(alignment: .leading, spacing: 4) {
