@@ -242,6 +242,8 @@ function normalizeSection(section, index) {
     // shuffle button is now the player.
     ...(section.kind !== 'ambience' && (section.playlist || section.shuffle) ? { playlist: true } : {}),
     ...(section.kind !== 'ambience' && (section.playlist || section.shuffle) && section.playlistShuffle ? { playlistShuffle: true } : {}),
+    // Its loop: absent for the album (the default), 'one' for the current sound, 'off' for none.
+    ...(section.kind !== 'ambience' && (section.playlist || section.shuffle) && ['one', 'off'].includes(section.playlistLoop) ? { playlistLoop: section.playlistLoop } : {}),
   };
 }
 

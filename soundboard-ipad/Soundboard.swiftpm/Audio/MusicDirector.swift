@@ -23,13 +23,16 @@ final class MusicDirector: ObservableObject {
         let shuffle: Bool
         /// The section's volume slider, if it has one.
         var gain: Double
+        /// "all" (the album), "one" (the current sound) or "off" (stop after the last song).
+        var loop: String
 
-        init(kitId: UUID, sectionId: UUID, order: [UUID], shuffle: Bool, gain: Double) {
+        init(kitId: UUID, sectionId: UUID, order: [UUID], shuffle: Bool, gain: Double, loop: String) {
             self.kitId = kitId
             self.sectionId = sectionId
             self.order = order
             self.shuffle = shuffle
             self.gain = gain
+            self.loop = loop
         }
     }
 
@@ -116,7 +119,8 @@ final class MusicDirector: ObservableObject {
         publish()
     }
 
-    private func advance(_ list: Playlist, fade: Double) {
+    /// manual: Next was pressed, which always moves on (whatever the loop).
+    private func advance(_ list: Playlist, fade: Double, manual: Bool = false) {
         guard lists[list.sectionId] === list else { return }
         // Songs that won't play: give up once every one has failed in a row.
         if list.failures >= list.order.count {
@@ -125,6 +129,13 @@ final class MusicDirector: ObservableObject {
         }
         let old = (id: list.current, token: list.token)
         var next = list.index + 1
+        if !manual && list.loop == "one" {
+            next = list.index // Loop current sound: it starts again.
+        } else if !manual && list.loop == "off" && next >= list.order.count {
+            // No loop: the last song plays to its end, then the player stops.
+            if fade == 0 { end(list.sectionId) }
+            return
+        }
         if next >= list.order.count {
             next = 0
             if list.shuffle && list.order.count > 2 {
@@ -146,6 +157,17 @@ final class MusicDirector: ObservableObject {
         publish()
     }
 
+    /// The player's loop: "all" (the album, the default), "one" (the current
+    /// sound) or "off" (stop after the last song). The same as music.js.
+    static func loop(of section: KitSection) -> String {
+        ["one", "off"].contains(section.playlistLoop ?? "") ? section.playlistLoop! : "all"
+    }
+
+    /// The loop changed while playing.
+    func setLoop(_ loop: String, for sectionId: UUID) {
+        lists[sectionId]?.loop = loop
+    }
+
     /// Next (step 1) or back (step -1) in a playing playlist. Back restarts the
     /// song if it's more than 3 seconds in, like a music player.
     func skip(_ sectionId: UUID, by step: Int) {
@@ -153,7 +175,7 @@ final class MusicDirector: ObservableObject {
         let fade = 0.6
         if step > 0 {
             list.failures = 0
-            advance(list, fade: fade)
+            advance(list, fade: fade, manual: true)
             return
         }
         let old = (id: list.current, token: list.token)
@@ -183,7 +205,7 @@ final class MusicDirector: ObservableObject {
         if let songId, order.contains(songId) {
             if shuffle { order = [songId] + order.filter { $0 != songId } } else { index = order.firstIndex(of: songId) ?? 0 }
         }
-        let list = Playlist(kitId: kit.id, sectionId: section.id, order: order, shuffle: shuffle, gain: section.gain)
+        let list = Playlist(kitId: kit.id, sectionId: section.id, order: order, shuffle: shuffle, gain: section.gain, loop: Self.loop(of: section))
         lists[section.id] = list
         startTrack(list, at: index, fadeIn: fade > 0 ? fade : (wasPlaying ? 2 : 0), seek: songId != nil ? seek : 0)
     }

@@ -146,6 +146,7 @@ test('scene music: autoplay kits, playlist sections, now-and-then layers', () =>
   const savedMusic = saved.sections.find((s) => s.id === music.id);
   assert.equal(savedMusic.playlist, true);
   assert.equal(savedMusic.playlistShuffle, true);
+  assert.equal(savedMusic.playlistLoop, undefined, 'looping the album is the default, not stored');
   const savedAmbience = saved.sections.find((s) => s.id === ambience.id);
   assert.equal(savedAmbience.playlist, undefined, 'ambience sections are never playlists');
   const [rain, thunder, odd] = savedAmbience.layers;
@@ -181,4 +182,24 @@ test('section volume sliders and players (older shuffle buttons become players)'
   assert.equal(find(ambience.id).volume, 0.5);
   assert.equal(find(ambience.id).playlist, undefined, 'ambience sections have no player');
   assert.ok(saved.sections.filter((s) => ![a.id, b.id, ambience.id].includes(s.id)).every((s) => s.volume === undefined), 'only numbers are kept');
+});
+
+test('a player keeps its loop: the current sound or none (the album is the default)', () => {
+  const dir = tmp();
+  const store = new KitStore(dir);
+  const kit = store.create({ name: 'Loops' });
+  const [a, b, c] = kit.sections;
+  store.update(kit.id, {
+    sections: kit.sections.map((s) => {
+      if (s.id === a.id) return { ...s, playlist: true, playlistLoop: 'one' };
+      if (s.id === b.id) return { ...s, playlist: true, playlistLoop: 'sideways' };
+      if (s.id === c.id) return { ...s, playlistLoop: 'off' }; // no player, so no loop
+      return s;
+    }),
+  });
+  const saved = new KitStore(dir).get(kit.id);
+  const find = (id) => saved.sections.find((s) => s.id === id);
+  assert.equal(find(a.id).playlistLoop, 'one');
+  assert.equal(find(b.id).playlistLoop, undefined);
+  assert.equal(find(c.id).playlistLoop, undefined);
 });

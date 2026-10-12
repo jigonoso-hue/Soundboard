@@ -57,13 +57,21 @@ const Music = (() => {
     notify();
   }
 
-  function advance(list, fade) {
+  // manual: Next was pressed, which always moves on (whatever the loop).
+  function advance(list, fade, manual = false) {
     if (lists.get(list.sectionId) !== list) return;
     // Songs that won't play: give up once every one has failed in a row.
     if (fade === 0 && list.audio && list.audio.error) list.failures += 1;
     if (list.failures >= list.order.length) { end(list.sectionId); return; }
     const old = { id: list.id, audio: list.audio };
     let next = list.index + 1;
+    if (!manual && list.loop === 'one') {
+      next = list.index; // Loop current sound: it starts again.
+    } else if (!manual && list.loop === 'off' && next >= list.order.length) {
+      // No loop: the last song plays to its end, then the player stops.
+      if (fade === 0) end(list.sectionId);
+      return;
+    }
     if (next >= list.order.length) {
       next = 0;
       if (list.shuffle && list.order.length > 2) {
@@ -84,13 +92,17 @@ const Music = (() => {
     notify();
   }
 
+  // The player's loop: 'all' (the album, the default), 'one' (the current
+  // sound) or 'off' (stop after the last song).
+  const loopOf = (section) => (['one', 'off'].includes(section.playlistLoop) ? section.playlistLoop : 'all');
+
   // Next (step 1) or back (step -1) in a playing playlist. Back restarts the
   // song if it's more than 3 seconds in, like a music player.
   function skip(sectionId, step) {
     const list = lists.get(sectionId);
     if (!list) return;
     const fade = 0.6;
-    if (step > 0) { list.failures = 0; advance(list, fade); return; }
+    if (step > 0) { list.failures = 0; advance(list, fade, true); return; }
     const old = { id: list.id, audio: list.audio };
     const restart = old.audio && (old.audio.currentTime || 0) > 3;
     const index = restart ? list.index : (list.index - 1 + list.order.length) % list.order.length;
@@ -112,7 +124,7 @@ const Music = (() => {
       if (section.playlistShuffle) order = [fromId, ...order.filter((id) => id !== fromId)];
       else index = order.indexOf(fromId);
     }
-    const list = { kitId: kit.id, sectionId: section.id, order, index, id: null, audio: null, n: 1, failures: 0, shuffle: !!section.playlistShuffle, gain: section.volume ?? 1 };
+    const list = { kitId: kit.id, sectionId: section.id, order, index, id: null, audio: null, n: 1, failures: 0, shuffle: !!section.playlistShuffle, gain: section.volume ?? 1, loop: loopOf(section) };
     lists.set(section.id, list);
     startTrack(list, index, fade || (current ? 2 : 0), fromId ? seek : 0);
   }
@@ -226,6 +238,9 @@ const Music = (() => {
     skip,
     capture,
     restore,
+    loopOf,
+    // The loop changed while playing.
+    setLoop(sectionId, loop) { const list = lists.get(sectionId); if (list) list.loop = loop; },
     // The section's volume slider moved: the songs still to come play at the new level.
     setGain(sectionId, gain) { const list = lists.get(sectionId); if (list) list.gain = gain; },
     sceneOpened,

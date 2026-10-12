@@ -772,3 +772,78 @@ struct WoodTrimCard: View {
             .overlay(shape.strokeBorder(Color(hex: active ? 0xF0CF75 : 0xB8862B), lineWidth: 1))
     }
 }
+
+/// A full sound in Dark Academia: the spine of a leather book lying on its
+/// side, in the sound's colour. Rounded leather, gilt lines along its length,
+/// raised bands across it, and a dark title label with a gold border behind
+/// the name (theme-art.js bookSpine).
+struct BookSpine: View, Equatable {
+    let seed: String
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            BookSpine.draw(&context, size: size, seed: stableSeed(seed), color: color)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, seed: UInt64, color: Color) {
+        let w = size.width
+        let h = size.height
+        guard w >= 40, h >= 20 else { return }
+        let all = CGRect(origin: .zero, size: size)
+        context.fill(Path(all), with: .color(Color(hex: 0x1A1028)))
+        context.fill(Path(all), with: .color(color.opacity(0.55)))
+        // Rounded like a spine: dark at the edges, a soft sheen across the middle.
+        context.fill(Path(all), with: .linearGradient(
+            Gradient(stops: [.init(color: .black.opacity(0.6), location: 0), .init(color: .black.opacity(0.12), location: 0.16),
+                             .init(color: .white.opacity(0.13), location: 0.4), .init(color: .white.opacity(0.04), location: 0.58),
+                             .init(color: .black.opacity(0.28), location: 0.84), .init(color: .black.opacity(0.65), location: 1)]),
+            startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+        var random = SeededRandom(seed &+ 5)
+        for _ in 0..<Int(w * h / 40) {
+            let light = random.next() < 0.5
+            context.fill(Path(CGRect(x: random.range(0, w), y: random.range(0, h), width: 1.2, height: 1.2)),
+                         with: .color(light ? .white.opacity(0.05) : .black.opacity(0.13)))
+        }
+        let gold = Arcane.gold(over: all)
+        // Gilt lines along its length.
+        for (y, height) in [(3.0, 1.0), (5.0, 0.6), (h - 4, 1.0), (h - 5.6, 0.6)] as [(CGFloat, CGFloat)] {
+            context.fill(Path(CGRect(x: 0, y: y, width: w, height: height)), with: gold)
+        }
+        // Raised bands across it: a ridge with a gilt edge on each side.
+        func band(_ x: CGFloat) {
+            context.fill(Path(CGRect(x: x - 4, y: 0, width: 8, height: h)), with: .color(.black.opacity(0.35)))
+            context.fill(Path(CGRect(x: x - 3, y: 0, width: 6, height: h)), with: .linearGradient(
+                Gradient(stops: [.init(color: .black.opacity(0.25), location: 0), .init(color: .white.opacity(0.28), location: 0.45),
+                                 .init(color: .black.opacity(0.35), location: 1)]),
+                startPoint: CGPoint(x: x - 3, y: 0), endPoint: CGPoint(x: x + 3, y: 0)))
+            context.fill(Path(CGRect(x: x - 4.5, y: 0, width: 1, height: h)), with: gold)
+            context.fill(Path(CGRect(x: x + 3.5, y: 0, width: 1, height: h)), with: gold)
+        }
+        let head: CGFloat = 60
+        let tail = max(head + 40, w - 104)
+        band(head)
+        band(tail)
+        band(w - 9)
+        // The title label.
+        let lx = head + 9
+        let lw = tail - 9 - lx
+        if lw > 50 {
+            let label = CGRect(x: lx, y: 8, width: lw, height: h - 16)
+            context.fill(Path(roundedRect: label, cornerRadius: 2), with: .color(Color(red: 12 / 255, green: 7 / 255, blue: 4 / 255).opacity(0.5)))
+            context.stroke(Path(roundedRect: label, cornerRadius: 2), with: gold, lineWidth: 1)
+            context.stroke(Path(roundedRect: label.insetBy(dx: 3, dy: 3), cornerRadius: 1.5), with: gold, lineWidth: 0.5)
+            for corner in [CGPoint(x: label.minX, y: label.minY), CGPoint(x: label.maxX, y: label.minY),
+                           CGPoint(x: label.minX, y: label.maxY), CGPoint(x: label.maxX, y: label.maxY)] {
+                context.fill(Arcane.diamond(at: corner, size: 3), with: gold)
+            }
+        }
+        // A small gilt star tooled into the tail, between the bands.
+        if w - 9 - tail > 30 {
+            context.fill(Arcane.star(at: CGPoint(x: (tail + w - 9) / 2, y: h - 11), size: 3), with: gold)
+        }
+    }
+}

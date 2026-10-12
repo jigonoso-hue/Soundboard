@@ -78,6 +78,9 @@ struct KitSection: Identifiable, Codable, Equatable {
     var playlist: Bool? = nil
     /// The player's songs play in a random order (its Shuffle button).
     var playlistShuffle: Bool? = nil
+    /// The player's loop: nil for the album (the default), "one" for the
+    /// current sound, "off" to stop after the last song.
+    var playlistLoop: String? = nil
 
     var isAmbience: Bool { kind == .ambience }
     /// Level applied to everything played from this section.

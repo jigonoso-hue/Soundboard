@@ -106,7 +106,7 @@ While a kit with an ambience section is open, the ambience strip at the bottom o
 
 Click **Done** to lock the layout, so nothing moves by accident during a session.
 
-**Player.** In a sound section's **⋯** menu, choose **Player**. Its title bar gets a player (in a narrow section, on its own row): **Play** plays its songs (full sounds) in order and **Shuffle** in a random order, a new one each time round. Each song crossfades into the next a few seconds before it ends, and after the last it starts again. While it plays, **Back** (the start of the song, or the one before), **Stop** and **Next** work. Clicking a song starts the player from it. In a section with no songs, **Shuffle** plays a random sound or bash, never the same one twice in a row. **Stop All** stops the player too.
+**Player.** In a sound section's **⋯** menu, choose **Player**. Its title bar gets a player (in a narrow section, on its own row): **Play** plays its songs (full sounds) in order and **Shuffle** in a random order, a new one each time round. Each song crossfades into the next a few seconds before it ends, and after the last it starts again. While it plays, **Back** (the start of the song, or the one before), **Stop** and **Next** work. The loop button goes round **Loop album** (the default: after the last song, start again), **Loop current sound** (a "1" on the button) and **No loop** (stop after the last song). Clicking a song starts the player from it. In a section with no songs, **Shuffle** plays a random sound or bash, never the same one twice in a row. **Stop All** stops the player too.
 
 **Scene changes.** In **Edit**, tick **Start its music and ambience when opened**. Opening the kit is then a scene change: the music and ambience that are playing fade out over 3 seconds while the kit's first playlist and its ambience layers fade in: the layers you had on when you last left the kit (the first time, all of them). Listeners hear the same fades.
 
@@ -250,7 +250,7 @@ Click **Options** at the bottom of the sidebar to pick a theme and a highlight c
 - **Tavern**: every page on worn parchment on a wooden table, under a plank toolbar. Tiles are scraps of paper pinned up with brass tacks, a little crooked, and embers rise off them while they play. Full sounds, bashes and ambience layers are cream cards, and play buttons are wax seals.
 - **Space Age**: a chrome-rimmed starship window onto deep space: nebulae, spiked bright stars, a spiral galaxy, a 70s gas station on an asteroid, a ringed gas giant with a cratered moon and a chrome flying saucer with its beam on, with 50s atomic panels. Cards have a gunmetal trim with corner rivets, and a planet with circling moons appears on sounds while they play.
 - **Sci-Fi**: a glowing holographic HUD. Tiles are see-through glass with a glowing edge, and synth waves ripple through them while they play.
-- **Dark Academia**: a starry night in a dark hardwood frame, a bookcase for the sidebar, and deep indigo pages in gilded frames. Tiles are leather-bound book covers that throw off glitter and stars while they play. The toolbar, full sounds and bashes are hardwood with gold trim.
+- **Dark Academia**: full sounds are the spines of leather books in their colours (gilt bands and a title label); a starry night in a dark hardwood frame, a bookcase for the sidebar, and deep indigo pages in gilded frames. Tiles are leather-bound book covers that throw off glitter and stars while they play. The toolbar and bashes are hardwood with gold trim.
 
 The listener's stage in a Live Session takes on the theme too.
 

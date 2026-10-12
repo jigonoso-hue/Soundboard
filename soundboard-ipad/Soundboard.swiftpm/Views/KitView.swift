@@ -604,6 +604,7 @@ struct KitSectionView: View {
                         if !on {
                             s.shuffle = nil
                             s.playlistShuffle = nil
+                            s.playlistLoop = nil
                             music.stop(section.id, fade: 2)
                         }
                         onChange(s)
@@ -665,8 +666,33 @@ struct KitSectionView: View {
                 playerButton("Back", icon: "previous", disabled: !on) { music.skip(section.id, by: -1) }
                 playerButton("Stop", icon: "stop", disabled: !on) { music.stop(section.id, fade: 2) }
                 playerButton("Next", icon: "next", disabled: !on) { music.skip(section.id, by: 1) }
+                loopButton(hasSongs: hasSongs)
             }
             .padding(.leading, 4)
+        }
+    }
+
+    /// Loop: the album, the current sound ("1" on the button) or off. Tap to go round.
+    private func loopButton(hasSongs: Bool) -> some View {
+        let loop = MusicDirector.loop(of: section)
+        let label = ["all": "Loop album", "one": "Loop current sound", "off": "No loop"][loop] ?? "Loop album"
+        return playerButton(label, icon: "repeat", active: loop != "off", disabled: !hasSongs) {
+            let next = ["all": "one", "one": "off", "off": "all"][loop] ?? "all"
+            var s = section
+            s.playlistLoop = next == "all" ? nil : next
+            onChange(s)
+            music.setLoop(next, for: section.id)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if loop == "one" {
+                Text("1")
+                    .font(.system(size: 8, weight: .heavy))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(minWidth: 11, minHeight: 11)
+                    .background(Circle().fill(AccentFill.ink))
+                    .offset(x: -1, y: -1)
+                    .allowsHitTesting(false)
+            }
         }
     }
 

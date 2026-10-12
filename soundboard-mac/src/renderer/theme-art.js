@@ -1202,6 +1202,56 @@ const ThemeArt = (() => {
     }
   }
 
+  /** A full sound in Dark Academia: the spine of a leather book lying on its
+      side, in the sound's colour. Rounded leather, gilt lines along its length,
+      raised bands across it, and a dark title label with a gold border behind
+      the name. The play button sits in the head end; the time in the tail. */
+  function bookSpine(ctx, w, h, seedText, color) {
+    if (w < 40 || h < 20) return;
+    const outline = roundRect(0, 0, w, h, 3);
+    ctx.save();
+    ctx.clip(outline);
+    ctx.fillStyle = '#1A1028'; ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 0.55; ctx.fillStyle = color; ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
+    // Rounded like a spine: dark at the edges, a soft sheen across the middle.
+    ctx.fillStyle = linear(ctx, 0, 0, 0, h, [[0, 'rgba(0,0,0,0.6)'], [0.16, 'rgba(0,0,0,0.12)'], [0.4, 'rgba(255,255,255,0.13)'],
+      [0.58, 'rgba(255,255,255,0.04)'], [0.84, 'rgba(0,0,0,0.28)'], [1, 'rgba(0,0,0,0.65)']]);
+    ctx.fillRect(0, 0, w, h);
+    const random = rng(seedOf(seedText) + 5);
+    for (let i = 0; i < Math.floor(w * h / 40); i++) {
+      ctx.fillStyle = random.next() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.13)';
+      ctx.fillRect(random.range(0, w), random.range(0, h), 1.2, 1.2);
+    }
+    const g = gold(ctx, 0, 0, w, h);
+    // Gilt lines along its length.
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 3, w, 1); ctx.fillRect(0, 5, w, 0.6);
+    ctx.fillRect(0, h - 4, w, 1); ctx.fillRect(0, h - 5.6, w, 0.6);
+    // Raised bands across it: a ridge with a gilt edge on each side.
+    const band = (x) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x - 4, 0, 8, h);
+      ctx.fillStyle = linear(ctx, x - 3, 0, x + 3, 0, [[0, 'rgba(0,0,0,0.25)'], [0.45, 'rgba(255,255,255,0.28)'], [1, 'rgba(0,0,0,0.35)']]);
+      ctx.fillRect(x - 3, 0, 6, h);
+      ctx.fillStyle = g; ctx.fillRect(x - 4.5, 0, 1, h); ctx.fillRect(x + 3.5, 0, 1, h);
+    };
+    const head = 60; const tail = Math.max(head + 40, w - 104);
+    band(head); band(tail); band(w - 9);
+    // The title label.
+    const lx = head + 9; const lw = tail - 9 - lx;
+    if (lw > 50) {
+      const plate = roundRect(lx, 8, lw, h - 16, 2);
+      ctx.fillStyle = 'rgba(12,7,4,0.5)'; ctx.fill(plate);
+      ctx.strokeStyle = g; ctx.lineWidth = 1; ctx.stroke(plate);
+      ctx.lineWidth = 0.5; ctx.stroke(roundRect(lx + 3, 11, lw - 6, h - 22, 1.5));
+      const corners = new Path2D();
+      for (const [cx, cy] of [[lx, 8], [lx + lw, 8], [lx, h - 8], [lx + lw, h - 8]]) diamond(cx, cy, 3, corners);
+      ctx.fillStyle = g; ctx.fill(corners);
+    }
+    // A small gilt star tooled into the tail, between the bands.
+    if (w - 9 - tail > 30) { ctx.fillStyle = g; ctx.fill(star((tail + w - 9) / 2, h - 11, 3)); }
+    ctx.restore();
+  }
+
   // ---------- Card art: scrap paper (Tavern), hardwood and shelves (Dark Academia) ----------
 
   const DIRT = (a) => `rgba(74,48,20,${a})`;
@@ -1648,7 +1698,7 @@ const ThemeArt = (() => {
     seedOf, rgba,
     parchment, woodTable, spaceScene, hullPlating, atomicPanel,
     hudBackdrop, hudPanel, arcaneBackdrop, gildedPanel, bookCover,
-    scrapPaper, hardwood, libraryShelves, woodFrame,
+    scrapPaper, hardwood, libraryShelves, woodFrame, bookSpine,
     synthWave, orbitPlanet, glitter, embers, stage,
   };
 })();

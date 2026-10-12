@@ -220,7 +220,7 @@ const Themes = (() => {
       if (force) delete el.dataset.artKey;
       paintOne(el);
     });
-    document.querySelectorAll('.tile').forEach(decorateTile);
+    document.querySelectorAll('.tile, .track').forEach(decorateTile);
     syncFx();
   }
 
@@ -234,8 +234,10 @@ const Themes = (() => {
     return el.style.getPropertyValue('--tile-color').trim() || accent();
   }
 
+  // Tiles (and, in Dark Academia, full sounds' rows, drawn as book spines).
   function decorateTile(tile) {
-    if (theme !== 'academia' && theme !== 'tavern') {
+    const track = tile.classList.contains('track');
+    if (track ? theme !== 'academia' : (theme !== 'academia' && theme !== 'tavern')) {
       if (tile.dataset.cover) { delete tile.dataset.cover; tile.style.backgroundImage = ''; }
       tile.style.removeProperty('--tilt');
       return;
@@ -249,8 +251,8 @@ const Themes = (() => {
     // Tavern's notes are pinned up a little crooked, each its own way.
     if (theme === 'tavern') tile.style.setProperty('--tilt', `${((ThemeArt.seedOf(id) % 1000) / 1000 * 2.4 - 1.2).toFixed(2)}deg`);
     else tile.style.removeProperty('--tilt');
-    const emblem = h >= 110;
-    const key = `${theme}|${id}|${color}|${w}x${h}|${emblem}`;
+    const emblem = !track && h >= 110;
+    const key = `${theme}|${track ? 'spine' : 'cover'}|${id}|${color}|${w}x${h}|${emblem}`;
     if (tile.dataset.cover === key) return;
     tile.dataset.cover = key;
     let url = coverCache.get(key);
@@ -261,7 +263,8 @@ const Themes = (() => {
       canvas.height = Math.round(h * scale);
       const ctx = canvas.getContext('2d');
       ctx.scale(scale, scale);
-      if (theme === 'academia') ThemeArt.bookCover(ctx, w, h, id, color, emblem);
+      if (track) ThemeArt.bookSpine(ctx, w, h, id, color);
+      else if (theme === 'academia') ThemeArt.bookCover(ctx, w, h, id, color, emblem);
       else ThemeArt.scrapPaper(ctx, w, h, id, color);
       url = canvas.toDataURL('image/png');
       if (coverCache.size > 400) coverCache.clear();
@@ -353,8 +356,8 @@ const Themes = (() => {
       for (const node of m.addedNodes) {
         if (node.nodeType !== 1) continue;
         scan(node);
-        if (node.classList.contains('tile')) decorateTile(node);
-        node.querySelectorAll?.('.tile').forEach(decorateTile);
+        if (node.classList.contains('tile') || node.classList.contains('track')) decorateTile(node);
+        node.querySelectorAll?.('.tile, .track').forEach(decorateTile);
         node.querySelectorAll?.('[data-art-role]').forEach((el) => paintOne(el));
         if (node.dataset.artRole) paintOne(node);
         fx = true;

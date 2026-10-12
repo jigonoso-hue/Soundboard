@@ -176,6 +176,9 @@ struct TrackRow: View {
         let color = Palette.color(sound.colorIndex)
         let isPlaying = progress != nil
         let total = sound.duration ?? 0
+        // Dark Academia: the row is a book's spine (square-ish corners).
+        let spine = theme == .academia
+        let corner: CGFloat = spine ? 3 : 12
         VStack(spacing: 0) {
             Button {
                 if let onPlay { onPlay() } else { playSound(sound, store: store, player: player, ui: ui, gain: gain) }
@@ -203,6 +206,7 @@ struct TrackRow: View {
                     .frame(width: size == .l ? 40 : 32, height: size == .l ? 40 : 32)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(sound.name)
+                            .shadow(color: spine ? .black.opacity(0.7) : .clear, radius: 2, y: 1)
                             .font(size == .l ? Font.headline : Font.subheadline.weight(.semibold))
                             .italic(theme == .academia)
                             .lineLimit(1)
@@ -210,6 +214,8 @@ struct TrackRow: View {
                             TagLine(tags: sound.tagList)
                         }
                     }
+                    // Inside the spine's title label.
+                    .padding(.leading, spine ? 18 : 0)
                     Spacer(minLength: 8)
                     if sound.gmOnly == true { GMBadge() }
                     if let gap = sound.repeatGap {
@@ -262,8 +268,8 @@ struct TrackRow: View {
         }
         .background {
             ZStack {
-                if theme == .academia {
-                    WoodTrimCard(active: isPlaying)
+                if spine {
+                    BookSpine(seed: sound.id.uuidString, color: color).equatable()
                 } else {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(theme.cardFill(active: isPlaying))
@@ -274,14 +280,17 @@ struct TrackRow: View {
             }
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(theme.cardStroke, lineWidth: theme.hasBackdrop && theme != .academia && theme != .spaceAge ? 1 : 0)
+            RoundedRectangle(cornerRadius: corner)
+                .strokeBorder(spine ? Color(hex: 0xF0CF75).opacity(isPlaying ? 0.9 : 0) : theme.cardStroke, lineWidth: spine ? 1 : (theme.hasBackdrop && theme != .spaceAge ? 1 : 0))
         )
         .overlay {
             if theme == .spaceAge { MetalTrim(cornerRadius: 12) }
         }
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2).fill(current ? Color.accentColor : color).frame(width: current ? 4 : 3).padding(.vertical, current ? 0 : 8)
+            // The colour edge (a spine is its colour already; the playlist's current song still gets one).
+            if !spine || current {
+                RoundedRectangle(cornerRadius: 2).fill(current ? Color.accentColor : color).frame(width: current ? 4 : 3).padding(.vertical, current ? 0 : 8)
+            }
         }
         .overlay(alignment: .bottomLeading) {
             GeometryReader { geo in
@@ -292,8 +301,9 @@ struct TrackRow: View {
             }
             .allowsHitTesting(false)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: corner))
+        .contentShape(RoundedRectangle(cornerRadius: corner))
+        .shadow(color: spine ? (isPlaying ? Color(hex: 0xFFD27A).opacity(0.75) : .black.opacity(0.55)) : .clear, radius: spine && isPlaying ? 9 : 2, y: spine && !isPlaying ? 2 : 0)
         .animation(.easeOut(duration: 0.2), value: isPlaying)
         .contextMenu { SoundMenu(sound: sound) }
     }

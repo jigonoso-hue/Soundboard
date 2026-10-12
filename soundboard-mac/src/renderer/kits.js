@@ -674,6 +674,29 @@ const Kits = (() => {
     move(button('previous', 'Back', 'Back: the start of this song, or the one before', () => Music.skip(section.id, -1), { disabled: !on }));
     move(button('stop', 'Stop', 'Fade out the music', () => Music.stop(section.id, 2), { disabled: !on }));
     move(button('next', 'Next', 'Next song', () => Music.skip(section.id, 1), { disabled: !on }));
+    // Loop: the album (all the songs, again and again), the current sound, or
+    // off (stop after the last song). Click to go round the three.
+    const loop = Music.loopOf(section);
+    const LOOPS = { all: ['Loop album', 'Loop album: after the last song, start again from the first. Click for Loop current sound.'],
+      one: ['Loop current sound', 'Loop current sound: the song playing starts again when it ends. Click for No loop.'],
+      off: ['No loop', 'No loop: the player stops after the last song. Click for Loop album.'] };
+    const loopBtn = button('repeat', LOOPS[loop][0], LOOPS[loop][1], () => {
+      const nextLoop = { all: 'one', one: 'off', off: 'all' }[loop];
+      if (nextLoop === 'all') delete section.playlistLoop; else section.playlistLoop = nextLoop;
+      Music.setLoop(section.id, nextLoop);
+      saveSections(kit, true);
+      renderBoard();
+    }, { disabled: !songs, active: loop !== 'off' });
+    loopBtn.classList.add('player-loop');
+    loopBtn.dataset.loop = loop;
+    loopBtn.setAttribute('aria-pressed', String(loop !== 'off'));
+    if (loop === 'one') {
+      const one = document.createElement('span');
+      one.className = 'loop-one';
+      one.textContent = '1';
+      loopBtn.append(one);
+    }
+    move(loopBtn);
     return bar;
   }
 
@@ -718,7 +741,7 @@ const Kits = (() => {
     if (!isAmbience(section)) {
       add('Player', () => {
         if (hasPlayer(section)) {
-          delete section.playlist; delete section.playlistShuffle; delete section.shuffle;
+          delete section.playlist; delete section.playlistShuffle; delete section.playlistLoop; delete section.shuffle;
           Music.stop(section.id, 2);
         } else section.playlist = true;
         saveSections(kit, true);
