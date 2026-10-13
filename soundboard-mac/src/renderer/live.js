@@ -1,4 +1,4 @@
-/* global api, $, sounds, play, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS, soundFileUrl, Premium */
+/* global api, $, sounds, play, prefs, toast, Ambience, Kits, Bashes, isFull, Icons, Themes, ThemeArt, COLORS, soundFileUrl, Premium, Fx */
 // Live Session in the window: the Live dialog, forwarding what the board plays
 // to listeners (when hosting), and playing what the host sends (when tuned in)
 // on a full-window stage in the theme's style, with the player's own sound pads.
@@ -181,6 +181,8 @@ const Live = (() => {
       // Started part-way through (a bookmark): listeners start at the same place.
       at: Date.now() - (options.seek > 0 ? options.seek * 1000 : 0),
       ...(options.fadeIn > 0 ? { fadeIn: options.fadeIn } : {}),
+      // A scene kit's sound effect (fx.js): listeners hear it too.
+      ...(options.fx ? { fx: options.fx } : {}),
       volume: Math.min(1, (sound.volume ?? 1) * (options.gain ?? 1) * prefs.master),
       cat: category(sound),
       loop: !!sound.repeat && !sound.repeat.gap,
@@ -424,13 +426,16 @@ const Live = (() => {
 
     function play(cmd) {
       stopPlay(cmd.pid);
-      const audio = new Audio(cmd.url);
+      const audio = new Audio();
+      const fx = Fx.prepare(audio, cmd.fx);
+      audio.src = cmd.url;
+      if (fx) Fx.attach(audio, cmd.fx);
       sink(audio);
       const entry = { audio, group: cmd.group, cat: cmd.cat, volume: cmd.volume, timer: null, name: cmd.name, whisper: cmd.whisper, by: cmd.by || null, at: cmd.at };
       plays.set(cmd.pid, entry);
       audio.volume = cmd.fadeIn > 0 ? 0 : Math.min(1, cmd.volume * level(cmd.cat));
       if (cmd.loop) audio.loop = true;
-      const finish = () => { clearTimeout(entry.timer); if (plays.get(cmd.pid) === entry) { plays.delete(cmd.pid); renderNowPlaying(); } };
+      const finish = () => { clearTimeout(entry.timer); Fx.release(audio); if (plays.get(cmd.pid) === entry) { plays.delete(cmd.pid); renderNowPlaying(); } };
       const startAt = (position) => {
         audio.currentTime = position;
         audio.play().catch(finish);
@@ -485,7 +490,7 @@ const Live = (() => {
       if (!entry) return;
       clearTimeout(entry.timer);
       plays.delete(id);
-      const end = () => { entry.audio.pause(); entry.audio.removeAttribute('src'); entry.audio.load(); };
+      const end = () => { entry.audio.pause(); entry.audio.removeAttribute('src'); entry.audio.load(); Fx.release(entry.audio); };
       if (fade > 0 && !entry.audio.paused) rampTo(entry, 0, fade, end);
       else { clearInterval(entry.ramp); end(); }
     }

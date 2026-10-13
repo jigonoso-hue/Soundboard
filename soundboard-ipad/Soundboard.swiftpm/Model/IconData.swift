@@ -486,6 +486,12 @@ enum IconData {
         IconDefinition(id: "folder", name: "Folder", category: "Interface", shapes: [
             IconShape(path: "M 3 6 C 3 5.448 3.448 5 4 5 L 9 5 L 11 7 L 20 7 C 20.552 7 21 7.448 21 8 L 21 18 C 21 18.552 20.552 19 20 19 L 4 19 C 3.448 19 3 18.552 3 18 Z"),
         ]),
+        IconDefinition(id: "sliders", name: "Effects", category: "Interface", shapes: [
+            IconShape(path: "M 4 6 L 13 6 M 17 6 L 20 6 M 4 12 L 7 12 M 11 12 L 20 12 M 4 18 L 15 18 M 19 18 L 20 18"),
+            IconShape(path: "M 17 6 C 17 7.105 16.105 8 15 8 C 13.895 8 13 7.105 13 6 C 13 4.895 13.895 4 15 4 C 16.105 4 17 4.895 17 6 Z"),
+            IconShape(path: "M 11 12 C 11 13.105 10.105 14 9 14 C 7.895 14 7 13.105 7 12 C 7 10.895 7.895 10 9 10 C 10.105 10 11 10.895 11 12 Z"),
+            IconShape(path: "M 19 18 C 19 19.105 18.105 20 17 20 C 15.895 20 15 19.105 15 18 C 15 16.895 15.895 16 17 16 C 18.105 16 19 16.895 19 18 Z"),
+        ]),
         IconDefinition(id: "more", name: "More", category: "Interface", shapes: [
             IconShape(path: "M 6.4 12 C 6.4 12.773 5.773 13.4 5 13.4 C 4.227 13.4 3.6 12.773 3.6 12 C 3.6 11.227 4.227 10.6 5 10.6 C 5.773 10.6 6.4 11.227 6.4 12 Z", fill: true),
             IconShape(path: "M 13.4 12 C 13.4 12.773 12.773 13.4 12 13.4 C 11.227 13.4 10.6 12.773 10.6 12 C 10.6 11.227 11.227 10.6 12 10.6 C 12.773 10.6 13.4 11.227 13.4 12 Z", fill: true),

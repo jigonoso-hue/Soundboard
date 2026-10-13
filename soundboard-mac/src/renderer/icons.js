@@ -130,6 +130,7 @@
     ['download', 'Download', 'Interface', '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>'],
     ['video', 'Video', 'Interface', '<rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3z"/>'],
     ['folder', 'Folder', 'Interface', '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'],
+    ['sliders', 'Effects', 'Interface', '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>'],
     ['more', 'More', 'Interface', '<circle cx="5" cy="12" r="1.4" ' + F + '/><circle cx="12" cy="12" r="1.4" ' + F + '/><circle cx="19" cy="12" r="1.4" ' + F + '/>'],
   ];
 

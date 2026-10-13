@@ -109,6 +109,8 @@ Click **Done** to lock the layout, so nothing moves by accident during a session
 
 **Player.** In a sound section's **⋯** menu, choose **Player**. Its title bar gets a player (in a narrow section, on its own row): **Play** plays its songs (full sounds) in order and **Shuffle** in a random order, a new one each time round. Each song crossfades into the next a few seconds before it ends, and after the last it starts again. While it plays, **Back** (the start of the song, or the one before), **Stop** and **Next** work. The loop button goes round **Loop album** (the default: after the last song, start again), **Loop current sound** (a "1" on the button) and **No loop** (stop after the last song). Clicking a song starts the player from it. In a section with no songs, **Shuffle** plays a random sound or bash, never the same one twice in a row. **Stop All** stops the player too.
 
+**Sound effects.** **Effects** in the kit's header puts an effect on the next sound you play from the kit (a tile, a row, **Shuffle**, or a player's songs): **Distant room** (muffled, as if through a wall), **Empty echo** (a big empty hall), **Old radio** (thin and crackly) or **Underwater** (deep and murky). The button glows and says which one is waiting; it's used up by the sound it goes on. Tick **Keep it on** to put it on every sound you play from the kit until you turn it off. Bashes play as they are. Listeners in a Live Session hear the effect too.
+
 **Scene changes.** In **Edit**, tick **Start its music and ambience when opened**. Opening the kit is then a scene change: the music and ambience that are playing fade out over 3 seconds while the kit's first playlist and its ambience layers fade in: the layers you had on when you last left the kit (the first time, all of them). Listeners hear the same fades.
 
 **Bookmarks.** **+ Save** under **Bookmarks** in the sidebar saves the moment's sound: the scene kit that's open, the playlists playing (which song and how far in), other songs playing, the ambience layers (the strip's and the kit's, with their volumes and now-and-then settings) and the master and ambience volumes. Click a bookmark to bring it all back, next session or after a detour: it's a scene change, so what isn't in the bookmark fades out over 3 seconds while each song fades back in from where it was, and listeners hear the same. Right-click a bookmark to **Update to what's playing now**, **Rename** or **Delete** it. Deleting a scene kit leaves its bookmarks (they forget the kit).
@@ -312,6 +314,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/tags.js` | Tag colours, chips, picker and the new-sound tagging dialog |
 | `src/renderer/ambience.js` | Ambience mixer |
 | `src/renderer/handouts.js` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send dialog |
+| `src/renderer/fx.js` | Sound effects for scene kits (Distant room, Empty echo, Old radio, Underwater), with Web Audio |
 | `src/renderer/music.js` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |
 | `src/renderer/bookmarks.js`, `src/bookmarks.js` | Bookmarks: saving the moment's sound and bringing it back |
 | `src/ambience/` | Built-in ambience loops |

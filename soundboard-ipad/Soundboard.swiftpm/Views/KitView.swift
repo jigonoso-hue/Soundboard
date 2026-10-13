@@ -10,6 +10,7 @@ struct KitView: View {
     @EnvironmentObject private var ui: AppUI
     @Environment(\.horizontalSizeClass) private var sizeClass
     @EnvironmentObject private var themes: ThemeSettings
+    @EnvironmentObject private var player: SoundPlayer
     let kitId: UUID
 
     @State private var editing = false
@@ -117,6 +118,15 @@ struct KitView: View {
                     actions(kit)
                 }
             }
+            // iPhone: the Effects button is just its icon, so say what's armed here.
+            if sizeClass == .compact, let fx = armedEffect(kit) {
+                HStack(spacing: 6) {
+                    AppIcon(id: fx.icon, size: 12)
+                    Text(effectStatus(fx))
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+            }
             if editing {
                 Text("Drag a section by its title bar to move it, or drag its bottom-right corner to resize it. Tap Done when finished.")
                     .font(.caption)
@@ -159,6 +169,7 @@ struct KitView: View {
                 IconLabel("Section", icon: "plus", size: 14)
             }
             .buttonStyle(.bordered)
+            effectsMenu(kit)
             Menu {
                 Button {
                     ui.editingKit = KitEditRequest(kitId: kit.id)
@@ -187,6 +198,55 @@ struct KitView: View {
         // iPhone: full-size buttons for thumbs.
         .controlSize(sizeClass == .compact ? .regular : .small)
         .fixedSize()
+    }
+
+    // MARK: Sound effects
+
+    private func armedEffect(_ kit: SoundKit) -> SoundEffect? {
+        guard let armed = player.armedEffect, armed.kitId == kit.id else { return nil }
+        return armed.effect
+    }
+
+    private func effectStatus(_ fx: SoundEffect) -> String {
+        "\(fx.name) · \(player.keepEffect ? "on" : "next sound")"
+    }
+
+    /// Effects: puts a sound effect on the next sound played from this kit
+    /// (tile, row, Shuffle or a player's songs), or on every one while "Keep
+    /// it on" is ticked. Bashes play as they are. The same as the Mac's kits.js.
+    private func effectsMenu(_ kit: SoundKit) -> some View {
+        let armed = armedEffect(kit)
+        return Menu {
+            Section(player.keepEffect ? "Effect for every sound" : "Effect for the next sound") {
+                ForEach(SoundEffect.allCases) { fx in
+                    Button {
+                        player.armedEffect = armed == fx ? nil : SoundPlayer.ArmedEffect(kitId: kit.id, effect: fx)
+                    } label: {
+                        if armed == fx {
+                            Label(fx.name, systemImage: "checkmark")
+                        } else {
+                            Text(fx.name)
+                        }
+                        Text(fx.hint)
+                    }
+                }
+            }
+            Toggle("Keep it on", isOn: $player.keepEffect)
+            if armed != nil {
+                Button("Turn off") { player.armedEffect = nil }
+            }
+        } label: {
+            if sizeClass == .compact {
+                AppIcon(id: armed?.icon ?? "sliders", size: 16)
+                    .frame(minWidth: 20, minHeight: 18)
+            } else {
+                IconLabel(armed.map(effectStatus) ?? "Effects", icon: armed?.icon ?? "sliders", size: 14)
+            }
+        }
+        .buttonStyle(.bordered)
+        .tint(armed != nil ? Color.accentColor : nil)
+        .shadow(color: armed != nil ? Color.accentColor.opacity(0.55) : .clear, radius: 7)
+        .accessibilityLabel(armed.map { "Effects: \(effectStatus($0))" } ?? "Effects")
     }
 
     private func describe(_ kit: SoundKit) -> String {
@@ -700,7 +760,7 @@ struct KitSectionView: View {
         var s = section
         s.playlistShuffle = shuffled ? true : nil
         onChange(s)
-        music.start(kit: kit, section: s)
+        music.start(kit: kit, section: s, fx: player.takeEffect(for: kit.id))
     }
 
     private func playerButton(_ label: String, icon: String, showLabel: Bool = false, active: Bool = false,
@@ -772,7 +832,7 @@ struct KitSectionView: View {
         switch pick.type {
         case .sound:
             if let sound = store.sound(pick.id) {
-                playSound(sound, store: store, player: player, ui: ui, gain: section.gain)
+                playSound(sound, store: store, player: player, ui: ui, gain: section.gain, effectKit: kit.id)
             }
         case .bash:
             if let bash = bashes.bash(pick.id) {
@@ -834,7 +894,7 @@ struct KitSectionView: View {
             if !clipItems.isEmpty {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: tileWidth), spacing: 8)], spacing: 8) {
                     ForEach(clipItems) { entry in
-                        SoundTile(sound: entry.value, size: section.size, gain: section.gain)
+                        SoundTile(sound: entry.value, size: section.size, gain: section.gain, effectKit: kit.id)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
                             .contextMenu { itemMenu(entry.item) }
                     }
@@ -845,7 +905,7 @@ struct KitSectionView: View {
                     ForEach(fullItems) { entry in
                         // In a playlist, a song starts the playlist from it (or stops it, if it's the one playing).
                         TrackRow(sound: entry.value, size: section.size, gain: section.gain,
-                                 onPlay: playlistAction(for: entry.value.id),
+                                 onPlay: playlistAction(for: entry.value.id), effectKit: kit.id,
                                  current: section.isPlaylist && music.current[section.id] == entry.value.id)
                             .draggable(KitDrag.encode(entry.item, from: section.id))
                             .contextMenu { itemMenu(entry.item) }
@@ -859,13 +919,14 @@ struct KitSectionView: View {
     private func playlistAction(for songId: UUID) -> (() -> Void)? {
         guard section.isPlaylist else { return nil }
         let music = self.music
+        let player = self.player
         let kit = self.kit
         let section = self.section
         return {
             if music.current[section.id] == songId {
                 music.stop(section.id, fade: 2)
             } else {
-                music.start(kit: kit, section: section, from: songId)
+                music.start(kit: kit, section: section, from: songId, fx: player.takeEffect(for: kit.id))
             }
         }
     }

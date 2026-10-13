@@ -19,6 +19,8 @@ struct MirrorPlay {
     var by: String? = nil
     /// Seconds it fades in over (a playlist's next song, a scene change).
     var fadeIn: Double = 0
+    /// A scene kit's sound effect to play it through.
+    var fx: SoundEffect? = nil
 }
 
 /// One thing playing, for the stage's now-playing list.
@@ -52,13 +54,13 @@ final class MirrorPlayer {
     var onChange: (() -> Void)?
 
     private final class Voice {
-        let player: AVAudioPlayer
+        let player: VoicePlayer
         let play: MirrorPlay
         var volume: Double
         var started = false
         var resumeAt: Date?
 
-        init(player: AVAudioPlayer, play: MirrorPlay) {
+        init(player: VoicePlayer, play: MirrorPlay) {
             self.player = player
             self.play = play
             self.volume = play.volume
@@ -71,7 +73,13 @@ final class MirrorPlayer {
 
     func play(_ play: MirrorPlay) {
         stopVoice(play.pid)
-        guard let player = try? AVAudioPlayer(contentsOf: play.url) else { return }
+        let made: VoicePlayer?
+        if let fx = play.fx {
+            made = try? FxPlayer(contentsOf: play.url, effect: fx)
+        } else {
+            made = try? AVAudioPlayer(contentsOf: play.url)
+        }
+        guard let player = made else { return }
         let voice = Voice(player: player, play: play)
         let target = Float(min(1, play.volume * level(play.category)))
         player.volume = play.fadeIn > 0 ? 0 : target

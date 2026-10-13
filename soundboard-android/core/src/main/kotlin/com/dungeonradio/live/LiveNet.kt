@@ -28,6 +28,8 @@ object LiveNet {
     val HASH_RE = Regex("^[0-9a-f]{64}$")
     val EXT_RE = Regex("^[a-z0-9]{1,5}$")
     val BUILTIN_RE = Regex("^[a-z0-9-]+\\.wav$")
+    /** Sound effects a play can carry (the web renderer's fx.js, SoundEffects.swift). */
+    val FX_IDS = listOf("distant", "echo", "radio", "underwater")
     private val BASE64_RE = Regex("^[A-Za-z0-9+/]+={0,2}$")
 
     fun now(): Long = System.currentTimeMillis()

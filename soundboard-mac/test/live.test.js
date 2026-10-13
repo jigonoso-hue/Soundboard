@@ -131,14 +131,16 @@ test('scene music: crossfades, built-in cues and scene-change fades', async () =
     sam.connect(`ws://127.0.0.1:${transport.port}`);
     await waitFor(host, 'peers', (list) => list.length === 1);
     // A playlist's next song fades in; the one before fades out.
-    await host.play({ pid: 'p1', group: 'pl:music:2', soundId: 'song', name: 'Song', at: Date.now(), volume: 0.7, cat: 'music', fadeIn: 4 });
+    await host.play({ pid: 'p1', group: 'pl:music:2', soundId: 'song', name: 'Song', at: Date.now(), volume: 0.7, cat: 'music', fadeIn: 4, fx: 'distant' });
     const song = await cmds.next('play', 5000);
     assert.equal(song.fadeIn, 4);
+    assert.equal(song.fx, 'distant', 'a scene kit sound effect reaches listeners');
     await host.stop('pl:music:1', 4);
     assert.deepEqual(await cmds.next('stop'), { t: 'stop', group: 'pl:music:1', fade: 4 });
     // A now-and-then layer on a built-in loop: played with nothing to fetch.
-    await host.play({ pid: 'p2', group: 'a:thunder', builtin: 'thunderstorm.wav', name: 'Thunderstorm', at: Date.now(), volume: 0.5, cat: 'ambience' });
+    await host.play({ pid: 'p2', group: 'a:thunder', builtin: 'thunderstorm.wav', name: 'Thunderstorm', at: Date.now(), volume: 0.5, cat: 'ambience', fx: 'chorus' });
     const cue = await cmds.next('play');
+    assert.equal(cue.fx, undefined, 'an effect that isn\'t one is dropped');
     assert.equal(cue.builtin, 'thunderstorm.wav');
     assert.equal(cue.file, undefined);
     assert.equal(cue.cat, 'ambience');

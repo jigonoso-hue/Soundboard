@@ -47,6 +47,16 @@ const initScript = (relay) => `(() => {
   const RealAudio = window.Audio;
   window.Audio = function (src) { const a = new RealAudio(src); if (src) window.__audio.push(String(src)); return a; };
   window.Audio.prototype = RealAudio.prototype;
+  // Sounds made first and given their address after (so a sound effect can
+  // set crossOrigin) are recorded too.
+  const srcProp = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+  Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+    ...srcProp,
+    set(value) {
+      if (value) { window.__audio.push(String(value)); (window.__fxAudio = window.__fxAudio || []).push(this); }
+      srcProp.set.call(this, value);
+    },
+  });
   window.DRNative = {
     fsExists: (p) => ask('fsExists', { p }), fsMkdir: (p) => ask('fsMkdir', { p }),
     fsRead: (p) => ask('fsRead', { p }), fsReadText: (p) => ask('fsReadText', { p }),
@@ -131,6 +141,20 @@ async function until(fn, label, timeout = 15000) {
     check(heard.startsWith('http://127.0.0.1:'), `the player plays it from its own server (${heard.replace(/[0-9a-f]{32}/g, '…')})`);
     const bytes = await playerPage.evaluate(async (u) => (await (await fetch(u)).arrayBuffer()).byteLength, heard);
     check(bytes === fs.statSync(path.join(ambienceDir, 'campfire.wav')).size, 'the fetched copy is the whole sound');
+
+    // A scene kit's sound effect reaches the player: it plays through Web Audio, sounding.
+    await gmPage.evaluate(() => play(sounds.find((s) => s.name === 'Dragon Roar').id, { fx: 'echo' }));
+    const fxLevel = await until(() => playerPage.evaluate(() => {
+      const audio = [...document.querySelectorAll('audio')].concat(window.__fxAudio || []).find((a) => a.fx && a.fx.id === 'echo');
+      if (!audio) return null;
+      const ctx = audio.fx.source.context;
+      if (!audio.__meter) { audio.__meter = ctx.createAnalyser(); audio.fx.chain.output.connect(audio.__meter); }
+      const buf = new Float32Array(2048);
+      audio.__meter.getFloatTimeDomainData(buf);
+      const rms = Math.sqrt(buf.reduce((sum, v) => sum + v * v, 0) / buf.length);
+      return rms > 0.001 ? rms : null;
+    }), 'the player hearing the echo');
+    check(fxLevel > 0, 'a sound effect reaches the player and sounds');
 
     // A built-in ambience loop reaches the player too.
     await gmPage.evaluate(() => { const toggle = document.querySelector('#amb-collapse'); if (document.querySelector('#amb-layers').classList.contains('hidden')) toggle.click(); });

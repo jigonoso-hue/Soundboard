@@ -116,6 +116,11 @@ async function audit(page, label, scope = null) {
       await shot('04-kit-scrolled');
     });
     await step('section menu', async () => { await page.click('.kit-section .section-more >> nth=0'); await page.waitForTimeout(300); await shot('05-section-menu', '#section-menu'); await page.keyboard.press('Escape'); await page.mouse.click(5, 400); });
+    await step('effects menu', async () => {
+      await page.click('#kit-fx-btn'); await page.waitForTimeout(300); await shot('05b-effects-menu', '#section-menu');
+      await page.click('#section-menu button:has-text("Distant room")'); await page.waitForTimeout(200); await shot('05c-effect-armed');
+      await page.click('#kit-fx-btn'); await page.click('#section-menu button:has-text("Turn off")');
+    });
     await step('kit drawer', async () => { await page.click('.kit-section .section-add >> nth=0'); await page.waitForTimeout(400); await shot('06-kit-library'); await page.evaluate(() => window.DRBack()); await page.click('#drawer-close').catch(() => {}); });
     await step('edit sound', async () => {
       await page.evaluate(() => document.querySelector('.view-btn[data-view="all"]').click());

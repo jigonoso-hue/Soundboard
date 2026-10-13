@@ -111,13 +111,20 @@ and converts host times to its own clock.
   "buzz": false,           // vibrate phones when it starts
   "whisper": false,        // sent only to some listeners
   "by": "Sam",             // optional: the listener who played it
-  "fadeIn": 4              // optional: seconds to fade in over (up to 10)
+  "fadeIn": 4,             // optional: seconds to fade in over (up to 10)
+  "fx": "distant"          // optional: a scene kit's sound effect (below)
 }
 ```
 
 Instead of `hash` and `ext`, a play can name a built-in sound with
 `"builtin": "thunderstorm.wav"` (a file name of lowercase letters, digits and
 dashes, ending `.wav`). Every copy of the app has those, so nothing is fetched.
+
+`fx` plays the sound through an effect: `"distant"` (Distant room: muffled,
+through a wall), `"echo"` (Empty echo: a big empty hall), `"radio"` (Old radio:
+thin and crackly) or `"underwater"` (Underwater: deep and murky). Listeners
+build it themselves (Web Audio on the Mac and Android, AVAudioEngine on
+iPhone/iPad); an unknown name is dropped and the sound plays as it is.
 
 **Groups.** `s:<sound id>` is a sound tile or row; `b:<bash run id>` a bash;
 `pl:<section id>:<n>` one song of a playlist (each song has its own group, so the

@@ -1,10 +1,13 @@
 import SwiftUI
 
 /// Plays a sound, or reports why it couldn't.
+/// effectKit: the scene kit it's played from, whose armed sound effect it gets.
 @MainActor
-func playSound(_ sound: Sound, store: SoundStore, player: SoundPlayer, ui: AppUI, gain: Double = 1) {
+func playSound(_ sound: Sound, store: SoundStore, player: SoundPlayer, ui: AppUI, gain: Double = 1, effectKit: UUID? = nil) {
+    var options = SoundPlayer.PlayOptions()
+    if let effectKit { options.fx = { [weak player] in player?.takeEffect(for: effectKit) } }
     do {
-        try player.play(sound, url: store.url(for: sound), gain: gain)
+        try player.play(sound, url: store.url(for: sound), gain: gain, options: options)
     } catch {
         ui.errorMessage = "Couldn't play “\(sound.name)”."
     }
@@ -29,6 +32,8 @@ struct SoundTile: View {
     var size: ItemSize = .m
     /// Extra level, such as a scene kit section's volume slider.
     var gain: Double = 1
+    /// The scene kit it's in, whose armed sound effect it plays with.
+    var effectKit: UUID? = nil
 
     var body: some View {
         let progress = player.progress[sound.id]
@@ -44,7 +49,7 @@ struct SoundTile: View {
             ? AnyShape(UnevenRoundedRectangle(topLeadingRadius: 3, bottomLeadingRadius: 3, bottomTrailingRadius: 8, topTrailingRadius: 8))
             : (scrap ? AnyShape(Rectangle()) : AnyShape(RoundedRectangle(cornerRadius: theme == .spaceAge ? 10 : 14)))
         Button {
-            playSound(sound, store: store, player: player, ui: ui, gain: gain)
+            playSound(sound, store: store, player: player, ui: ui, gain: gain, effectKit: effectKit)
         } label: {
             ZStack(alignment: .bottomLeading) {
                 if book {
@@ -168,6 +173,8 @@ struct TrackRow: View {
     var gain: Double = 1
     /// What tapping it does instead of playing it (a playlist starts from it).
     var onPlay: (() -> Void)? = nil
+    /// The scene kit it's in, whose armed sound effect it plays with.
+    var effectKit: UUID? = nil
     /// The song a playlist is on: marked with an accent edge.
     var current = false
 
@@ -181,7 +188,7 @@ struct TrackRow: View {
         let corner: CGFloat = spine ? 3 : 12
         VStack(spacing: 0) {
             Button {
-                if let onPlay { onPlay() } else { playSound(sound, store: store, player: player, ui: ui, gain: gain) }
+                if let onPlay { onPlay() } else { playSound(sound, store: store, player: player, ui: ui, gain: gain, effectKit: effectKit) }
             } label: {
                 HStack(spacing: 12) {
                     ZStack {

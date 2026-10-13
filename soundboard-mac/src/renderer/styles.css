@@ -853,6 +853,18 @@ dialog { max-height: 90vh; overflow-y: auto; }
 }
 #section-menu .menu-option { flex-wrap: wrap; padding: 8px 12px 8px 12px; min-width: 220px; }
 #section-menu .menu-option .menu-hint { flex-basis: 100%; padding-left: 21px; }
+.menu-sep { height: 1px; margin: 4px 8px; background: var(--border); }
+
+/* A scene kit's sound effect, armed for the next sound (or kept on). */
+#kit-fx-btn.fx-armed {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: fx-armed 1.8s ease-in-out infinite alternate;
+}
+@keyframes fx-armed { to { box-shadow: 0 0 0 1px var(--accent), 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent); } }
+@media (prefers-reduced-motion: reduce) { #kit-fx-btn.fx-armed { animation: none; } }
 
 /* ---------- Library drawer ---------- */
 
@@ -1118,7 +1130,7 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
 
 /* Themed backdrops: buttons get a solid sheet, so the pictures behind
    (planets, moons, stars) never show through them. */
-.has-backdrop :is(#board, #sidebar, .kit-header, .kit-section-head) button:not(.primary):not(.plain):not(.chip):not(.danger):not(.block-title):not(.layer-name):not(.titlebar *):not(.tile *):not(.track *):not(.bash-card *):not(.layer *):not(.view-btn):not(.kit-btn):not(.bookmark-btn):not(.tag-filter-btn):not(#tags-toggle):not(.player-btn.on):not(.popup-menu *) {
+.has-backdrop :is(#board, #sidebar, .kit-header, .kit-section-head) button:not(.primary):not(.plain):not(.chip):not(.danger):not(.block-title):not(.layer-name):not(.titlebar *):not(.tile *):not(.track *):not(.bash-card *):not(.layer *):not(.view-btn):not(.kit-btn):not(.bookmark-btn):not(.tag-filter-btn):not(#tags-toggle):not(.player-btn.on):not(.popup-menu *):not(.fx-armed) {
   background: color-mix(in srgb, var(--panel) 94%, var(--text));
 }
 

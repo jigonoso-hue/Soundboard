@@ -1,4 +1,4 @@
-/* global AudioUtils, Tags, Kits */
+/* global AudioUtils, Tags, Kits, Fx */
 const api = window.soundboard;
 const $ = (sel) => document.querySelector(sel);
 
@@ -8,6 +8,7 @@ const MAX_CLIP_SECONDS = 300;
 const YOUTUBE_HOME = 'https://www.youtube.com/';
 
 const prefs = loadPrefs();
+if (prefs.outputDevice) Fx.setOutputDevice(prefs.outputDevice);
 let sounds = [];
 const playing = new Map(); // sound id -> Set<HTMLAudioElement>
 
@@ -61,6 +62,9 @@ function rampVolume(audio, to, seconds, then) {
 //   onEnded: called when it finishes by itself
 //   gain: extra level from where it was played (a scene kit section's volume slider)
 //   seek: seconds in to start from (a bookmark brings a song back where it was)
+//   fx: a sound effect to play it through (fx.js: 'distant', 'echo', …), or a
+//       function giving one, asked only if the sound really starts (a kit's
+//       armed effect is used up by the sound it goes on)
 // Returns the audio element, or null.
 function play(id, options = {}) {
   const sound = sounds.find((s) => s.id === id);
@@ -68,7 +72,11 @@ function play(id, options = {}) {
   // Full sounds and repeating sounds toggle: pressing again stops them instead of stacking another copy.
   if (!options.fresh && (sound.repeat || isFull(sound)) && playing.has(id)) { stop(id); return null; }
   if (prefs.noOverlap && !options.fresh) stop(id);
-  const audio = new Audio(soundUrl(sound));
+  const audio = new Audio();
+  const wanted = typeof options.fx === 'function' ? options.fx() : options.fx;
+  const fx = typeof Fx !== 'undefined' && Fx.prepare(audio, wanted) ? wanted : null;
+  audio.src = soundUrl(sound);
+  if (fx) Fx.attach(audio, fx);
   audio.group = options.group || `s:${id}`;
   audio.gain = options.gain ?? 1;
   const target = Math.min(1, sound.volume * audio.gain * prefs.master);
@@ -82,6 +90,7 @@ function play(id, options = {}) {
   const done = () => {
     clearTimeout(audio.repeatTimer);
     clearInterval(audio.rampTimer);
+    if (fx) Fx.release(audio);
     set.delete(audio);
     if (!set.size && playing.get(id) === set) playing.delete(id);
     updateTile(id);
@@ -120,7 +129,7 @@ function play(id, options = {}) {
   });
   audio.play().then(() => { if (options.fadeIn) rampVolume(audio, target, options.fadeIn); }).catch(done);
   updateTile(id, audio);
-  if (typeof Live !== 'undefined') Live.soundPlayed(sound, { group: audio.group, fadeIn: options.fadeIn || 0, gain: audio.gain, seek: options.seek || 0 });
+  if (typeof Live !== 'undefined') Live.soundPlayed(sound, { group: audio.group, fadeIn: options.fadeIn || 0, gain: audio.gain, seek: options.seek || 0, fx });
   return audio;
 }
 
@@ -155,7 +164,10 @@ function release(id, audio, fade = 0) {
   if (set) { set.delete(audio); if (!set.size) playing.delete(id); }
   audio.stopped = true;
   clearTimeout(audio.repeatTimer);
-  const end = () => { audio.pause(); audio.removeAttribute('src'); audio.load(); };
+  const end = () => {
+    audio.pause(); audio.removeAttribute('src'); audio.load();
+    if (typeof Fx !== 'undefined') Fx.release(audio);
+  };
   if (fade > 0) rampVolume(audio, 0, fade, end); else { clearInterval(audio.rampTimer); end(); }
   updateTile(id);
   if (typeof Live !== 'undefined') Live.groupStopped(audio.group, fade);
@@ -470,8 +482,9 @@ const fitObserver = new ResizeObserver((entries) => {
 // Full sounds: a row with play button, name, tags, timer and progress.
 // onPlay: what clicking it does instead of playing it (a playlist starts from it).
 // gain: a scene kit section's volume slider.
-function makeTrack(sound, { reorder = true, onPlay = null, gain = 1 } = {}) {
-  const go = () => (onPlay ? onPlay() : play(sound.id, { gain }));
+// fx: a scene kit's armed sound effect (a function, see play()).
+function makeTrack(sound, { reorder = true, onPlay = null, gain = 1, fx = null } = {}) {
+  const go = () => (onPlay ? onPlay() : play(sound.id, { gain, fx }));
   const row = document.createElement('div');
   row.className = 'track';
   row.dataset.soundId = sound.id;
@@ -586,7 +599,7 @@ function addReorder(el, sound) {
 }
 
 // gain: a scene kit section's volume slider.
-function makeTile(sound, { reorder = true, gain = 1 } = {}) {
+function makeTile(sound, { reorder = true, gain = 1, fx = null } = {}) {
   const tile = document.createElement('div');
   tile.className = 'tile';
   tile.dataset.id = sound.id;
@@ -642,8 +655,8 @@ function makeTile(sound, { reorder = true, gain = 1 } = {}) {
   progress.className = 'tile-progress';
   tile.appendChild(progress);
 
-  tile.addEventListener('click', (e) => (e.altKey ? stop(sound.id) : play(sound.id, { gain })));
-  tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id, { gain }); } });
+  tile.addEventListener('click', (e) => (e.altKey ? stop(sound.id) : play(sound.id, { gain, fx })));
+  tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(sound.id, { gain, fx }); } });
   tile.addEventListener('contextmenu', (e) => { e.preventDefault(); openEditor(sound.id); });
 
   if (reorder) addReorder(tile, sound);
@@ -805,6 +818,7 @@ $('#output-device').addEventListener('change', (e) => {
   prefs.outputDevice = e.target.value;
   savePrefs();
   Ambience.setOutputDevice(prefs.outputDevice);
+  Fx.setOutputDevice(prefs.outputDevice);
 });
 navigator.mediaDevices?.addEventListener?.('devicechange', loadOutputDevices);
 

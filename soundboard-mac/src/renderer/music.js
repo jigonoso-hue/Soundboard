@@ -45,6 +45,7 @@ const Music = (() => {
       fadeIn,
       seek,
       gain: list.gain,
+      fx: list.fx,
       group: `pl:${list.sectionId}:${list.n++}`,
       nearEnd: { seconds: fade, fn: () => { if (list.audio === audio) advance(list, fade); } },
       onEnded: () => { if (list.audio === audio) advance(list, 0); },
@@ -113,7 +114,8 @@ const Music = (() => {
   // Starts a playlist section (from one of its songs, if given), fading in
   // over `fade` seconds and fading out what it was playing.
   // seek: seconds into that song to start from (a bookmark).
-  function start(kit, section, fromId = null, fade = 0, seek = 0) {
+  // fx: a sound effect for all its songs (a scene kit's armed effect).
+  function start(kit, section, fromId = null, fade = 0, seek = 0, fx = null) {
     const songs = songsIn(section);
     if (!songs.length) return;
     const current = lists.get(section.id);
@@ -124,7 +126,7 @@ const Music = (() => {
       if (section.playlistShuffle) order = [fromId, ...order.filter((id) => id !== fromId)];
       else index = order.indexOf(fromId);
     }
-    const list = { kitId: kit.id, sectionId: section.id, order, index, id: null, audio: null, n: 1, failures: 0, shuffle: !!section.playlistShuffle, gain: section.volume ?? 1, loop: loopOf(section) };
+    const list = { kitId: kit.id, sectionId: section.id, order, index, id: null, audio: null, n: 1, failures: 0, shuffle: !!section.playlistShuffle, gain: section.volume ?? 1, loop: loopOf(section), fx };
     lists.set(section.id, list);
     startTrack(list, index, fade || (current ? 2 : 0), fromId ? seek : 0);
   }

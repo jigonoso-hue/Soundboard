@@ -35,11 +35,32 @@ final class SoundPlayer: ObservableObject {
         var onRelease: (() -> Void)? = nil
         /// Seconds in to start from (a bookmark brings a song back where it was).
         var seek: Double = 0
+        /// A sound effect to play it through, asked only if the sound really
+        /// starts (a scene kit's armed effect is used up by the sound it goes on).
+        var fx: (() -> SoundEffect?)? = nil
+    }
+
+    /// A scene kit's armed sound effect: it goes on the next sound played from
+    /// that kit, or on every one while keepEffect is on.
+    struct ArmedEffect: Equatable {
+        let kitId: UUID
+        let effect: SoundEffect
+    }
+    @Published var armedEffect: ArmedEffect?
+    @Published var keepEffect: Bool {
+        didSet { UserDefaults.standard.set(keepEffect, forKey: "keepEffect") }
+    }
+
+    /// The effect armed in a kit, for a sound starting from it (used up unless kept on).
+    func takeEffect(for kitId: UUID) -> SoundEffect? {
+        guard let armed = armedEffect, armed.kitId == kitId else { return nil }
+        if !keepEffect { armedEffect = nil }
+        return armed.effect
     }
 
     private final class Voice {
         let token = UUID()
-        let player: AVAudioPlayer
+        let player: VoicePlayer
         var volume: Double
         /// Extra level from where it was played, such as a scene kit section's volume slider.
         var gain: Double = 1
@@ -53,7 +74,7 @@ final class SoundPlayer: ObservableObject {
         /// While fading in or out, volume changes don't cut across the fade.
         var fadingUntil: Date?
 
-        init(player: AVAudioPlayer, volume: Double, repeatGap: Double?, group: String, options: PlayOptions) {
+        init(player: VoicePlayer, volume: Double, repeatGap: Double?, group: String, options: PlayOptions) {
             self.player = player
             self.volume = volume
             self.repeatGap = repeatGap
@@ -73,6 +94,7 @@ final class SoundPlayer: ObservableObject {
         let defaults = UserDefaults.standard
         masterVolume = defaults.object(forKey: "masterVolume") as? Double ?? 1
         restartInsteadOfOverlap = defaults.bool(forKey: "restartInsteadOfOverlap")
+        keepEffect = defaults.bool(forKey: "keepEffect")
         // Playback that mixes with music or the YouTube view and keeps going with the screen locked.
         BackgroundAudio.shared.configure()
     }
@@ -86,7 +108,13 @@ final class SoundPlayer: ObservableObject {
             return nil
         }
         if restartInsteadOfOverlap && !options.fresh { stop(sound.id) }
-        let player = try AVAudioPlayer(contentsOf: url)
+        let effect = options.fx?()
+        let player: VoicePlayer
+        if let effect {
+            player = try FxPlayer(contentsOf: url, effect: effect)
+        } else {
+            player = try AVAudioPlayer(contentsOf: url)
+        }
         let volume = volumes[sound.id] ?? sound.volume
         let level = Float(min(1, volume * gain * masterVolume))
         player.volume = options.fadeIn > 0 ? 0 : level
@@ -107,7 +135,7 @@ final class SoundPlayer: ObservableObject {
         volumes[sound.id] = volume
         startTicker()
         live?.soundPlayed(sound, volume: min(1, volume * gain * masterVolume), group: voice.group, fadeIn: options.fadeIn,
-                          seek: options.seek > 0 ? player.currentTime : 0)
+                          seek: options.seek > 0 ? player.currentTime : 0, fx: effect)
         return voice.token
     }
 

@@ -1,4 +1,4 @@
-/* global api, $, Icons, IconPicker, Ambience, Music, sounds, prefs, savePrefs, render, toast, isFull, editingId, AudioUtils, Tags, Bashes, makeTile, makeTrack, matchesFilters */
+/* global api, $, Icons, IconPicker, Ambience, Music, sounds, prefs, savePrefs, render, toast, isFull, editingId, AudioUtils, Tags, Bashes, makeTile, makeTrack, matchesFilters, Fx */
 // Scene Kits: customizable boards of sections holding sounds and bashes
 // from the whole library. Sections live on a 12-column grid and can be
 // moved and resized in "Customize Layout" mode. Ambience sections hold
@@ -137,6 +137,7 @@ const Kits = (() => {
     if (editing) $('#kit-layout-btn').textContent = 'Done';
     else Icons.set($('#kit-layout-btn'), 'grid', 'Customize Layout');
     $('#kit-layout-btn').classList.toggle('primary', editing);
+    syncFxButton();
     $('#kit-layout-hint').classList.toggle('hidden', !editing);
   }
 
@@ -315,7 +316,7 @@ const Kits = (() => {
     if (clipItems.length) {
       const grid = document.createElement('div');
       grid.className = 'section-clips';
-      for (const { item, sound } of clipItems) grid.appendChild(decorate(makeTile(sound, { reorder: false, gain: gainOf(section) }), kit, section, item));
+      for (const { item, sound } of clipItems) grid.appendChild(decorate(makeTile(sound, { reorder: false, gain: gainOf(section), fx: takeEffect }), kit, section, item));
       body.appendChild(grid);
     }
     if (fullItems.length) {
@@ -325,9 +326,9 @@ const Kits = (() => {
         // In a playlist, a song starts the playlist from it (or stops it, if it's the one playing).
         const onPlay = section.playlist ? () => {
           if (Music.current(section.id) === sound.id) Music.stop(section.id, 2);
-          else Music.start(kit, section, sound.id);
+          else Music.start(kit, section, sound.id, 0, 0, takeEffect());
         } : null;
-        const row = makeTrack(sound, { reorder: false, onPlay, gain: gainOf(section) });
+        const row = makeTrack(sound, { reorder: false, onPlay, gain: gainOf(section), fx: takeEffect });
         if (section.playlist && Music.current(section.id) === sound.id) row.classList.add('playlist-current');
         rows.appendChild(decorate(row, kit, section, item));
       }
@@ -673,7 +674,7 @@ const Kits = (() => {
     const startIn = (shuffled) => {
       if (shuffled) section.playlistShuffle = true; else delete section.playlistShuffle;
       saveSections(kit);
-      Music.start(kit, section);
+      Music.start(kit, section, null, 0, 0, takeEffect());
     };
     button('play', 'Play', 'Play the songs in order, one after another', () => startIn(false),
       { disabled: !songs, active: on && !section.playlistShuffle, showLabel: true });
@@ -724,7 +725,7 @@ const Kits = (() => {
     if (!pick) return;
     lastShuffled.set(section.id, pick);
     if (pick.type === 'bash') Bashes.player.play(bashesById.get(pick.id), sounds, 0, gainOf(section));
-    else play(pick.id, { gain: gainOf(section) });
+    else play(pick.id, { gain: gainOf(section), fx: takeEffect });
   }
 
   function openSectionMenu(kit, section, anchor) {
@@ -785,11 +786,99 @@ const Kits = (() => {
 
   function showMenuAt(menu, anchor) {
     const rect = anchor.getBoundingClientRect();
-    menu.style.left = `${Math.min(window.innerWidth - 220, rect.left)}px`;
     menu.classList.remove('hidden');
+    // Kept inside the window, by its real width.
+    menu.style.left = `${Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, rect.left))}px`;
     // Kept on screen: it scrolls if it's taller than the window.
     const height = menu.offsetHeight;
     menu.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, rect.bottom + 4))}px`;
+  }
+
+  // ---------- Sound effects ----------
+  // An effect armed in the open kit goes on the next sound played from it
+  // (tile, row, Shuffle or a player's songs), or on every one while
+  // "Keep it on" is ticked. Bashes play as they are.
+
+  let fxArmed = null; // { kitId, id }
+  let fxKeep = false;
+  try { fxKeep = localStorage.getItem('fxKeep') === '1'; } catch { /* ignore */ }
+
+  function armedEffect() {
+    const kit = activeKit();
+    return fxArmed && kit && fxArmed.kitId === kit.id ? Fx.get(fxArmed.id) : null;
+  }
+
+  // The armed effect for a sound that's starting (used up unless kept on).
+  function takeEffect() {
+    const fx = armedEffect();
+    if (!fx) return null;
+    if (!fxKeep) { fxArmed = null; syncFxButton(); }
+    return fx.id;
+  }
+
+  function syncFxButton() {
+    const btn = $('#kit-fx-btn');
+    if (!btn) return;
+    const fx = armedEffect();
+    Icons.set(btn, fx ? fx.icon : 'sliders', fx ? `${fx.name} · ${fxKeep ? 'on' : 'next sound'}` : 'Effects');
+    btn.classList.toggle('fx-armed', !!fx);
+    btn.setAttribute('aria-pressed', String(!!fx));
+    btn.title = fx
+      ? (fxKeep ? `${fx.name} is on for every sound you play from this kit` : `${fx.name} goes on the next sound you play from this kit`)
+      : 'Put a sound effect on the next sound you play';
+  }
+
+  function openFxMenu(anchor) {
+    const kit = activeKit();
+    if (!kit) return;
+    const menu = $('#section-menu');
+    menu.textContent = '';
+    const heading = document.createElement('div');
+    heading.className = 'menu-heading';
+    heading.textContent = fxKeep ? 'Effect for every sound' : 'Effect for the next sound';
+    menu.appendChild(heading);
+    const current = armedEffect();
+    for (const fx of Fx.EFFECTS) {
+      const b = document.createElement('button');
+      b.className = 'menu-option';
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', String(current === fx));
+      if (current === fx) b.classList.add('checked');
+      Icons.set(b, fx.icon, fx.name, { size: 16 });
+      const small = document.createElement('span');
+      small.className = 'muted small menu-hint';
+      small.textContent = fx.hint;
+      b.appendChild(small);
+      b.addEventListener('click', () => {
+        menu.classList.add('hidden');
+        fxArmed = current === fx ? null : { kitId: kit.id, id: fx.id };
+        syncFxButton();
+      });
+      menu.appendChild(b);
+    }
+    const keep = document.createElement('button');
+    keep.setAttribute('role', 'menuitemcheckbox');
+    keep.setAttribute('aria-checked', String(fxKeep));
+    keep.classList.toggle('checked', fxKeep);
+    keep.textContent = 'Keep it on';
+    keep.title = 'Leave the effect on for every sound, instead of just the next one';
+    keep.addEventListener('click', (e) => {
+      e.stopPropagation(); // the menu is redrawn, so the outside-click check can't find it
+      fxKeep = !fxKeep;
+      try { localStorage.setItem('fxKeep', fxKeep ? '1' : '0'); } catch { /* ignore */ }
+      syncFxButton();
+      openFxMenu(anchor);
+    });
+    const sep = document.createElement('div');
+    sep.className = 'menu-sep';
+    menu.append(sep, keep);
+    if (current) {
+      const off = document.createElement('button');
+      off.textContent = 'Turn off';
+      off.addEventListener('click', () => { menu.classList.add('hidden'); fxArmed = null; syncFxButton(); });
+      menu.appendChild(off);
+    }
+    showMenuAt(menu, anchor);
   }
 
   // "+ Section": a sound section or an ambience section.
@@ -1126,6 +1215,7 @@ const Kits = (() => {
       if (drawer.open && action === 'library') closeDrawer(); else openDrawer(drawer.target);
     }
     if (action === 'layout') { editing = !editing; render(); }
+    if (action === 'fx') openFxMenu(document.querySelector('[data-kit-action="fx"]'));
     if (action === 'section') openAddSectionMenu(kit, document.querySelector('[data-kit-action="section"]'));
     if (action === 'edit') await editKit(kit);
     if (action === 'duplicate') { const copy = await api.kits.duplicate(id); await refreshKits(); open(copy.id); }
@@ -1144,7 +1234,7 @@ const Kits = (() => {
   });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#kit-menu')) $('#kit-menu').classList.add('hidden');
-    if (!e.target.closest('#section-menu, .section-more, [data-kit-action="section"]')) $('#section-menu').classList.add('hidden');
+    if (!e.target.closest('#section-menu, .section-more, [data-kit-action="section"], [data-kit-action="fx"]')) $('#section-menu').classList.add('hidden');
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;

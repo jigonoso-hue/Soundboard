@@ -21,6 +21,8 @@ const SERVICE_TYPE = 'dungeonradio'; // _dungeonradio._tcp
 const CHUNK_SIZE = 256 * 1024;
 const MAX_MESSAGE = 1024 * 1024;
 const CHUNKS_IN_FLIGHT = 4;
+// Sound effects a play can carry (renderer/fx.js, SoundEffects.swift).
+const FX_IDS = ['distant', 'echo', 'radio', 'underwater'];
 const HASH_RE = /^[0-9a-f]{64}$/;
 const EXT_RE = /^[a-z0-9]{1,5}$/;
 const BUILTIN_RE = /^[a-z0-9-]+\.wav$/;
@@ -822,6 +824,7 @@ class LiveHost extends EventEmitter {
     const fadeIn = fadeSeconds(event.fadeIn);
     if (fadeIn) message.fadeIn = fadeIn;
     if (event.by) message.by = String(event.by).slice(0, 40);
+    if (FX_IDS.includes(event.fx)) message.fx = event.fx;
     const targets = Array.isArray(event.to) ? event.to : (event.to ? [event.to] : null);
     if (targets) {
       for (const peer of targets) if (this.peers.has(peer)) await this.sendTo(peer, message);
@@ -998,7 +1001,7 @@ function clamp01(value) {
 // Emits 'status' ({ state, host, scene, error }), 'rules' (playerSounds),
 // 'catalog' ([{ id, name, color }]) and 'command' messages with
 // local times and file paths:
-//   { t: 'play', pid, group, file, name, at, volume, cat, loop, gap, buzz, whisper, by }
+//   { t: 'play', pid, group, file, name, at, volume, cat, loop, gap, buzz, whisper, by, fx }
 //   { t: 'stop', group } · { t: 'volume', group, volume } · { t: 'stopAll' }
 //   { t: 'ambience', layers: [{ key, file | builtin, name, volume }] }
 
@@ -1302,6 +1305,7 @@ class LiveListener extends EventEmitter {
       whisper: !!message.whisper,
       by: message.by ? String(message.by).slice(0, 40) : null,
       ...(fadeSeconds(message.fadeIn) ? { fadeIn: fadeSeconds(message.fadeIn) } : {}),
+      ...(FX_IDS.includes(message.fx) ? { fx: message.fx } : {}),
     });
   }
 

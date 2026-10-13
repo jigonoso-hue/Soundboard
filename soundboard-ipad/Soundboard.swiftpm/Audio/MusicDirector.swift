@@ -25,6 +25,8 @@ final class MusicDirector: ObservableObject {
         var gain: Double
         /// "all" (the album), "one" (the current sound) or "off" (stop after the last song).
         var loop: String
+        /// A sound effect for all its songs (a scene kit's armed effect).
+        var fx: SoundEffect?
 
         init(kitId: UUID, sectionId: UUID, order: [UUID], shuffle: Bool, gain: Double, loop: String) {
             self.kitId = kitId
@@ -90,6 +92,8 @@ final class MusicDirector: ObservableObject {
         options.fresh = true
         options.fadeIn = fadeIn
         options.seek = seek
+        let fx = list.fx
+        options.fx = { fx }
         options.group = "pl:\(list.sectionId.uuidString):\(list.n)"
         list.n += 1
         var token: UUID?
@@ -194,7 +198,9 @@ final class MusicDirector: ObservableObject {
     /// Starts a playlist section (from one of its songs, if given), fading in
     /// over `fade` seconds and fading out what it was playing.
     /// seek: seconds into that song to start from (a bookmark).
-    func start(kit: SoundKit, section: KitSection, from songId: UUID? = nil, fade: Double = 0, seek: Double = 0) {
+    /// fx: a sound effect for all its songs (a scene kit's armed effect).
+    func start(kit: SoundKit, section: KitSection, from songId: UUID? = nil, fade: Double = 0, seek: Double = 0,
+               fx: SoundEffect? = nil) {
         let available = songs(in: section)
         guard !available.isEmpty else { return }
         let wasPlaying = lists[section.id] != nil
@@ -206,6 +212,7 @@ final class MusicDirector: ObservableObject {
             if shuffle { order = [songId] + order.filter { $0 != songId } } else { index = order.firstIndex(of: songId) ?? 0 }
         }
         let list = Playlist(kitId: kit.id, sectionId: section.id, order: order, shuffle: shuffle, gain: section.gain, loop: Self.loop(of: section))
+        list.fx = fx
         lists[section.id] = list
         startTrack(list, at: index, fadeIn: fade > 0 ? fade : (wasPlaying ? 2 : 0), seek: songId != nil ? seek : 0)
     }

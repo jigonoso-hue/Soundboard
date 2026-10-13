@@ -339,6 +339,8 @@ final class LiveHostEngine {
         var by: String? = nil
         /// Seconds it fades in over (a playlist's next song, a scene change).
         var fadeIn: Double = 0
+        /// A scene kit's sound effect, so listeners hear it too.
+        var fx: SoundEffect? = nil
     }
 
     /// A sound a player asked to play for everyone.
@@ -826,6 +828,7 @@ final class LiveHostEngine {
             let fadeIn = LiveNet.fadeSeconds(event.fadeIn)
             if fadeIn > 0 { message["fadeIn"] = fadeIn }
             if let by = event.by { message["by"] = by }
+            if let fx = event.fx { message["fx"] = fx.rawValue }
             if let targets = event.to {
                 for peer in targets where self.peers[peer] != nil { self.send(message, to: peer) }
                 return
@@ -1341,7 +1344,8 @@ final class LiveListenerEngine {
             buzz: LiveNet.bool(message["buzz"]),
             whisper: LiveNet.bool(message["whisper"]),
             by: LiveNet.string(message["by"]),
-            fadeIn: LiveNet.fadeSeconds(message["fadeIn"])
+            fadeIn: LiveNet.fadeSeconds(message["fadeIn"]),
+            fx: LiveNet.string(message["fx"]).flatMap { SoundEffect(rawValue: $0) }
         )))
     }
 
