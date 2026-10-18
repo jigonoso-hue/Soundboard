@@ -9,6 +9,8 @@ const { BashStore, COVER_TYPES } = require('./bashes');
 const { KitStore, KIT_ICONS, KIT_COLORS, COLUMNS } = require('./kits');
 const { BookmarkStore } = require('./bookmarks');
 const LibraryShare = require('./library-share');
+const LibrarySend = require('./library-send');
+const os = require('os');
 const Live = require('./live');
 
 const AMBIENCE_DIR = path.join(__dirname, 'ambience');
@@ -353,6 +355,83 @@ function registerIpc() {
     broadcast('kits:changed', kits.list());
     return { ...added, message: LibraryShare.describeImport(added) };
   });
+
+  // ---- Sending the library online with a code (library-send.js) ----
+  const openSocket = LibrarySend.nodeSocket(require('ws'));
+  let sending = null; // { sender, fd, dir }
+  let receiving = null; // { receiver, dir }
+  const stopSending = () => {
+    if (!sending) return;
+    const s = sending;
+    sending = null;
+    s.sender.stop();
+    setTimeout(() => { try { fs.closeSync(s.fd); } catch { /* closed */ } fs.rmSync(s.dir, { recursive: true, force: true }); }, 1000);
+  };
+  const stopReceiving = () => {
+    if (!receiving) return;
+    const r = receiving;
+    receiving = null;
+    r.receiver.cancel();
+    fs.rmSync(r.dir, { recursive: true, force: true });
+  };
+  ipcMain.handle('share:send-start', (_e, { relay } = {}) => {
+    stopSending();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dr-send-'));
+    const file = path.join(dir, 'library.zip');
+    try {
+      const summary = LibraryShare.exportToZip(file, { library, bashes, kits }, 'Mac');
+      if (!summary.sounds && !summary.bashes && !summary.kits) throw new Error('Your library is empty. Add some sounds first.');
+      const size = fs.statSync(file).size;
+      const fd = fs.openSync(file, 'r');
+      const session = { fd, dir };
+      session.sender = LibrarySend.startSender({
+        open: openSocket, relay, size, summary, name: Live.deviceName(),
+        readChunk: async (i) => {
+          const buf = Buffer.alloc(Math.min(LibrarySend.CHUNK, size - i * LibrarySend.CHUNK));
+          fs.readSync(fd, buf, 0, buf.length, i * LibrarySend.CHUNK);
+          return buf.toString('base64');
+        },
+        onStatus: (status) => { if (sending === session) sendToMain('share:send-status', { ...status, bytes: size, ...summary }); },
+      });
+      sending = session;
+      return { bytes: size, ...summary };
+    } catch (err) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      throw err;
+    }
+  });
+  ipcMain.handle('share:send-stop', () => stopSending());
+  ipcMain.handle('share:receive-start', (_e, { relay, code } = {}) => {
+    stopReceiving();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dr-receive-'));
+    const file = path.join(dir, 'library.zip');
+    const session = { dir };
+    try {
+      session.receiver = LibrarySend.startReceiver({
+        open: openSocket, relay, code, name: Live.deviceName(),
+        writeChunk: async (_i, data) => fs.appendFileSync(file, Buffer.from(data, 'base64')),
+        finish: async (offer) => {
+          if (!fs.existsSync(file) || fs.statSync(file).size !== offer.bytes) throw new Error('The library arrived damaged. Try again.');
+          const added = LibraryShare.importFromZip(file, { library, bashes, kits });
+          broadcast('sounds:changed', null);
+          broadcast('bashes:changed', bashes.list());
+          broadcast('kits:changed', kits.list());
+          return { ...added, message: LibraryShare.describeImport(added) };
+        },
+        onStatus: (status) => {
+          if (receiving !== session) return;
+          sendToMain('share:receive-status', status);
+          if (status.phase === 'done' || status.phase === 'error') { receiving = null; fs.rmSync(dir, { recursive: true, force: true }); }
+        },
+      });
+    } catch (err) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      throw err;
+    }
+    receiving = session;
+  });
+  ipcMain.handle('share:receive-cancel', () => stopReceiving());
+  app.on('before-quit', () => { stopSending(); stopReceiving(); });
 
   registerLiveIpc();
 

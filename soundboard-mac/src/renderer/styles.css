@@ -1300,6 +1300,21 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
 .share-status:empty { display: none; }
 .share-status { margin-top: 8px !important; }
 .share-status.error-text { color: var(--danger); }
+.share-online { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.share-online-head { font-weight: 600; margin-bottom: 6px; }
+.share-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+.share-panel p { margin: 0 0 8px; }
+.share-code-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.share-code { font-size: 28px; font-weight: 700; letter-spacing: 0.18em; color: var(--accent); user-select: all; }
+.share-receivers { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.share-receivers li.error-text { color: var(--danger); }
+.share-receive { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.share-receive input { flex: 1 1 140px; min-width: 0; text-transform: uppercase; letter-spacing: 0.12em; font-family: ui-monospace, Menlo, monospace; }
+.share-progress { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-bottom: 10px; }
+.share-progress > div { height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+#share-receive-text.error-text { color: var(--danger); }
+html.android .share-receive input, html.android .share-receive button, html.android .share-panel > button { min-height: 44px; }
+html.android #share-send { flex: 1 1 100%; justify-content: center; min-height: 44px; }
 html.android .share-actions button { min-height: 44px; flex: 1 1 160px; justify-content: center; }
 .accent-row .swatches { align-items: center; flex-wrap: wrap; }
 dialog input.accent-custom { width: 30px; flex: none; height: 30px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: none; cursor: pointer; }

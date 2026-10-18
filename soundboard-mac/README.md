@@ -117,6 +117,8 @@ Click **Done** to lock the layout, so nothing moves by accident during a session
 
 **Share your library.** In **Options**, **Export Library…** saves every sound, bash (with its cover picture), scene kit and custom tag as one `.zip` file; **Import Library…** opens one, from this Mac or from the iPhone/iPad or Android app (they all make the same file: see [`LIBRARY-FORMAT.md`](../LIBRARY-FORMAT.md)). Importing adds to your library and never replaces anything: things you already have (and sounds whose audio is exactly one you have) aren't added twice, so importing the same file again adds nothing. To keep the file small, compressed audio is stored as it is and only the list and wav or aiff audio are squeezed.
 
+**Send online with a code.** Also in **Options**: **Send with a Code** packs your library and shows a 5-character code. Whoever types it under **Receive** (in any of the apps, anywhere) gets the library added to theirs, with a progress bar on their side and "Sam has it. Added 12 sounds." on yours. It goes through Dungeon Radio's relay piece by piece and nothing is stored online, so keep the app open on both until it's there. Any number of people can use the same code until you choose **Stop Sending**.
+
 **Section options (⋯).**
 - **Rename** it (double-clicking the title also works).
 - **Item size:** Small, Medium or Large.
@@ -318,6 +320,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/handouts.js` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send dialog |
 | `src/renderer/fx.js` | Sound effects for scene kits (Distant room, Empty echo, Old radio, Underwater), with Web Audio |
 | `src/library-share.js`, `src/zip.js` | Sharing the whole library as one zip (export, import), the same file as the other apps |
+| `src/library-send.js` | Sending a library online with a code, through the relay (also run by Android) |
 | `src/renderer/music.js` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |
 | `src/renderer/bookmarks.js`, `src/bookmarks.js` | Bookmarks: saving the moment's sound and bringing it back |
 | `src/ambience/` | Built-in ambience loops |

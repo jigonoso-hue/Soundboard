@@ -35,6 +35,7 @@ The relay wraps traffic for the host only:
 | `{"t":"send","msg":{…}}` | To every listener |
 | `{"t":"send","to":"<peer>","msg":{…}}` | To one listener |
 | `{"t":"kick","peer":"<peer>"}` | Remove a listener: the relay sends it `{"t":"kicked"}` and disconnects it |
+| `{"t":"end"}` | Close the room now (listeners get `{"t":"ended"}`) rather than holding it a minute for a reconnect |
 
 Listeners send and receive bare messages. The relay sends a listener
 `{"t":"no-room"}` if the code is unknown and `{"t":"ended"}` when the host

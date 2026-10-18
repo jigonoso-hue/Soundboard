@@ -46,7 +46,10 @@ connect wakes it up.
 - Messages from listeners go to the broadcaster; the broadcaster's go to every listener or to one
   (whispers).
 - If the broadcaster's connection drops, the room stays open for a minute so the app can
-  reconnect.
+  reconnect. A host can also close its room at once (`{"t":"end"}`).
+- Sending a whole library with a code uses the same rooms (see
+  [`LIBRARY-FORMAT.md`](../LIBRARY-FORMAT.md)): the library passes through in
+  pieces and nothing is kept.
 - Messages are limited to 1 MB. Nothing is stored.
 
 `GET /health` returns `ok` and the number of open rooms.

@@ -104,6 +104,27 @@ test('the host can kick a listener', async () => {
   }
 });
 
+test('the host can close the room at once (a library send stopped)', async () => {
+  const relay = await createRelay({ port: 0, host: '127.0.0.1' });
+  const base = `ws://127.0.0.1:${relay.port}/live`;
+  try {
+    const host = connect(`${base}?role=host`);
+    const room = await host.next();
+    const a = connect(`${base}?role=listen&code=${room.code}`);
+    await host.next();
+    await a.opened;
+    host.sendJSON({ t: 'end' });
+    assert.deepEqual(await a.next(), { t: 'ended' });
+    await host.closed;
+    // The code is gone straight away, not held for a reconnect.
+    const late = connect(`${base}?role=listen&code=${room.code}`);
+    assert.deepEqual(await late.next(), { t: 'no-room' });
+    assert.equal(relay.rooms.size, 0);
+  } finally {
+    await relay.close();
+  }
+});
+
 test('serves the Privacy Policy, Terms of Use and Licenses', async () => {
   const relay = await createRelay({ port: 0, host: '127.0.0.1' });
   const base = `http://127.0.0.1:${relay.port}`;

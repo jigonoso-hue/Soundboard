@@ -1414,6 +1414,7 @@ const Live = (() => {
   api.live.status().then((current) => { bonjour = current.bonjour !== false; setStatus(current); });
 
   return {
+    relayAddress,
     soundPlayed, groupStopped, groupVolume, stoppedAll,
     // Redraws the listener's stage (a handout arrived).
     refreshStage: () => Stage.render(),

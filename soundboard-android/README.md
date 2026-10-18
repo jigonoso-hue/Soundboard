@@ -71,6 +71,7 @@ node web-test/phone-tour.js       # every screen: screenshots + layout audit
 node web-test/live-e2e.js         # two phones in a Live Session, real native side
 node web-test/premium.js         # free limits, locked features, buying
 node web-test/library-share.js   # Export/Import Library between phones and with the Mac
+node web-test/library-send-e2e.js # Send with a Code: phone to phone, phone to Mac, Mac to phone, via the relay
 gradle :app:assembleDebug :app:lintDebug   # the app (needs the Android SDK)
 ```
 

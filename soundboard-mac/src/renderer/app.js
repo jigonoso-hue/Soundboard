@@ -1,4 +1,4 @@
-/* global AudioUtils, Tags, Kits, Fx */
+/* global AudioUtils, Tags, Kits, Fx, Live */
 const api = window.soundboard;
 const $ = (sel) => document.querySelector(sel);
 
@@ -853,6 +853,99 @@ $('#share-import').addEventListener('click', (e) => runShare(e.currentTarget, 'A
   await refresh();
   return r.message;
 }));
+
+// Online with a code (library-send.js, through the Live Session relay).
+const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+$('#share-send').addEventListener('click', async () => {
+  const button = $('#share-send');
+  button.disabled = true;
+  $('#share-send-panel').classList.remove('hidden');
+  $('#share-code').textContent = '· · · · ·';
+  $('#share-receivers').textContent = '';
+  $('#share-send-hint').classList.remove('error-text');
+  $('#share-send-hint').textContent = 'Packing your library…';
+  try {
+    const r = await api.share.sendStart(Live.relayAddress());
+    $('#share-send-hint').textContent = `Getting a code for ${plural(r.sounds, 'sound', 'sounds')}, ${plural(r.bashes, 'bash', 'bashes')} and ${plural(r.kits, 'scene kit', 'scene kits')} (${formatBytes(r.bytes)})…`;
+  } catch (err) {
+    $('#share-send-hint').classList.add('error-text');
+    $('#share-send-hint').textContent = remoteError(err);
+    button.disabled = false;
+  }
+});
+
+api.share.onSendStatus((s) => {
+  if (s.error) {
+    $('#share-send-hint').classList.add('error-text');
+    $('#share-send-hint').textContent = s.error;
+    $('#share-send').disabled = false;
+    return;
+  }
+  if (s.code) {
+    $('#share-code').textContent = s.code;
+    $('#share-send-hint').textContent = `Give this code to whoever should get your library (${plural(s.sounds, 'sound', 'sounds')}, ${formatBytes(s.bytes)}). They choose Receive in Options. Keep this open until they have it.`;
+  }
+  const list = $('#share-receivers');
+  list.textContent = '';
+  for (const r of s.receivers || []) {
+    const li = document.createElement('li');
+    if (r.failed) { li.className = 'error-text'; li.textContent = `${r.name}: ${r.failed}`; }
+    else if (r.done) li.textContent = `${r.name} has it. ${r.message || ''}`;
+    else if (r.left) li.textContent = `${r.name} left before it finished.`;
+    else li.textContent = `${r.name}: receiving… ${Math.round((r.got / r.n) * 100)}%`;
+    list.appendChild(li);
+  }
+});
+
+$('#share-send-stop').addEventListener('click', async () => {
+  await api.share.sendStop();
+  $('#share-send-panel').classList.add('hidden');
+  $('#share-send').disabled = false;
+});
+
+async function receiveLibrary() {
+  if ($('#share-receive').disabled) return;
+  const code = $('#share-receive-code').value;
+  $('#share-receive-panel').classList.remove('hidden');
+  $('#share-receive-text').classList.remove('error-text');
+  $('#share-receive-text').textContent = 'Connecting…';
+  $('#share-receive-bar').style.width = '0';
+  $('#share-receive').disabled = true;
+  try {
+    await api.share.receiveStart(Live.relayAddress(), code);
+  } catch (err) {
+    $('#share-receive-text').classList.add('error-text');
+    $('#share-receive-text').textContent = remoteError(err);
+    $('#share-receive').disabled = false;
+  }
+}
+$('#share-receive').addEventListener('click', receiveLibrary);
+// Enter in the code box receives (and doesn't close Options).
+$('#share-receive-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); receiveLibrary(); } });
+
+api.share.onReceiveStatus(async (s) => {
+  const text = $('#share-receive-text');
+  text.classList.toggle('error-text', s.phase === 'error');
+  $('#share-receive-bar').style.width = `${Math.round((s.progress || 0) * 100)}%`;
+  const o = s.offer;
+  const what = o ? `${o.name}’s library: ${plural(o.sounds, 'sound', 'sounds')}, ${plural(o.bashes, 'bash', 'bashes')}, ${plural(o.kits, 'scene kit', 'scene kits')} (${formatBytes(o.bytes)})` : '';
+  if (s.phase === 'connecting') text.textContent = 'Connecting…';
+  else if (s.phase === 'receiving') text.textContent = `Receiving ${what}… ${Math.round(s.progress * 100)}%`;
+  else if (s.phase === 'importing') text.textContent = `Adding ${what}…`;
+  else if (s.phase === 'done') text.textContent = s.message;
+  else if (s.phase === 'error') text.textContent = s.error;
+  const finished = s.phase === 'done' || s.phase === 'error';
+  $('#share-receive').disabled = !finished;
+  $('#share-receive-cancel').textContent = finished ? 'Close' : 'Cancel';
+  if (s.phase === 'done') { $('#share-receive-code').value = ''; await refresh(); }
+});
+
+$('#share-receive-cancel').addEventListener('click', async () => {
+  await api.share.receiveCancel();
+  $('#share-receive-panel').classList.add('hidden');
+  $('#share-receive').disabled = false;
+});
 
 $('#output-device').addEventListener('change', (e) => {
   prefs.outputDevice = e.target.value;

@@ -89,3 +89,32 @@ Importing adds to the library and never replaces anything:
   otherwise the Premium screen opens and nothing changes.
 - Every field is checked as it's read: names are cleaned, numbers clamped,
   links must be https, and a newer `version` asks for an app update.
+
+## Sending online with a code
+
+**Options → Send online with a code** sends the same file through the Live
+Session relay (`live-relay/`), so it reaches someone anywhere without being
+stored online. Code: `soundboard-mac/src/library-send.js` (Mac and Android) and
+`soundboard-ipad/Soundboard.swiftpm/Model/LibrarySend.swift`.
+
+The sender connects as a relay host (`?role=host`) and shows the room's code;
+each receiver connects with it (`?role=listen&code=…`). Any number can receive
+while the sender keeps it open. Pieces are 256 KB of the zip, base64 in JSON.
+
+| Receiver → sender | |
+| --- | --- |
+| `{ t: "lib-hello", v: 1, name }` | Joined: please describe the library |
+| `{ t: "lib-need", i }` | Send piece `i` (a receiver asks for up to 4 at a time) |
+| `{ t: "lib-done", message }` | All there and imported ("Added 12 sounds…") |
+| `{ t: "lib-fail", error }` | Couldn't import it (shown to the sender) |
+
+| Sender → receiver | |
+| --- | --- |
+| `{ t: "lib-offer", v: 1, name, bytes, n, chunk: 262144, sounds, bashes, kits }` | What's coming: `n` pieces |
+| `{ t: "lib-chunk", i, data }` | Piece `i` (base64) |
+| `{ t: "lib-error", error }` | The sender couldn't read the file |
+| `{ t: "lib-stopped" }` | The sender stopped; then it sends the relay `{ t: "end" }` to close the room |
+
+A receiver writes pieces in order, checks the total size, then imports the
+file exactly as **Import Library** does (same rules, same limits). If no offer
+comes within 20 seconds (a wrong code, or a Live Session's code), it gives up.

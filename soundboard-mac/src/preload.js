@@ -41,6 +41,13 @@ contextBridge.exposeInMainWorld('soundboard', {
   share: {
     exportLibrary: () => ipcRenderer.invoke('share:export'),
     importLibrary: () => ipcRenderer.invoke('share:import'),
+    // Online with a code, through the relay.
+    sendStart: (relay) => ipcRenderer.invoke('share:send-start', { relay }),
+    sendStop: () => ipcRenderer.invoke('share:send-stop'),
+    onSendStatus: (callback) => ipcRenderer.on('share:send-status', (_e, status) => callback(status)),
+    receiveStart: (relay, code) => ipcRenderer.invoke('share:receive-start', { relay, code }),
+    receiveCancel: () => ipcRenderer.invoke('share:receive-cancel'),
+    onReceiveStatus: (callback) => ipcRenderer.on('share:receive-status', (_e, status) => callback(status)),
   },
   onSoundsChanged: (callback) => ipcRenderer.on('sounds:changed', () => callback()),
   bashes: {

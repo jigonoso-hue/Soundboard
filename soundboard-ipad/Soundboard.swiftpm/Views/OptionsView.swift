@@ -24,6 +24,10 @@ struct OptionsView: View {
     @State private var importing = false
     @State private var shareStatus: String?
     @State private var shareFailed = false
+    // Sending the library online with a code (LibrarySend.swift); they keep going if Options closes.
+    @StateObject private var sender = LibrarySender.shared
+    @StateObject private var receiver = LibraryReceiver.shared
+    @State private var receiveCode = ""
 
     var body: some View {
         Form {
@@ -35,6 +39,7 @@ struct OptionsView: View {
                 online
                 storage
                 share
+                sendOnline
                 about
             }
             .themedRows(themes.theme)
@@ -231,6 +236,92 @@ struct OptionsView: View {
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.zip]) { result in
             if case .success(let url) = result { importLibrary(url) }
+        }
+    }
+
+    // MARK: Sending online with a code
+
+    private var sendOnline: some View {
+        Section {
+            if sender.active {
+                if let code = sender.code {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Code").font(.footnote).foregroundStyle(.secondary)
+                        Text(code)
+                            .font(.system(.largeTitle, design: .monospaced).weight(.bold))
+                            .tracking(4)
+                            .foregroundStyle(Color.accentColor)
+                            .textSelection(.enabled)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                ForEach(sender.receivers) { r in
+                    Text(receiverLine(r))
+                        .font(.footnote)
+                        .foregroundStyle(r.failed != nil ? themes.theme.danger : .primary)
+                }
+                Button("Stop Sending", role: .destructive) { sender.stop() }
+            } else {
+                Button("Send with a Code") { sender.start(store: store, bashes: bashes, kits: kits) }
+            }
+            if let status = sender.status {
+                Text(status)
+                    .font(.footnote)
+                    .foregroundStyle(sender.failed ? themes.theme.danger : .secondary)
+            }
+            HStack {
+                TextField("Code", text: $receiveCode)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .font(.body.monospaced())
+                    .submitLabel(.go)
+                    .onSubmit(receive)
+                Button("Receive", action: receive)
+                    .disabled(receiver.busy || receiveCode.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if receiver.phase != .idle {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(receiveText)
+                        .font(.footnote)
+                        .foregroundStyle(receiver.phase == .error ? themes.theme.danger : .primary)
+                    if receiver.phase == .receiving || receiver.phase == .importing {
+                        ProgressView(value: receiver.progress)
+                    }
+                }
+                Button(receiver.busy ? "Cancel" : "Close") { receiver.cancel() }
+            }
+        } header: {
+            Text("Send online with a code")
+        } footer: {
+            Text("Your library goes straight to whoever types the code, anywhere. Keep Dungeon Radio open on both until it’s there; nothing is stored online.")
+        }
+    }
+
+    private func receive() {
+        guard !receiver.busy else { return }
+        receiver.start(code: receiveCode, store: store, bashes: bashes, kits: kits)
+    }
+
+    private func receiverLine(_ r: LibrarySender.Receiver) -> String {
+        if let failed = r.failed { return "\(r.name): \(failed)" }
+        if r.done { return "\(r.name) has it. \(r.message ?? "")" }
+        if r.left { return "\(r.name) left before it finished." }
+        return "\(r.name): receiving… \(r.n > 0 ? r.got * 100 / r.n : 0)%"
+    }
+
+    private var receiveText: String {
+        var what = ""
+        if let o = receiver.offer {
+            func n(_ count: Int, _ one: String, _ many: String) -> String { "\(count) \(count == 1 ? one : many)" }
+            let size = ByteCountFormatter.string(fromByteCount: Int64(o.bytes), countStyle: .file)
+            what = "\(o.name)’s library: \(n(o.sounds, "sound", "sounds")), \(n(o.bashes, "bash", "bashes")), \(n(o.kits, "scene kit", "scene kits")) (\(size))"
+        }
+        switch receiver.phase {
+        case .idle: return ""
+        case .connecting: return "Connecting…"
+        case .receiving: return "Receiving \(what)… \(Int(receiver.progress * 100))%"
+        case .importing: return "Adding \(what)…"
+        case .done, .error: return receiver.message ?? ""
         }
     }
 

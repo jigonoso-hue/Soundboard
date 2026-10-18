@@ -382,6 +382,31 @@
           <button type="button" id="share-import"><i data-icon="folder"></i> Import Library…</button>
         </div>
         <p id="share-status" class="small share-status" role="status"></p>
+        <div class="share-online">
+          <div class="share-online-head">Send online with a code</div>
+          <p class="muted small">Your library goes straight to whoever types the code, anywhere. Keep Dungeon Radio open on both until it’s there; nothing is stored online.</p>
+          <div class="share-actions">
+            <button type="button" id="share-send">Send with a Code</button>
+          </div>
+          <div id="share-send-panel" class="share-panel hidden">
+            <div class="share-code-row">
+              <span class="muted small">Code</span>
+              <span id="share-code" class="share-code mono" aria-live="polite">· · · · ·</span>
+            </div>
+            <p id="share-send-hint" class="muted small"></p>
+            <ul id="share-receivers" class="share-receivers"></ul>
+            <button type="button" id="share-send-stop">Stop Sending</button>
+          </div>
+          <div id="share-receive-form" class="share-receive">
+            <input id="share-receive-code" placeholder="Code" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Code to receive a library">
+            <button type="button" id="share-receive">Receive</button>
+          </div>
+          <div id="share-receive-panel" class="share-panel hidden">
+            <p id="share-receive-text" class="small" role="status"></p>
+            <div class="share-progress"><div id="share-receive-bar"></div></div>
+            <button type="button" id="share-receive-cancel">Cancel</button>
+          </div>
+        </div>
       </div>
       <div class="dialog-actions">
         <span class="spacer"></span>

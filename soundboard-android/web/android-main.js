@@ -17,6 +17,7 @@
   const { KitStore, KIT_ICONS, KIT_COLORS, COLUMNS } = DRNode.require('kits');
   const { BookmarkStore } = DRNode.require('bookmarks');
   const LibraryShare = DRNode.require('library-share');
+  const LibrarySend = DRNode.require('library-send');
   const { fs, path } = DRNode;
 
   const ROOT = '/sounds';
@@ -124,6 +125,67 @@
     if (bashes.list().length + counts.bashes > Rules.LIMITS.bashes) throw limitHit('bashes');
     if (kits.list().length + counts.kits > Rules.LIMITS.kits) throw limitHit('kits');
   }
+  // Adds a library zip in the app's folder (picked, or received with a code).
+  async function importZipFile(file) {
+    const dir = await callAsync('libraryUnzip', { file });
+    try {
+      const at = (name) => path.join(dir, name);
+      const manifest = LibraryShare.readManifest(fs.readFileSync(at(LibraryShare.MANIFEST), 'utf8'));
+      const files = {
+        size: (name) => { try { return fs.statSync(at(name)).size; } catch { return null; } },
+        read: (name) => fs.readFileSync(at(name)),
+        path: (name) => at(name),
+      };
+      const stores = { library, bashes, kits };
+      const plan = LibraryShare.planImport(manifest, stores, files);
+      checkImportLimits(plan.counts);
+      const added = LibraryShare.applyImport(manifest, plan, stores, files);
+      emit('sounds:changed', []);
+      emit('bashes:changed', [bashes.list()]);
+      emit('kits:changed', [kits.list()]);
+      return { ...added, message: LibraryShare.describeImport(added) };
+    } finally {
+      try { call('libraryCleanup'); } catch { /* ignore */ }
+    }
+  }
+
+  // ---- Sending a library with a code (library-send.js), over native sockets ----
+  const sockets = new Map();
+  on(null, 'socket', (e) => {
+    const s = e && sockets.get(e.id);
+    if (!s) return;
+    if (e.type === 'open') { if (s.onOpen) s.onOpen(); } else if (e.type === 'message') { if (s.onMessage) s.onMessage(e.data); } else if (e.type === 'close') {
+      sockets.delete(e.id);
+      if (s.onClose) s.onClose(e.data);
+    }
+  });
+  function openSocket(url) {
+    const id = call('socketOpen', { url });
+    const socket = {
+      send: (text) => { try { call('socketSend', { id, text }); } catch { /* closed */ } },
+      close: () => { sockets.delete(id); try { call('socketClose', { id }); } catch { /* closed */ } },
+    };
+    sockets.set(id, socket);
+    return socket;
+  }
+  let deviceName = 'Android phone';
+  try { deviceName = call('deviceName') || deviceName; } catch { /* the default */ }
+  let sending = null;
+  let receiving = null;
+  function stopSending() {
+    if (!sending) return;
+    const s = sending;
+    sending = null;
+    s.stop();
+    setTimeout(() => { try { call('fileRemove', { file: '/export/send.zip' }); } catch { /* gone */ } }, 1000);
+  }
+  function stopReceiving() {
+    if (!receiving) return;
+    const r = receiving;
+    receiving = null;
+    r.cancel();
+  }
+
   const soundUrl = (host, file) => `${serverBase}${host}/${encodeURIComponent(file)}`;
 
   function titleCase(text) { return text.replace(/\b\w/g, (c) => c.toUpperCase()); }
@@ -228,27 +290,45 @@
         importLibrary: async () => {
           const picked = await callAsync('pickFiles', { kind: 'library', multiple: false });
           if (!picked || !picked[0]) return null;
-          const dir = await callAsync('libraryUnzip', { file: picked[0].file });
-          try {
-            const at = (name) => path.join(dir, name);
-            const manifest = LibraryShare.readManifest(fs.readFileSync(at(LibraryShare.MANIFEST), 'utf8'));
-            const file = {
-              size: (name) => { try { return fs.statSync(at(name)).size; } catch { return null; } },
-              read: (name) => fs.readFileSync(at(name)),
-              path: (name) => at(name),
-            };
-            const stores = { library, bashes, kits };
-            const plan = LibraryShare.planImport(manifest, stores, file);
-            checkImportLimits(plan.counts);
-            const added = LibraryShare.applyImport(manifest, plan, stores, file);
-            emit('sounds:changed', []);
-            emit('bashes:changed', [bashes.list()]);
-            emit('kits:changed', [kits.list()]);
-            return { ...added, message: LibraryShare.describeImport(added) };
-          } finally {
-            try { call('libraryCleanup'); } catch { /* ignore */ }
-          }
+          return importZipFile(picked[0].file);
         },
+        // Online with a code, through the relay.
+        sendStart: async (relay) => {
+          stopSending();
+          const { manifest, files } = LibraryShare.exportPlan({ library, bashes, kits, app: 'Android' });
+          const summary = { sounds: manifest.sounds.length, bashes: manifest.bashes.length, kits: manifest.kits.length };
+          if (!summary.sounds && !summary.bashes && !summary.kits) throw new Error('Your library is empty. Add some sounds first.');
+          const packed = await callAsync('libraryPack', { manifest: JSON.stringify(manifest), files: files.map((f) => ({ name: f.name, file: f.path })) });
+          const size = packed.bytes;
+          sending = LibrarySend.startSender({
+            open: openSocket, relay, size, summary, name: deviceName,
+            readChunk: async (i) => call('fileChunk', { file: packed.file, offset: i * LibrarySend.CHUNK, length: Math.min(LibrarySend.CHUNK, size - i * LibrarySend.CHUNK) }),
+            onStatus: (status) => emit('share:send-status', [{ ...status, bytes: size, ...summary }]),
+          });
+          return { bytes: size, ...summary };
+        },
+        sendStop: wrap(() => stopSending()),
+        onSendStatus: (fn) => on(owner, 'share:send-status', fn),
+        receiveStart: wrap((relay, code) => {
+          stopReceiving();
+          const file = '/import/receive.zip';
+          try { call('fileRemove', { file }); } catch { /* none */ }
+          receiving = LibrarySend.startReceiver({
+            open: openSocket, relay, code, name: deviceName,
+            writeChunk: async (_i, data) => call('fileAppend', { file, data }),
+            finish: async (offer) => {
+              const size = (() => { try { return fs.statSync(file).size; } catch { return -1; } })();
+              if (size !== offer.bytes) throw new Error('The library arrived damaged. Try again.');
+              return importZipFile(file);
+            },
+            onStatus: (status) => {
+              emit('share:receive-status', [status]);
+              if (status.phase === 'done' || status.phase === 'error') receiving = null;
+            },
+          });
+        }),
+        receiveCancel: wrap(() => stopReceiving()),
+        onReceiveStatus: (fn) => on(owner, 'share:receive-status', fn),
       },
       onSoundsChanged: (fn) => on(owner, 'sounds:changed', fn),
       bashes: {

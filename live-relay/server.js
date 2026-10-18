@@ -99,6 +99,13 @@ function createRelay({ port = 8787, host = '0.0.0.0', log = () => {} } = {}) {
       if (isBinary) return;
       let message;
       try { message = JSON.parse(data.toString()); } catch { return; }
+      if (message && message.t === 'end') {
+        // The host is done for good (a library send stopped): close the room now
+        // instead of holding it for a reconnect.
+        endRoom(code);
+        socket.close(1000, 'ended');
+        return;
+      }
       if (message && message.t === 'kick' && typeof message.peer === 'string') {
         // The host removed a listener from the session.
         const target = room.listeners.get(message.peer);
