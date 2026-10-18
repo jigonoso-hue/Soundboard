@@ -136,6 +136,17 @@ class KitStore {
     return this.update(copy.id, { icon: source.icon, color: source.color, iconColor: source.iconColor, sections, autoplay: !!source.autoplay });
   }
 
+  // Adds a kit from a shared library (library-share.js), keeping its id unless one here already has it.
+  importKit(kit) {
+    const taken = this.kits.some((k) => k.id === kit.id);
+    const next = normalize({ ...kit, id: taken ? crypto.randomUUID() : kit.id, createdAt: kit.createdAt || new Date().toISOString() });
+    if (!next) throw new Error('That scene kit is damaged.');
+    delete next.migrated;
+    this.kits.push(next);
+    this._save();
+    return structuredClone(next);
+  }
+
   remove(id) {
     this.kits = this.kits.filter((k) => k.id !== id);
     this._save();

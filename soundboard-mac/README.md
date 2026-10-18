@@ -115,6 +115,8 @@ Click **Done** to lock the layout, so nothing moves by accident during a session
 
 **Bookmarks.** **+ Save** under **Bookmarks** in the sidebar saves the moment's sound: the scene kit that's open, the playlists playing (which song and how far in), other songs playing, the ambience layers (the strip's and the kit's, with their volumes and now-and-then settings) and the master and ambience volumes. Click a bookmark to bring it all back, next session or after a detour: it's a scene change, so what isn't in the bookmark fades out over 3 seconds while each song fades back in from where it was, and listeners hear the same. Right-click a bookmark to **Update to what's playing now**, **Rename** or **Delete** it. Deleting a scene kit leaves its bookmarks (they forget the kit).
 
+**Share your library.** In **Options**, **Export Library…** saves every sound, bash (with its cover picture), scene kit and custom tag as one `.zip` file; **Import Library…** opens one, from this Mac or from the iPhone/iPad or Android app (they all make the same file: see [`LIBRARY-FORMAT.md`](../LIBRARY-FORMAT.md)). Importing adds to your library and never replaces anything: things you already have (and sounds whose audio is exactly one you have) aren't added twice, so importing the same file again adds nothing. To keep the file small, compressed audio is stored as it is and only the list and wav or aiff audio are squeezed.
+
 **Section options (⋯).**
 - **Rename** it (double-clicking the title also works).
 - **Item size:** Small, Medium or Large.
@@ -315,6 +317,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/ambience.js` | Ambience mixer |
 | `src/renderer/handouts.js` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send dialog |
 | `src/renderer/fx.js` | Sound effects for scene kits (Distant room, Empty echo, Old radio, Underwater), with Web Audio |
+| `src/library-share.js`, `src/zip.js` | Sharing the whole library as one zip (export, import), the same file as the other apps |
 | `src/renderer/music.js` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |
 | `src/renderer/bookmarks.js`, `src/bookmarks.js` | Bookmarks: saving the moment's sound and bringing it back |
 | `src/ambience/` | Built-in ambience loops |

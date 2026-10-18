@@ -814,6 +814,46 @@ async function loadOutputDevices() {
   });
   select.value = [...select.options].some((o) => o.value === prefs.outputDevice) ? prefs.outputDevice : '';
 }
+// ---------- Sharing the whole library (Options) ----------
+
+const remoteError = (err) => String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+async function runShare(button, busyText, action) {
+  const status = $('#share-status');
+  const buttons = [$('#share-export'), $('#share-import')];
+  buttons.forEach((b) => { b.disabled = true; });
+  status.classList.remove('error-text');
+  status.textContent = busyText;
+  try {
+    status.textContent = (await action()) || '';
+  } catch (err) {
+    status.classList.add('error-text');
+    status.textContent = remoteError(err);
+  } finally {
+    buttons.forEach((b) => { b.disabled = false; });
+  }
+}
+
+$('#share-export').addEventListener('click', (e) => runShare(e.currentTarget, 'Packing your library…', async () => {
+  const r = await api.share.exportLibrary();
+  if (!r) return '';
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  return `Saved ${r.name}${r.bytes ? ` (${formatBytes(r.bytes)})` : ''}: ${n(r.sounds, 'sound', 'sounds')}, ${n(r.bashes, 'bash', 'bashes')} and ${n(r.kits, 'scene kit', 'scene kits')}.`;
+}));
+
+$('#share-import').addEventListener('click', (e) => runShare(e.currentTarget, 'Adding the library…', async () => {
+  const r = await api.share.importLibrary();
+  if (!r) return '';
+  await refresh();
+  return r.message;
+}));
+
 $('#output-device').addEventListener('change', (e) => {
   prefs.outputDevice = e.target.value;
   savePrefs();

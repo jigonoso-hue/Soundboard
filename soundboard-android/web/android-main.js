@@ -16,6 +16,7 @@
   const { BashStore } = DRNode.require('bashes');
   const { KitStore, KIT_ICONS, KIT_COLORS, COLUMNS } = DRNode.require('kits');
   const { BookmarkStore } = DRNode.require('bookmarks');
+  const LibraryShare = DRNode.require('library-share');
   const { fs, path } = DRNode;
 
   const ROOT = '/sounds';
@@ -114,6 +115,15 @@
     const limit = !premium() && Rules.itemLimit(type, count);
     if (limit) throw limitHit(limit);
   };
+  // Importing a shared library: what's new has to fit the free version's limits.
+  function checkImportLimits(counts) {
+    if (premium()) return;
+    const have = Rules.countSounds(library.list());
+    if (have.clips + counts.clips > Rules.LIMITS.clips) throw limitHit('clips');
+    if (have.full + counts.full > Rules.LIMITS.full) throw limitHit('full');
+    if (bashes.list().length + counts.bashes > Rules.LIMITS.bashes) throw limitHit('bashes');
+    if (kits.list().length + counts.kits > Rules.LIMITS.kits) throw limitHit('kits');
+  }
   const soundUrl = (host, file) => `${serverBase}${host}/${encodeURIComponent(file)}`;
 
   function titleCase(text) { return text.replace(/\b\w/g, (c) => c.toUpperCase()); }
@@ -201,6 +211,44 @@
         list: wrap(() => library.tags()),
         add: wrap((name) => { const tag = library.addTag(name); soundsChanged(); return tag; }),
         remove: wrap((name) => { library.removeTag(name); soundsChanged(); }),
+      },
+      // Sharing the whole library as one zip (soundboard-mac/src/library-share.js;
+      // the zip itself is made and opened natively).
+      share: {
+        exportLibrary: async () => {
+          const { manifest, files } = LibraryShare.exportPlan({ library, bashes, kits, app: 'Android' });
+          const result = await callAsync('libraryExport', {
+            manifest: JSON.stringify(manifest),
+            files: files.map((f) => ({ name: f.name, file: f.path })),
+            title: 'Dungeon Radio Library.zip',
+          });
+          if (!result || !result.saved) return null;
+          return { sounds: manifest.sounds.length, bashes: manifest.bashes.length, kits: manifest.kits.length, bytes: result.bytes, name: 'Dungeon Radio Library.zip' };
+        },
+        importLibrary: async () => {
+          const picked = await callAsync('pickFiles', { kind: 'library', multiple: false });
+          if (!picked || !picked[0]) return null;
+          const dir = await callAsync('libraryUnzip', { file: picked[0].file });
+          try {
+            const at = (name) => path.join(dir, name);
+            const manifest = LibraryShare.readManifest(fs.readFileSync(at(LibraryShare.MANIFEST), 'utf8'));
+            const file = {
+              size: (name) => { try { return fs.statSync(at(name)).size; } catch { return null; } },
+              read: (name) => fs.readFileSync(at(name)),
+              path: (name) => at(name),
+            };
+            const stores = { library, bashes, kits };
+            const plan = LibraryShare.planImport(manifest, stores, file);
+            checkImportLimits(plan.counts);
+            const added = LibraryShare.applyImport(manifest, plan, stores, file);
+            emit('sounds:changed', []);
+            emit('bashes:changed', [bashes.list()]);
+            emit('kits:changed', [kits.list()]);
+            return { ...added, message: LibraryShare.describeImport(added) };
+          } finally {
+            try { call('libraryCleanup'); } catch { /* ignore */ }
+          }
+        },
       },
       onSoundsChanged: (fn) => on(owner, 'sounds:changed', fn),
       bashes: {

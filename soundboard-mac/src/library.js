@@ -134,6 +134,42 @@ class Library {
     });
   }
 
+  // Adds a sound from a shared library (library-share.js), keeping its id
+  // unless this library already uses it. The audio comes from a file
+  // (`sourcePath`) or bytes (`data`).
+  importSound(entry, sourcePath, data) {
+    const ext = path.extname(String(entry.file || '')).slice(1).toLowerCase();
+    if (!AUDIO_EXTENSIONS.includes(ext)) throw new Error(`Unsupported audio type: .${ext}`);
+    const id = typeof entry.id === 'string' && /^[0-9a-f-]{36}$/.test(entry.id) && !this.get(entry.id) ? entry.id : crypto.randomUUID();
+    const file = `${id}.${ext}`;
+    const dest = path.join(this.dir, file);
+    if (sourcePath) fs.copyFileSync(sourcePath, dest);
+    else fs.writeFileSync(dest, Buffer.from(data));
+    this.sounds.push({
+      id,
+      name: cleanName(entry.name) || 'Untitled',
+      file,
+      color: /^#[0-9a-f]{6}$/i.test(entry.color || '') ? entry.color : COLORS[this.sounds.length % COLORS.length],
+      volume: 1,
+      hotkey: null,
+      repeat: null,
+      tags: [],
+      kind: KINDS.includes(entry.kind) ? entry.kind : null,
+      duration: null,
+      source: entry.source || null,
+      createdAt: entry.createdAt || new Date().toISOString(),
+    });
+    // The rest goes through update's checks (and registers new tags).
+    return this.update(id, {
+      volume: entry.volume ?? 1,
+      tags: entry.tags || [],
+      repeat: entry.repeat || null,
+      gmOnly: !!entry.gmOnly,
+      buzz: !!entry.buzz,
+      ...(entry.duration ? { duration: entry.duration } : {}),
+    });
+  }
+
   update(id, changes) {
     const sound = this.get(id);
     if (!sound) throw new Error('Sound not found');

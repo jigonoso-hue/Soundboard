@@ -117,6 +117,24 @@ final class BashStore: ObservableObject {
         save()
     }
 
+    /// Adds a bash from a shared library (LibraryShare.swift), keeping its id
+    /// unless one here already has it, with its cover picture if it has one.
+    @discardableResult
+    func importBash(_ bash: Bash, cover: (data: Data, ext: String)?) -> Bash {
+        var next = Self.normalized(bash)
+        if self.bash(next.id) != nil { next.id = UUID() }
+        next.cover.imageFile = nil
+        if let cover, ["png", "jpg", "jpeg", "gif", "webp"].contains(cover.ext.lowercased()) {
+            let file = "\(next.id.uuidString)-\(Int(Date().timeIntervalSince1970)).\(cover.ext.lowercased())"
+            if (try? cover.data.write(to: coversFolder.appendingPathComponent(file), options: .atomic)) != nil {
+                next.cover.imageFile = file
+            }
+        }
+        bashes.append(next)
+        save()
+        return next
+    }
+
     func coverURL(_ file: String) -> URL {
         coversFolder.appendingPathComponent(file)
     }

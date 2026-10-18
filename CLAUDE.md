@@ -34,6 +34,7 @@ Where the code lives, side by side:
 | Listeners' pictures | `face()` in `src/renderer/live.js`, `cleanAvatar` in `src/live.js` | `Views/FaceView.swift`, `LiveNet.cleanAvatar` |
 | Playlists and scene changes | `src/renderer/music.js` | `Audio/MusicDirector.swift` (keep in step) |
 | Bookmarks | `src/bookmarks.js`, `src/renderer/bookmarks.js` | `Model/Bookmarks.swift`, `Views/BookmarksView.swift` |
+| Sharing whole libraries (`LIBRARY-FORMAT.md`) | `src/library-share.js`, `src/zip.js`; Android: `core/…/bridge/LibraryZip.kt` | `Model/LibraryShare.swift` (keep in step) |
 | Ambience (loops, now-and-then layers) | `src/renderer/ambience.js` | `Audio/AmbienceMixer.swift` |
 | Relay protocol | `live-relay/PROTOCOL.md` (shared) | |
 | Android Live engine | `src/live.js`, `src/game.js` | `Live/LiveEngines.swift`, `LiveGame.swift` → Android: `soundboard-android/core/` |

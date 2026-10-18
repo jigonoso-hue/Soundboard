@@ -154,7 +154,12 @@ class MainActivity : Activity() {
         picked = { uris -> io.execute { done(uris.mapNotNull { copyIn(it, importDir) }) } }
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).apply {
             type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, if (kind == "image") arrayOf("image/*") else arrayOf("audio/*", "video/mp4", "application/ogg"))
+            putExtra(Intent.EXTRA_MIME_TYPES, when (kind) {
+                "image" -> arrayOf("image/*")
+                // Shared libraries are zips; some apps label them only as files.
+                "library" -> arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
+                else -> arrayOf("audio/*", "video/mp4", "application/ogg")
+            })
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, multiple)
         }
         try { startActivityForResult(intent, REQUEST_OPEN) } catch (_: Exception) { picked = null; done(emptyList()) }

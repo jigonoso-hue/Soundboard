@@ -10,6 +10,9 @@ const http = require('http');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// The same zip format the app's LibraryZip.kt writes and reads (the Mac's zip.js).
+const { writeZip, openZip } = require('../../soundboard-mac/src/zip');
+const LIBRARY_NAME = /^(dungeon-radio-library\.json|sounds\/[0-9a-f-]{36}\.[a-z0-9]{1,5}|covers\/[0-9a-f-]{36}\.[a-z0-9]{1,5})$/;
 
 const MIME = { html: 'text/html', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml', png: 'image/png', wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg', m4a: 'audio/mp4' };
 
@@ -18,6 +21,8 @@ function startFakeNative({ webDir, ambienceDir }) {
   const calls = [];
   // Files the "system picker" will hand over next: [{ path, name }].
   const picks = [];
+  // Files the "Save as…" screen saved: [{ name, path }].
+  const saved = [];
   // Paths from the page are absolute from the app's private root; no escaping it.
   const resolve = (p) => {
     const full = path.resolve(root, `.${path.posix.normalize(`/${String(p)}`)}`);
@@ -61,6 +66,7 @@ function startFakeNative({ webDir, ambienceDir }) {
     liveHostEvent: () => null,
     notify: () => null,
     openExternal: () => null,
+    libraryCleanup: () => { fs.rmSync(resolve('/import/library'), { recursive: true, force: true }); return null; },
   };
   const asyncOps = {
     // The system file picker: copies the chosen files into the app's temporary folder.
@@ -73,6 +79,26 @@ function startFakeNative({ webDir, ambienceDir }) {
     micAccess: () => true,
     premiumPurchase: () => { premium.premium = true; return { status: premium }; },
     premiumRestore: () => premium,
+    // Sharing a library (LibraryZip.kt): the zip is written, then "saved" where the user chose.
+    libraryExport: ({ manifest, files, title }) => {
+      const out = path.join(root, `saved-${saved.length}.zip`);
+      writeZip(out, [{ name: 'dungeon-radio-library.json', data: Buffer.from(manifest) }, ...files.map((f) => ({ name: f.name, path: resolve(f.file) }))]);
+      saved.push({ name: title, path: out });
+      return { saved: true, bytes: fs.statSync(out).size };
+    },
+    libraryUnzip: ({ file }) => {
+      const dir = resolve('/import/library');
+      fs.rmSync(dir, { recursive: true, force: true });
+      const zip = openZip(resolve(file));
+      try {
+        if (!zip.names.includes('dungeon-radio-library.json')) throw new Error('That file isn’t a Dungeon Radio library.');
+        for (const name of zip.names.filter((n) => LIBRARY_NAME.test(n))) {
+          fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
+          fs.writeFileSync(path.join(dir, name), zip.read(name));
+        }
+      } finally { zip.close(); fs.rmSync(resolve(file), { force: true }); }
+      return '/import/library';
+    },
   };
 
   const server = http.createServer((req, res) => {
@@ -87,7 +113,10 @@ function startFakeNative({ webDir, ambienceDir }) {
         try {
           if (fsOps[op]) answer = { value: fsOps[op](args) };
           else if (op === 'call') answer = { value: JSON.stringify({ value: (callOps[args.name] || (() => { throw new Error(`No native call ${args.name}`); }))(JSON.parse(args.json)) }) };
-          else if (op === 'async') answer = { value: JSON.stringify(asyncOps[args.name] ? asyncOps[args.name](JSON.parse(args.json)) : null) };
+          // A native async call that fails rejects on the page, as NativeBridge's done(null, error) does.
+          else if (op === 'async') {
+            try { answer = { value: JSON.stringify(asyncOps[args.name] ? asyncOps[args.name](JSON.parse(args.json)) : null) }; } catch (err) { answer = { error: err.message }; }
+          }
           else answer = { error: `Unknown ${op}` };
         } catch (err) { answer = { value: JSON.stringify({ error: err.message }) }; }
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -127,6 +156,7 @@ function startFakeNative({ webDir, ambienceDir }) {
     ready({
       url: `http://127.0.0.1:${port}/index.html`, root, calls, initScript,
       pick: (files) => picks.push(...files),
+      saved,
       setPremium: (on) => { premium.premium = !!on; },
       close: () => new Promise((done) => server.close(done)),
     });

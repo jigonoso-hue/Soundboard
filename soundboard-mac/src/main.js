@@ -8,6 +8,7 @@ const { YtDlp } = require('./ytdlp');
 const { BashStore, COVER_TYPES } = require('./bashes');
 const { KitStore, KIT_ICONS, KIT_COLORS, COLUMNS } = require('./kits');
 const { BookmarkStore } = require('./bookmarks');
+const LibraryShare = require('./library-share');
 const Live = require('./live');
 
 const AMBIENCE_DIR = path.join(__dirname, 'ambience');
@@ -327,6 +328,31 @@ function registerIpc() {
   ipcMain.handle('bookmarks:save', (_e, bookmark) => bookmarks.save(bookmark));
   ipcMain.handle('bookmarks:rename', (_e, id, name) => bookmarks.rename(String(id), name));
   ipcMain.handle('bookmarks:remove', (_e, id) => { bookmarks.remove(String(id)); });
+
+  // ---- Sharing the whole library as one zip (library-share.js) ----
+  ipcMain.handle('share:export', async (e) => {
+    const result = await dialog.showSaveDialog(BrowserWindow.fromWebContents(e.sender), {
+      title: 'Export library',
+      defaultPath: path.join(app.getPath('documents'), 'Dungeon Radio Library.zip'),
+      filters: [{ name: 'Dungeon Radio library', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const counts = LibraryShare.exportToZip(result.filePath, { library, bashes, kits }, 'Mac');
+    return { ...counts, bytes: fs.statSync(result.filePath).size, name: path.basename(result.filePath) };
+  });
+  ipcMain.handle('share:import', async (e) => {
+    const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
+      title: 'Import library',
+      properties: ['openFile'],
+      filters: [{ name: 'Dungeon Radio library', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    const added = LibraryShare.importFromZip(result.filePaths[0], { library, bashes, kits });
+    broadcast('sounds:changed', null);
+    broadcast('bashes:changed', bashes.list());
+    broadcast('kits:changed', kits.list());
+    return { ...added, message: LibraryShare.describeImport(added) };
+  });
 
   registerLiveIpc();
 

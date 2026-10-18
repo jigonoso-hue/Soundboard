@@ -70,6 +70,7 @@ node web-test/smoke.js            # the web layer in Chromium at phone size
 node web-test/phone-tour.js       # every screen: screenshots + layout audit
 node web-test/live-e2e.js         # two phones in a Live Session, real native side
 node web-test/premium.js         # free limits, locked features, buying
+node web-test/library-share.js   # Export/Import Library between phones and with the Mac
 gradle :app:assembleDebug :app:lintDebug   # the app (needs the Android SDK)
 ```
 

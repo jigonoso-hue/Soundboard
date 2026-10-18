@@ -56,6 +56,31 @@ class NativeBridge(
                 }
                 "premiumRestore" -> platform.premiumRestore { status -> done(status, null) }
                 "liveHandoutSave" -> live.handoutSave(args.optString("id")) { ok -> done(ok, null) }
+                // Sharing the whole library: the page plans it (library-share.js), the zip is made here.
+                "libraryExport" -> work.execute {
+                    try {
+                        val out = files.resolve("/export/library.zip")
+                        val list = args.optJSONArray("files") ?: JSONArray()
+                        val entries = (0 until list.length()).map { i ->
+                            val f = list.getJSONObject(i)
+                            f.getString("name") to files.resolve(f.getString("file"))
+                        }
+                        LibraryZip.write(out, args.optString("manifest"), entries)
+                        val title = args.optString("title", "Dungeon Radio Library.zip").ifBlank { "Dungeon Radio Library.zip" }
+                        platform.saveImage(out, title, "application/zip") { ok ->
+                            val bytes = out.length()
+                            out.delete()
+                            done(JSONObject().put("saved", ok).put("bytes", bytes), null)
+                        }
+                    } catch (e: Exception) { done(null, e.message ?: "Couldn’t export the library") }
+                }
+                "libraryUnzip" -> work.execute {
+                    try {
+                        val zip = files.resolve(args.optString("file"))
+                        try { LibraryZip.extract(zip, files.resolve(IMPORT_DIR)) } finally { zip.delete() }
+                        done(IMPORT_DIR, null)
+                    } catch (e: Exception) { done(null, e.message ?: "Couldn’t open that file") }
+                }
                 "liveHostStart", "liveListen", "liveHandoutSend" -> work.execute {
                     try {
                         done(when (name) {
@@ -101,6 +126,7 @@ class NativeBridge(
         "liveRoll" -> { live.roll(args); null }
         "liveAvatar" -> live.setAvatar(args.optString("data"))
         "liveHandoutShow" -> { live.handoutShow(args.optString("id")); null }
+        "libraryCleanup" -> { files.resolve(IMPORT_DIR).deleteRecursively(); null }
         else -> throw IllegalArgumentException("No native call $name")
     }
 
@@ -119,6 +145,8 @@ class NativeBridge(
 
     companion object {
         const val LIBRARY = "/sounds"
+        /** Where a library file being imported is unpacked. */
+        const val IMPORT_DIR = "/import/library"
 
         private fun parse(json: String?): JSONObject {
             if (json.isNullOrBlank() || json == "null") return JSONObject()

@@ -1294,6 +1294,13 @@ body.live-buzz #app { animation: live-buzz 0.35s linear; }
 .font-rounded { font-family: ui-rounded, "SF Pro Rounded", sans-serif; }
 .font-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .options-subhead { font-weight: 600; margin: 10px 0 8px; }
+.share-library p { margin: 0 0 8px; line-height: 1.45; }
+.share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+.share-status:empty { display: none; }
+.share-status { margin-top: 8px !important; }
+.share-status.error-text { color: var(--danger); }
+html.android .share-actions button { min-height: 44px; flex: 1 1 160px; justify-content: center; }
 .accent-row .swatches { align-items: center; flex-wrap: wrap; }
 dialog input.accent-custom { width: 30px; flex: none; height: 30px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: none; cursor: pointer; }
 .link-btn { background: none; border: none; color: var(--accent); padding: 6px 0; }

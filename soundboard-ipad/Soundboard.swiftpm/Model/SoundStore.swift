@@ -134,6 +134,27 @@ final class SoundStore: ObservableObject {
         return try insert(id: id, fileName: fileName, name: name, source: origin)
     }
 
+    /// Adds a sound from a shared library (LibraryShare.swift), keeping its id
+    /// unless this library already uses it. The free version's limits were
+    /// checked for the whole import first.
+    @discardableResult
+    func importSound(_ sound: Sound, data: Data, ext: String) throws -> Sound {
+        var s = sound
+        if self.sound(s.id) != nil { s.id = UUID() }
+        s.fileName = "\(s.id.uuidString).\(ext.lowercased())"
+        let destination = folder.appendingPathComponent(s.fileName)
+        try data.write(to: destination, options: .atomic)
+        s.name = Self.clean(s.name).isEmpty ? "Untitled" : Self.clean(s.name)
+        s.volume = min(1, max(0, s.volume))
+        s.tags = Self.cleanTags(s.tags)
+        if s.duration == nil { s.duration = Self.measure(destination) }
+        if s.kind == nil, let duration = s.duration { s.kind = duration >= SoundKind.fullSoundSeconds ? .full : .clip }
+        for tag in s.tagList { _ = addTag(tag) }
+        sounds.append(s)
+        save()
+        return s
+    }
+
     func update(_ sound: Sound) {
         guard let index = sounds.firstIndex(where: { $0.id == sound.id }) else { return }
         var updated = sound

@@ -87,6 +87,23 @@ class BashStore {
     return structuredClone(bash);
   }
 
+  // Adds a bash from a shared library (library-share.js), keeping its id
+  // unless one here already has it. image: { data, ext } for a cover picture.
+  importBash(bash, image = null) {
+    const taken = this.bashes.some((b) => b.id === bash.id);
+    const next = normalize({ ...bash, id: taken ? crypto.randomUUID() : bash.id, createdAt: bash.createdAt || new Date().toISOString() });
+    if (!next) throw new Error('That bash is damaged.');
+    if (next.cover.type === 'image') next.cover = { type: 'icon', icon: ICONS[0], color: ICON_COLORS[0], iconColor: '#ffffff' };
+    if (image && COVER_TYPES.includes(String(image.ext).toLowerCase())) {
+      const file = `${next.id}-${Date.now()}.${String(image.ext).toLowerCase()}`;
+      fs.writeFileSync(path.join(this.coversDir, file), Buffer.from(image.data));
+      next.cover = { type: 'image', file };
+    }
+    this.bashes.push(next);
+    this._save();
+    return structuredClone(next);
+  }
+
   remove(id) {
     const bash = this.bashes.find((b) => b.id === id);
     if (!bash) return;

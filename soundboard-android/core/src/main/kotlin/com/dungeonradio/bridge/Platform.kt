@@ -18,12 +18,12 @@ interface Platform {
     fun notify(title: String, body: String)
     fun openExternal(url: String)
     /**
-     * The system file picker (kind "audio" or "image"). The chosen files are
+     * The system file picker (kind "audio", "image" or "library", a zip). The chosen files are
      * copied into the app's folder (`importDir`); done gets (copy, display name).
      */
     fun pickFiles(kind: String, multiple: Boolean, importDir: File, done: (List<Pair<File, String>>) -> Unit)
     fun micAccess(done: (Boolean) -> Unit)
-    /** Saves a picture where the user chooses (or to Pictures). */
+    /** Saves a file where the user chooses: a handout picture, or a library (application/zip). */
     fun saveImage(file: File, name: String, mime: String, done: (Boolean) -> Unit)
 
     /** Announces a session at the table on the Wi-Fi (NSD), or null if it can't. */

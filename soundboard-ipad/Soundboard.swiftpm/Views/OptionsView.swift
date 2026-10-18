@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
 
 /// Options: appearance, playback, library and online settings, and storage.
@@ -17,6 +18,12 @@ struct OptionsView: View {
     @State private var storageText = "Measuring…"
     @State private var confirmSignOut = false
     @State private var signedOut = false
+    // Sharing the whole library (LibraryShare.swift).
+    @State private var sharing = false
+    @State private var exported: LibraryShare.Exported?
+    @State private var importing = false
+    @State private var shareStatus: String?
+    @State private var shareFailed = false
 
     var body: some View {
         Form {
@@ -27,6 +34,7 @@ struct OptionsView: View {
                 library
                 online
                 storage
+                share
                 about
             }
             .themedRows(themes.theme)
@@ -184,6 +192,84 @@ struct OptionsView: View {
             row("Bashes", "\(bashes.bashes.count)")
             row("Scene kits", "\(kits.kits.count)")
             row("Space used", storageText)
+        }
+    }
+
+    // MARK: Sharing the library
+
+    /// Export packs every sound, bash, scene kit and tag into one zip to send
+    /// (AirDrop, Files, Messages…); Import adds one to this library. The same
+    /// file works in the Mac and Android apps.
+    private var share: some View {
+        Section {
+            Button {
+                exportLibrary()
+            } label: {
+                IconLabel("Export Library…", icon: "download")
+            }
+            .disabled(sharing)
+            if let exported {
+                ShareLink(item: exported.url) {
+                    Label("Send \(LibraryShare.fileName)", systemImage: "square.and.arrow.up")
+                }
+            }
+            Button {
+                importing = true
+            } label: {
+                IconLabel("Import Library…", icon: "folder")
+            }
+            .disabled(sharing)
+            if let shareStatus {
+                Text(shareStatus)
+                    .font(.footnote)
+                    .foregroundStyle(shareFailed ? themes.theme.danger : .secondary)
+            }
+        } header: {
+            Text("Share your library")
+        } footer: {
+            Text("Save all your sounds, bashes, scene kits and tags as one .zip file, then open it in Dungeon Radio on a Mac, iPhone, iPad or Android phone. Importing adds to the library there; nothing is replaced, and sounds it already has aren’t added twice.")
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.zip]) { result in
+            if case .success(let url) = result { importLibrary(url) }
+        }
+    }
+
+    private func exportLibrary() {
+        sharing = true
+        shareFailed = false
+        exported = nil
+        shareStatus = "Packing your library…"
+        Task {
+            do {
+                let result = try await LibraryShare.export(store: store, bashes: bashes, kits: kits)
+                func n(_ count: Int, _ one: String, _ many: String) -> String { "\(count) \(count == 1 ? one : many)" }
+                let size = ByteCountFormatter.string(fromByteCount: Int64(result.bytes), countStyle: .file)
+                shareStatus = "Ready (\(size)): \(n(result.sounds, "sound", "sounds")), \(n(result.bashes, "bash", "bashes")) and \(n(result.kits, "scene kit", "scene kits"))."
+                exported = result
+            } catch {
+                shareFailed = true
+                shareStatus = error.localizedDescription
+            }
+            sharing = false
+        }
+    }
+
+    private func importLibrary(_ url: URL) {
+        sharing = true
+        shareFailed = false
+        shareStatus = "Adding the library…"
+        Task {
+            // Lets "Adding the library…" show before the work starts.
+            await Task.yield()
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            do {
+                shareStatus = try LibraryShare.importLibrary(from: url, store: store, bashes: bashes, kits: kits).message
+            } catch {
+                shareFailed = true
+                shareStatus = error.localizedDescription
+            }
+            sharing = false
         }
     }
 

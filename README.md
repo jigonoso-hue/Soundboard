@@ -4,8 +4,8 @@ A soundboard for running tabletop RPG sessions.
 
 | App | Folder | Status |
 | --- | --- | --- |
-| **Mac** (Electron) | [`soundboard-mac/`](soundboard-mac/) | Sounds, YouTube clipping and full-audio saving, ambience layers (looping or now and then), tags, Bashes, Scene Kits with playlists, scene crossfades and sound effects, Live Sessions, themes, 3D dice |
-| **iPad / iPhone** (SwiftUI) | [`soundboard-ipad/`](soundboard-ipad/) | Sounds, YouTube clipping and full-audio saving, ambience layers (looping or now and then), tags, Bashes, Scene Kits with playlists, scene crossfades and sound effects, Live Sessions, themes, 3D dice |
+| **Mac** (Electron) | [`soundboard-mac/`](soundboard-mac/) | Sounds, YouTube clipping and full-audio saving, ambience layers (looping or now and then), tags, Bashes, Scene Kits with playlists, scene crossfades and sound effects, whole-library sharing between the apps, Live Sessions, themes, 3D dice |
+| **iPad / iPhone** (SwiftUI) | [`soundboard-ipad/`](soundboard-ipad/) | Sounds, YouTube clipping and full-audio saving, ambience layers (looping or now and then), tags, Bashes, Scene Kits with playlists, scene crossfades and sound effects, whole-library sharing between the apps, Live Sessions, themes, 3D dice |
 | **Android** (in progress) | [`soundboard-android/`](soundboard-android/) | The Live Session engine (tested with the Mac app and the relay); the app is next |
 | **Relay server** (Node) | [`live-relay/`](live-relay/) | Routes online Live Sessions between the broadcaster's app and the listeners' apps |
 

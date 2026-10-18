@@ -37,6 +37,11 @@ contextBridge.exposeInMainWorld('soundboard', {
     add: (name) => ipcRenderer.invoke('tags:add', name),
     remove: (name) => ipcRenderer.invoke('tags:remove', name),
   },
+  // Sharing the whole library as one zip file.
+  share: {
+    exportLibrary: () => ipcRenderer.invoke('share:export'),
+    importLibrary: () => ipcRenderer.invoke('share:import'),
+  },
   onSoundsChanged: (callback) => ipcRenderer.on('sounds:changed', () => callback()),
   bashes: {
     list: () => ipcRenderer.invoke('bashes:list'),

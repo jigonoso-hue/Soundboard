@@ -128,6 +128,16 @@ final class KitStore: ObservableObject {
         load()
     }
 
+    /// Adds a kit from a shared library (LibraryShare.swift), keeping its id unless one here already has it.
+    @discardableResult
+    func importKit(_ kit: SoundKit) -> SoundKit {
+        var next = Self.normalized(kit)
+        if self.kit(next.id) != nil { next.id = UUID() }
+        kits.append(next)
+        save()
+        return next
+    }
+
     func kit(_ id: UUID) -> SoundKit? {
         kits.first { $0.id == id }
     }
