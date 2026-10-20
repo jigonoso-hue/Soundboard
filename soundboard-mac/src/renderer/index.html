@@ -426,6 +426,13 @@
         <div id="record-after" class="record-after hidden">
           <button type="button" id="record-listen">▶ Listen</button>
           <label>Name <input id="record-name" maxlength="80"></label>
+          <div class="record-edit">
+            <div class="record-edit-head">Voice effect</div>
+            <div id="record-fx" class="record-fx" role="radiogroup" aria-label="Voice effect"></div>
+            <div class="record-edit-head">Add sounds <span class="muted small">played along with your recording</span></div>
+            <div id="record-layers" class="record-layers"></div>
+            <select id="record-add-layer" aria-label="Add a sound"></select>
+          </div>
         </div>
       </div>
       <div class="dialog-actions">
@@ -447,6 +454,7 @@
   <script src="audio-utils.js"></script>
   <script src="tags.js"></script>
   <script src="fx.js"></script>
+  <script src="voice-edit.js"></script>
   <script src="app.js"></script>
   <script src="premium.js"></script>
   <script src="ambience.js"></script>

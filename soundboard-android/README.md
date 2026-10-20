@@ -72,6 +72,7 @@ node web-test/live-e2e.js         # two phones in a Live Session, real native si
 node web-test/premium.js         # free limits, locked features, buying
 node web-test/library-share.js   # Export/Import Library between phones and with the Mac
 node web-test/library-send-e2e.js # Send with a Code: phone to phone, phone to Mac, Mac to phone, via the relay
+node web-test/recorder-edit.js    # Record a Sound's edit: every voice effect, sounds played along
 gradle :app:assembleDebug :app:lintDebug   # the app (needs the Android SDK)
 ```
 

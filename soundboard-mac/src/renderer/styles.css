@@ -1451,6 +1451,23 @@ dialog label.picker-row input { width: auto; }
 .record-body p { margin: 0; }
 .record-after { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .record-after label { width: 100%; margin: 0; }
+#record-dialog { max-height: 94vh; overflow-y: auto; }
+.record-edit { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.record-edit-head { font-weight: 600; font-size: 13px; margin-top: 4px; }
+.record-edit-head .muted { font-weight: 400; margin-left: 4px; }
+.record-fx { display: flex; flex-wrap: wrap; gap: 6px; }
+.record-fx button { border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.record-fx button[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.record-layers { display: flex; flex-direction: column; gap: 6px; }
+.record-layer { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+.record-layer-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record-layer-remove { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; }
+.record-layer-controls { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.record-layer-controls label { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 6px; width: auto !important; margin: 0 !important; }
+.record-layer-controls input[type=range] { width: 120px; }
+.record-layer-controls input[type=number] { width: 64px; }
+html.android .record-fx button { min-height: 40px; }
+html.android .record-layer-remove { width: 44px; height: 44px; }
 
 /* ---------- Dice (dice.js) ---------- */
 .dice-layer { position: fixed; inset: 0; z-index: 40; overflow: hidden; color: #fff; }

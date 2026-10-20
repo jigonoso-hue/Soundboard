@@ -38,6 +38,13 @@ The app icon comes from `build/icon.png` (1024×1024).
 
 Click **+ Add → Record…**, then the red button, and record with your microphone (up to 10 minutes). Click it again to stop. **Listen** plays it back; name it and click **Save** to add it to your library. macOS asks for microphone access the first time.
 
+Before saving you can edit it:
+
+- **Voice effect:** **Radio**, **Static** (hiss and crackle on a bad line), **Distorted**, **Robot** (ring-modulated and metallic), **Ghost** (airy and wavering in a long reverb), **Demon** (slower and deeper, growled), **Distant room**, **Empty echo** or **Underwater**.
+- **Add sounds:** up to four sounds from your library played along with the recording, each with its own volume and the second it starts (thunder under a villain's line, say).
+
+**Listen** plays the edited version, and **Save** saves it: the edit is mixed into the saved WAV, so it sounds the same everywhere, Live Session listeners included. Record again and the same edit applies to the new take.
+
 ## Making a sound from YouTube
 
 1. Click **+ Add → YouTube** to open the browser panel.
@@ -318,6 +325,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/tags.js` | Tag colours, chips, picker and the new-sound tagging dialog |
 | `src/renderer/ambience.js` | Ambience mixer |
 | `src/renderer/handouts.js` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send dialog |
+| `src/renderer/voice-edit.js` | Editing a recording before it's saved: a voice effect and sounds played along, rendered offline |
 | `src/renderer/fx.js` | Sound effects for scene kits (Distant room, Empty echo, Old radio, Underwater), with Web Audio |
 | `src/library-share.js`, `src/zip.js` | Sharing the whole library as one zip (export, import), the same file as the other apps |
 | `src/library-send.js` | Sending a library online with a code, through the relay (also run by Android) |

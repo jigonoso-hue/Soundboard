@@ -1,8 +1,9 @@
 import AVFoundation
 import SwiftUI
 
-/// Records a sound with the microphone: record, listen back, name it and save
-/// it to the library. Matches the Mac app's Record window.
+/// Records a sound with the microphone: record, listen back, edit it (a voice
+/// effect, library sounds played along), name it and save it to the library.
+/// Matches the Mac app's Record window.
 @MainActor
 final class SoundRecorder: ObservableObject {
     enum Phase: Equatable { case idle, recording, recorded }
@@ -16,8 +17,15 @@ final class SoundRecorder: ObservableObject {
     @Published private(set) var levels: [Double] = Array(repeating: 0, count: 40)
     @Published private(set) var isPreviewing = false
     @Published var error: String?
+    /// The edit (VoiceEdit.swift): a voice effect and sounds played along.
+    @Published var effect: VoiceEffect? { didSet { stopPreview() } }
+    @Published var layers: [VoiceEdit.Layer] = [] { didSet { stopPreview() } }
+    @Published private(set) var rendering = false
 
     private var recorder: AVAudioRecorder?
+    /// The current edit, rendered: what it was made from, and the file.
+    private var edited: (key: String, url: URL)?
+    private var take = UUID()
     private var preview: AVAudioPlayer?
     private var ticker: Timer?
     private let file = FileManager.default.temporaryDirectory.appendingPathComponent("recording-\(UUID().uuidString).m4a")
@@ -57,6 +65,8 @@ final class SoundRecorder: ObservableObject {
             recorder.isMeteringEnabled = true
             guard recorder.record(forDuration: Self.maxSeconds) else { throw CocoaError(.fileWriteUnknown) }
             self.recorder = recorder
+            // A new take: the edit (kept) is applied to it afresh.
+            take = UUID()
             phase = .recording
             elapsed = 0
             levels = Array(repeating: 0, count: levels.count)
@@ -97,12 +107,49 @@ final class SoundRecorder: ObservableObject {
         phase = FileManager.default.fileExists(atPath: file.path) && elapsed > 0.2 ? .recorded : .idle
     }
 
+    var hasEdits: Bool { effect != nil || !layers.isEmpty }
+
+    private var editKey: String {
+        "\(take)|\(effect?.rawValue ?? "")|" + layers.map { "\($0.soundId):\($0.volume):\($0.start)" }.joined(separator: ",")
+    }
+
+    /// The file to listen to and save: the recording, or the recording edited.
+    func currentFile() async throws -> URL {
+        guard hasEdits else { return file }
+        let key = editKey
+        if let edited, edited.key == key { return edited.url }
+        rendering = true
+        defer { rendering = false }
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("edited-\(UUID().uuidString).wav")
+        let voice = file
+        let effect = self.effect
+        let layers = self.layers
+        try await Task.detached(priority: .userInitiated) {
+            try VoiceEdit.render(voice: voice, effect: effect, layers: layers, to: out)
+        }.value
+        if let old = edited?.url { try? FileManager.default.removeItem(at: old) }
+        edited = (key, out)
+        return out
+    }
+
     func togglePreview() {
         if isPreviewing {
             stopPreview()
             return
         }
-        guard let player = try? AVAudioPlayer(contentsOf: file) else { return }
+        guard !rendering else { return }
+        Task {
+            do {
+                let url = try await currentFile()
+                play(url)
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func play(_ url: URL) {
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return }
         preview = player
         player.play()
         isPreviewing = true
@@ -123,6 +170,10 @@ final class SoundRecorder: ObservableObject {
         if phase == .recording { stop() }
         stopPreview()
         try? FileManager.default.removeItem(at: file)
+        if let url = edited?.url { try? FileManager.default.removeItem(at: url) }
+        edited = nil
+        effect = nil
+        layers = []
         phase = .idle
         elapsed = 0
     }
@@ -136,6 +187,7 @@ struct RecorderView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 22) {
                 Spacer(minLength: 10)
                 Text(timeText(recorder.elapsed))
@@ -163,6 +215,7 @@ struct RecorderView: View {
                 Spacer(minLength: 10)
             }
             .padding()
+            }
             .navigationTitle("Record a Sound")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -174,7 +227,7 @@ struct RecorderView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .disabled(recorder.phase != .recorded)
+                        .disabled(recorder.phase != .recorded || recorder.rendering)
                 }
             }
         }
@@ -207,31 +260,112 @@ struct RecorderView: View {
             Button {
                 recorder.togglePreview()
             } label: {
-                Label(recorder.isPreviewing ? "Stop" : "Listen", systemImage: recorder.isPreviewing ? "stop.fill" : "play.fill")
-                    .frame(minWidth: 120)
+                if recorder.rendering {
+                    Label("Applying…", systemImage: "hourglass").frame(minWidth: 120)
+                } else {
+                    Label(recorder.isPreviewing ? "Stop" : "Listen", systemImage: recorder.isPreviewing ? "stop.fill" : "play.fill")
+                        .frame(minWidth: 120)
+                }
             }
             .buttonStyle(.bordered)
+            .disabled(recorder.rendering)
             TextField("Sound name", text: $name)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 360)
             Text("Tap the red button to record again.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            editControls
+                .frame(maxWidth: 480)
         }
+    }
+
+    // MARK: Editing
+
+    /// A voice effect and library sounds played along (VoiceEdit.swift),
+    /// the same as the Mac's Record window.
+    private var editControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Voice effect").font(.subheadline.weight(.semibold))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
+                effectChip(nil, "None")
+                ForEach(VoiceEffect.allCases) { effectChip($0, $0.name) }
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("Add sounds").font(.subheadline.weight(.semibold))
+                Text("played along with your recording").font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach($recorder.layers) { $layer in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(layer.name).font(.callout.weight(.semibold)).lineLimit(1)
+                        Spacer()
+                        Button {
+                            recorder.layers.removeAll { $0.id == layer.id }
+                        } label: {
+                            Image(systemName: "xmark").frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Remove \(layer.name)")
+                    }
+                    HStack {
+                        Text("Volume").font(.caption).foregroundStyle(.secondary)
+                        Slider(value: $layer.volume, in: 0...1)
+                    }
+                    Stepper(value: $layer.start, in: 0...600, step: 0.5) {
+                        Text("Starts at \(layer.start, specifier: "%.1f") s").font(.caption)
+                    }
+                }
+                .padding(10)
+                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+            }
+            Menu {
+                ForEach(store.sounds) { sound in
+                    Button(sound.name) {
+                        recorder.layers.append(VoiceEdit.Layer(soundId: sound.id, name: sound.name, url: store.url(for: sound)))
+                    }
+                }
+            } label: {
+                Label(recorder.layers.count >= VoiceEdit.maxLayers ? "Up to \(VoiceEdit.maxLayers) sounds" : "Add a Sound…", systemImage: "plus")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .disabled(recorder.layers.count >= VoiceEdit.maxLayers || store.sounds.isEmpty)
+        }
+    }
+
+    private func effectChip(_ effect: VoiceEffect?, _ title: String) -> some View {
+        let selected = recorder.effect == effect
+        return Button {
+            recorder.effect = effect
+        } label: {
+            Text(title)
+                .font(.callout)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(selected ? Color.accentColor : Color.secondary.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(effect.map { "\($0.name): \($0.hint)" } ?? "No effect")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func save() {
         recorder.stopPreview()
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        do {
-            _ = try store.addFile(at: recorder.fileURL, name: clean.isEmpty ? "Recording" : clean)
-            recorder.discard()
-            dismiss()
-        } catch SoundError.premiumLimit(let limit) {
-            // The Premium screen opens; the recording stays here.
-            recorder.error = limit.message
-        } catch {
-            recorder.error = "Couldn't save the recording."
+        Task {
+            do {
+                let url = try await recorder.currentFile()
+                _ = try store.addFile(at: url, name: clean.isEmpty ? "Recording" : clean)
+                recorder.discard()
+                dismiss()
+            } catch SoundError.premiumLimit(let limit) {
+                // The Premium screen opens; the recording stays here.
+                recorder.error = limit.message
+            } catch {
+                recorder.error = "Couldn't save the recording."
+            }
         }
     }
 

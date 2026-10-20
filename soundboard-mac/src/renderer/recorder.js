@@ -1,7 +1,8 @@
-/* global api, $, toast, AudioUtils, afterAdding, sounds */
-// Record a Sound: record with the microphone, listen back, name it and save it
-// to the library as a WAV file (which every device in a Live Session can
-// play). Matches the iPad app's RecorderView.
+/* global api, $, toast, AudioUtils, afterAdding, sounds, Fx, VoiceEdit, soundUrl */
+// Record a Sound: record with the microphone, listen back, edit it (a voice
+// effect, other sounds played along), name it and save it to the library as
+// a WAV file (which every device in a Live Session can play). Matches the
+// iPad app's RecorderView.
 const Recorder = (() => {
   const MAX_SECONDS = 600; // recordings stop on their own after ten minutes
   const BARS = 40;
@@ -19,6 +20,13 @@ const Recorder = (() => {
   let wav = null; // ArrayBuffer of the finished recording
   let previewUrl = null;
   let preview = null;
+  // The edit: a voice effect and sounds played along.
+  let voice = null; // the recording (mono samples)
+  let voiceRate = 44100;
+  let effect = null;
+  let layers = []; // { soundId, name, volume, start, buffer }
+  let edited = null; // { key, wav, url } for the current edit
+  let rendering = false;
 
   const dialog = $('#record-dialog');
   const timeText = (seconds) => {
@@ -36,8 +44,114 @@ const Recorder = (() => {
       : phase === 'recorded' ? 'Click the red button to record again.' : 'Click to record. Up to 10 minutes.';
     $('#record-after').classList.toggle('hidden', phase !== 'recorded');
     $('#record-save').disabled = phase !== 'recorded';
-    $('#record-listen').textContent = preview && !preview.paused ? '■ Stop' : '▶ Listen';
+    $('#record-listen').textContent = rendering ? 'Applying…' : (preview && !preview.paused ? '■ Stop' : '▶ Listen');
+    $('#record-listen').disabled = rendering;
+    $('#record-save').disabled = phase !== 'recorded' || rendering;
+    if (phase === 'recorded') renderEdit();
     drawMeter();
+  }
+
+  // ---------- Editing ----------
+
+  const editKey = () => JSON.stringify({ effect, layers: layers.map((l) => [l.soundId, l.volume, l.start]) });
+  const hasEdits = () => !!effect || layers.length > 0;
+
+  function renderEdit() {
+    const fx = $('#record-fx');
+    if (!fx.childElementCount) {
+      for (const option of [{ id: null, name: 'None' }, ...Fx.VOICE]) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('role', 'radio');
+        b.dataset.fx = option.id || '';
+        b.textContent = option.name;
+        if (option.hint) b.title = option.hint;
+        b.addEventListener('click', () => { effect = option.id; stopPreview(); render(); });
+        fx.appendChild(b);
+      }
+    }
+    for (const b of fx.children) b.setAttribute('aria-checked', String((b.dataset.fx || null) === effect));
+
+    const list = $('#record-layers');
+    list.textContent = '';
+    layers.forEach((layer, index) => {
+      const row = document.createElement('div');
+      row.className = 'record-layer';
+      const name = document.createElement('span');
+      name.className = 'record-layer-name';
+      name.textContent = layer.name;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'record-layer-remove';
+      remove.textContent = '✕';
+      remove.setAttribute('aria-label', `Remove ${layer.name}`);
+      remove.addEventListener('click', () => { layers.splice(index, 1); stopPreview(); render(); });
+      const controls = document.createElement('div');
+      controls.className = 'record-layer-controls';
+      const volume = document.createElement('input');
+      volume.type = 'range';
+      volume.min = '0'; volume.max = '1'; volume.step = '0.05';
+      volume.value = String(layer.volume);
+      volume.addEventListener('input', () => { layer.volume = Number(volume.value); stopPreview(); });
+      const start = document.createElement('input');
+      start.type = 'number';
+      start.min = '0'; start.max = '600'; start.step = '0.1';
+      start.value = String(layer.start);
+      start.addEventListener('change', () => { layer.start = Math.max(0, Math.min(600, Number(start.value) || 0)); start.value = String(layer.start); stopPreview(); });
+      const vLabel = document.createElement('label');
+      vLabel.append('Volume', volume);
+      const sLabel = document.createElement('label');
+      sLabel.append('Starts at', start, 's');
+      controls.append(vLabel, sLabel);
+      row.append(name, remove, controls);
+      list.appendChild(row);
+    });
+
+    const add = $('#record-add-layer');
+    add.textContent = '';
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = layers.length >= VoiceEdit.MAX_LAYERS ? `Up to ${VoiceEdit.MAX_LAYERS} sounds` : '+ Add a sound…';
+    add.appendChild(first);
+    for (const sound of sounds) {
+      const o = document.createElement('option');
+      o.value = sound.id;
+      o.textContent = sound.name;
+      add.appendChild(o);
+    }
+    add.disabled = layers.length >= VoiceEdit.MAX_LAYERS || !sounds.length;
+  }
+
+  async function addLayer(id) {
+    const sound = sounds.find((s) => s.id === id);
+    if (!sound || layers.length >= VoiceEdit.MAX_LAYERS) return;
+    try {
+      const buffer = await VoiceEdit.decode(soundUrl(sound), voiceRate);
+      layers.push({ soundId: sound.id, name: sound.name, volume: 0.6, start: 0, buffer });
+    } catch {
+      toast(`Couldn’t read “${sound.name}”.`, true);
+    }
+    stopPreview();
+    render();
+  }
+
+  // The file to listen to and save: the recording, or the recording edited.
+  async function currentWav() {
+    if (!hasEdits()) return { wav, url: previewUrl };
+    const key = editKey();
+    if (edited && edited.key === key) return edited;
+    rendering = true;
+    render();
+    try {
+      const out = await VoiceEdit.render({ voice, sampleRate: voiceRate, effect, layers });
+      const data = AudioUtils.encodeWav([out], voiceRate);
+      if (edited) URL.revokeObjectURL(edited.url);
+      edited = { key, wav: data, url: URL.createObjectURL(new Blob([data], { type: 'audio/wav' })) };
+      return edited;
+    } finally {
+      rendering = false;
+      render();
+    }
   }
 
   function drawMeter() {
@@ -135,6 +249,11 @@ const Recorder = (() => {
         for (let i = 0; i < data.length; i++) mono[i] += data[i] / audio.numberOfChannels;
       }
       wav = AudioUtils.encodeWav([mono], audio.sampleRate);
+      voice = mono;
+      voiceRate = audio.sampleRate;
+      // A new take: the edit (kept) is applied to it afresh.
+      if (edited) URL.revokeObjectURL(edited.url);
+      edited = null;
       elapsed = audio.duration;
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       previewUrl = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
@@ -150,10 +269,12 @@ const Recorder = (() => {
     if (preview) { preview.pause(); preview = null; }
   }
 
-  function togglePreview() {
+  async function togglePreview() {
     if (preview && !preview.paused) { stopPreview(); render(); return; }
-    if (!previewUrl) return;
-    preview = new Audio(previewUrl);
+    if (!previewUrl || rendering) return;
+    let current;
+    try { current = await currentWav(); } catch { toast('Couldn’t apply the edit.', true); return; }
+    preview = new Audio(current.url);
     preview.addEventListener('ended', () => { preview = null; render(); });
     preview.play().catch(() => {});
     render();
@@ -166,17 +287,23 @@ const Recorder = (() => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = null;
     wav = null;
+    voice = null;
+    effect = null;
+    layers = [];
+    if (edited) URL.revokeObjectURL(edited.url);
+    edited = null;
     phase = 'idle';
     elapsed = 0;
     levels = new Array(BARS).fill(0);
   }
 
   async function save() {
-    if (phase !== 'recorded' || !wav) return;
+    if (phase !== 'recorded' || !wav || rendering) return;
     stopPreview();
     const name = $('#record-name').value.trim() || 'Recording';
     try {
-      const added = await api.add({ name, data: wav, ext: 'wav' });
+      const { wav: data } = await currentWav();
+      const added = await api.add({ name, data, ext: 'wav' });
       reset();
       dialog.close();
       await afterAdding([added]);
@@ -196,6 +323,7 @@ const Recorder = (() => {
   $('#record-btn').addEventListener('click', open);
   $('#record-toggle').addEventListener('click', () => (phase === 'recording' ? stop() : start()));
   $('#record-listen').addEventListener('click', togglePreview);
+  $('#record-add-layer').addEventListener('change', (e) => { const id = e.target.value; e.target.value = ''; if (id) addLayer(id); });
   $('#record-save').addEventListener('click', (e) => { e.preventDefault(); save(); });
   $('#record-cancel').addEventListener('click', () => { reset(); dialog.close(); });
   dialog.addEventListener('cancel', reset);
