@@ -196,6 +196,8 @@ class LiveBridge(
                     by = e.optString("by").ifEmpty { null },
                     fadeIn = e.optDouble("fadeIn", 0.0).takeIf { !it.isNaN() } ?: 0.0,
                     fx = e.optString("fx").ifEmpty { null },
+                    fxMix = (e.opt("fxMix") as? Number)?.toDouble(),
+                    rate = (e.opt("rate") as? Number)?.toDouble(),
                 ))
             }
             "playerSounds" -> host.setPlayerSounds(e.optString("mode"))
@@ -306,6 +308,8 @@ class LiveBridge(
             .put("by", c.by ?: JSONObject.NULL)
             .apply { if (c.fadeIn > 0) put("fadeIn", c.fadeIn) }
             .apply { c.fx?.let { put("fx", it) } }
+            .apply { c.fxMix?.let { put("fxMix", it) } }
+            .apply { c.rate?.let { put("rate", it) } }
         is LiveListener.Command.Stop -> JSONObject().put("t", "stop").put("group", c.group).apply { if (c.fade > 0) put("fade", c.fade) }
         is LiveListener.Command.Volume -> JSONObject().put("t", "volume").put("group", c.group).put("volume", c.volume)
         is LiveListener.Command.StopAll -> JSONObject().put("t", "stopAll").apply { if (c.ambienceToo) put("ambienceToo", true) }

@@ -127,10 +127,16 @@ enum LibraryShare {
             bashList.append([
                 "id": lower(b.id), "name": b.name, "cover": cover, "createdAt": iso.string(from: b.createdAt),
                 "clips": b.clips.filter { soundIds.contains($0.soundId) }.map { c -> [String: Any] in
-                    [
+                    var clip: [String: Any] = [
                         "id": lower(c.id), "soundId": lower(c.soundId), "offset": c.offset, "volume": c.volume, "lane": c.lane,
                         "repeat": c.repetition.map { ["gap": $0.gap, "times": $0.times] as Any } ?? NSNull(),
                     ]
+                    if let speed = c.speed { clip["speed"] = speed }
+                    if let effect = c.effect {
+                        clip["fx"] = effect.rawValue
+                        clip["fxAmount"] = c.fxAmount ?? 1
+                    }
+                    return clip
                 },
             ])
         }
@@ -287,6 +293,11 @@ enum LibraryShare {
                                     volume: number(c["volume"], 0, 1) ?? 1, lane: Int(number(c["lane"], 0, 999) ?? 0))
                 if let r = c["repeat"] as? [String: Any] {
                     clip.repetition = ClipRepeat(gap: number(r["gap"], 0, 3600) ?? 0, times: Int(number(r["times"], 0, 999) ?? 0))
+                }
+                clip.speed = number(c["speed"], BashClip.minSpeed, BashClip.maxSpeed)
+                if let fx = c["fx"] as? String, VoiceEffect(rawValue: fx) != nil {
+                    clip.fx = fx
+                    clip.fxAmount = number(c["fxAmount"], 0, 1) ?? 1
                 }
                 return clip
             }

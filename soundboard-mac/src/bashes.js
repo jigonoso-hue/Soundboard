@@ -11,6 +11,11 @@ const ICONS = ['crossed-swords', 'dragon', 'mug', 'flame', 'pine', 'castle', 'sk
 const ICON_COLORS = ['#7c6cff', '#ff5d73', '#ffb347', '#6ee7b7', '#5ec8ff', '#d58bff', '#8a6a4f', '#3f4a5a'];
 const COVER_TYPES = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
 const MAX_OFFSET = 60 * 60;
+// A clip's effects (renderer/fx.js Fx.VOICE; Audio/VoiceEdit.swift on iPhone/iPad).
+const CLIP_EFFECTS = ['radio', 'static', 'distorted', 'robot', 'ghost', 'demon', 'distant', 'echo', 'underwater', 'cave', 'megaphone', 'warble', 'fairy'];
+// How far a clip can be squashed (faster, higher) or pulled (slower, deeper).
+const MIN_SPEED = 0.25;
+const MAX_SPEED = 4;
 
 class BashStore {
   constructor(dir) {
@@ -167,6 +172,10 @@ function normalize(bash) {
       volume: clamp(Number(c.volume ?? 1), 0, 1),
       lane: Math.max(0, Math.floor(Number(c.lane) || 0)),
       repeat: normalizeRepeat(c.repeat),
+      // Squashed or pulled on the timeline: faster and higher, or slower and deeper.
+      ...(Number(c.speed) > 0 && Math.abs(Number(c.speed) - 1) > 0.001 ? { speed: Math.round(clamp(Number(c.speed), MIN_SPEED, MAX_SPEED) * 100) / 100 } : {}),
+      // An effect, and how much of it (0…1).
+      ...(CLIP_EFFECTS.includes(c.fx) ? { fx: c.fx, fxAmount: Math.round(clamp(Number(c.fxAmount ?? 1), 0, 1) * 100) / 100 } : {}),
     }));
   return {
     id: bash.id,
@@ -198,4 +207,4 @@ function pick(obj, keys) {
   return out;
 }
 
-module.exports = { BashStore, ICONS, ICON_COLORS, COVER_TYPES };
+module.exports = { BashStore, ICONS, ICON_COLORS, COVER_TYPES, CLIP_EFFECTS, MIN_SPEED, MAX_SPEED };

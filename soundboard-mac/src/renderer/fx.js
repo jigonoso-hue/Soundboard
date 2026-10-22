@@ -1,4 +1,4 @@
-/* global window, AudioContext */
+/* global window, AudioContext, OfflineAudioContext */
 // Sound effects a scene kit can put on the sounds it plays: Distant room,
 // Empty echo, Old radio and Underwater. An effected sound still plays through
 // its own <audio> element (so its volume, fades, repeats and progress work as
@@ -25,7 +25,13 @@
     { id: 'distant', name: 'Distant room', hint: 'Muffled, through a wall' },
     { id: 'echo', name: 'Empty echo', hint: 'A big empty hall' },
     { id: 'underwater', name: 'Underwater', hint: 'Deep and murky' },
+    { id: 'cave', name: 'Cave', hint: 'Dark, dripping echoes' },
+    { id: 'megaphone', name: 'Megaphone', hint: 'Loud, thin and crunchy' },
+    { id: 'warble', name: 'Warble', hint: 'Wobbling pitch and volume' },
+    { id: 'fairy', name: 'Fairy', hint: 'Faster, higher and sparkling' },
   ];
+  // Every effect, for bash clips and Live Session plays (kit effects are VOICE ones too).
+  const allById = new Map(VOICE.map((e) => [e.id, e]));
 
   let ctx = null;
   let sinkId = '';
@@ -200,6 +206,52 @@
         reverb(thin, output, 4, 1.6, 1.1);
         return { input, output, tail: 4, sources: [lfo] };
       }
+      case 'cave': {
+        // A deep cave: dark, long, with dripping echoes.
+        const [, dark] = series(input, filter('highpass', 70), filter('lowpass', 2800));
+        series(dark, level(0.6), output);
+        const drip = ctx.createDelay(1);
+        drip.delayTime.value = 0.27;
+        const feedback = level(0.35);
+        series(dark, drip, filter('lowpass', 1800), feedback, drip);
+        series(feedback, level(0.8), output);
+        reverb(dark, output, 3.5, 1.4, 0.9);
+        return { input, output, tail: 4 };
+      }
+      case 'megaphone': {
+        // Loud and thin: a narrow, shouty band, driven hard.
+        series(input, filter('highpass', 700, 1), filter('lowpass', 2600, 1), filter('peaking', 1700, 1.2, 10), shaper(8), level(0.35), output);
+        return { input, output, tail: 0.1 };
+      }
+      case 'warble': {
+        // Wobbling: the pitch bends (a moving delay) and the volume pulses.
+        const bend = ctx.createDelay(0.1);
+        bend.delayTime.value = 0.008;
+        const bendLfo = oscillator(5.5);
+        const bendDepth = level(0.004);
+        series(bendLfo, bendDepth);
+        bendDepth.connect(bend.delayTime);
+        const pulse = ctx.createGain();
+        pulse.gain.value = 0.65;
+        const pulseLfo = oscillator(7);
+        const pulseDepth = level(0.35);
+        series(pulseLfo, pulseDepth);
+        pulseDepth.connect(pulse.gain);
+        series(input, bend, pulse, output);
+        return { input, output, tail: 0.1, sources: [bendLfo, pulseLfo] };
+      }
+      case 'fairy': {
+        // Played faster (so higher), brightened, with a sparkling echo.
+        const [, bright] = series(input, filter('highpass', 200), filter('highshelf', 3000, 0.7, 6));
+        series(bright, level(0.8), output);
+        const sparkle = ctx.createDelay(1);
+        sparkle.delayTime.value = 0.09;
+        const feedback = level(0.45);
+        series(bright, sparkle, filter('highpass', 1200), feedback, sparkle);
+        series(feedback, level(0.6), output);
+        reverb(bright, output, 2.5, 2, 0.6);
+        return { input, output, tail: 3, rate: 1.35 };
+      }
       case 'demon': {
         // Played slower (so deeper), growled and darkened, in a stone room.
         const [, growl] = series(input, filter('lowpass', 2400), shaper(4), level(0.7));
@@ -216,21 +268,39 @@
   // Call before the element's src is set: Web Audio only hears a cross-origin
   // sound that was loaded with CORS.
   function prepare(audio, id) {
-    if (!byId.has(id)) return false;
+    if (!allById.has(id)) return false;
     audio.crossOrigin = 'anonymous';
     return true;
   }
 
-  // Routes an <audio> element through an effect.
-  function attach(audio, id) {
-    if (!byId.has(id) || audio.fx) return;
+  // Routes an <audio> element through an effect. amount (0…1) is how much
+  // of it: the rest of the sound passes through as it is. An effect that
+  // changes speed (Demon, Fairy) speeds the element up or down with it.
+  function attach(audio, id, amount = 1) {
+    if (!allById.has(id) || audio.fx) return;
     try {
       context();
       const source = ctx.createMediaElementSource(audio);
-      const chain = build(id);
+      const chain = { sources: [], rate: 1, ...build(id) };
+      const mix = Math.max(0, Math.min(1, Number(amount)));
+      const wet = level(Number.isFinite(mix) ? mix : 1);
+      const dry = level(Number.isFinite(mix) ? 1 - mix : 0);
       source.connect(chain.input);
-      chain.output.connect(ctx.destination);
-      audio.fx = { id, source, chain };
+      chain.output.connect(wet);
+      wet.connect(ctx.destination);
+      source.connect(dry);
+      dry.connect(ctx.destination);
+      if (chain.rate !== 1) {
+        audio.preservesPitch = false;
+        audio.playbackRate *= chain.rate;
+      }
+      // Oscillators and hiss run while the sound does.
+      if (chain.sources.length) {
+        audio.addEventListener('playing', () => {
+          for (const s of chain.sources) { try { s.start(); } catch { /* started */ } }
+        }, { once: true });
+      }
+      audio.fx = { id, source, chain, wet, dry };
     } catch {
       // Without Web Audio the sound still plays, just without the effect.
     }
@@ -242,7 +312,8 @@
     if (!fx) return;
     audio.fx = null;
     setTimeout(() => {
-      try { fx.source.disconnect(); fx.chain.output.disconnect(); } catch { /* already gone */ }
+      try { fx.source.disconnect(); fx.chain.output.disconnect(); fx.dry.disconnect(); } catch { /* already gone */ }
+      for (const s of fx.chain.sources) { try { s.stop(); } catch { /* never started */ } }
     }, (fx.chain.tail + 0.5) * 1000);
   }
 
@@ -252,6 +323,18 @@
   }
 
   const valid = (id) => (byId.has(id) ? id : null);
+  // Any effect (bash clips, Live Session plays), or null.
+  const validAny = (id) => (allById.has(id) ? id : null);
+  // How long an effect rings on after its sound ends, and how it changes speed.
+  const infos = new Map();
+  const info = (id) => {
+    if (!allById.has(id)) return { tail: 0, rate: 1 };
+    if (!infos.has(id)) {
+      const probe = chain(new OfflineAudioContext(1, 1, 44100), id);
+      infos.set(id, { tail: probe.tail, rate: probe.rate });
+    }
+    return infos.get(id);
+  };
 
   // An effect's nodes on another context (an OfflineAudioContext rendering a recording).
   function chain(context, id) {
@@ -260,5 +343,5 @@
     try { return { sources: [], rate: 1, ...build(id) }; } finally { ctx = saved; }
   }
 
-  window.Fx = { EFFECTS, VOICE, chain, get: (id) => byId.get(id) || null, valid, prepare, attach, release, setOutputDevice };
+  window.Fx = { EFFECTS, VOICE, chain, validAny, info, get: (id) => byId.get(id) || null, valid, prepare, attach, release, setOutputDevice };
 })();

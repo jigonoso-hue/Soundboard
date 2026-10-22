@@ -25,6 +25,7 @@ Where the code lives, side by side:
 | Listener stage | `src/renderer/live.js` (Stage), `styles.css` | `Views/ListenerStageView.swift` |
 | Listener playback | `src/renderer/live.js` (Mirror) | `Live/MirrorPlayer.swift` |
 | Recording, and its edit (voice effects, sounds played along) | `src/renderer/recorder.js`, `voice-edit.js`, `fx.js` (Fx.VOICE) | `Views/RecorderView.swift`, `Audio/VoiceEdit.swift` (keep the effects in step) |
+| Bash clips: speed (squash and pull), effect and intensity | `src/bashes.js`, `src/renderer/bash-common.js` (player), `bash-editor.js` | `Model/Bash.swift`, `Audio/BashPlayer.swift`, `Audio/SoundEffects.swift` (FxPlayer), `Views/BashEditorView.swift` |
 | Dice tray | `src/renderer/dice.js` (three.js + cannon-es) | `Views/DiceView.swift` (SceneKit) |
 | Dice shapes and rules | `src/renderer/dice-geometry.js` | `Model/DiceGeometry.swift` (keep in step) |
 | Roll requests, initiative, who wins | `src/renderer/table.js` | `Views/TableView.swift` |

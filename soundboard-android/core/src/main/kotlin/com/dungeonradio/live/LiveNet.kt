@@ -29,7 +29,19 @@ object LiveNet {
     val EXT_RE = Regex("^[a-z0-9]{1,5}$")
     val BUILTIN_RE = Regex("^[a-z0-9-]+\\.wav$")
     /** Sound effects a play can carry (the web renderer's fx.js, SoundEffects.swift). */
-    val FX_IDS = listOf("distant", "echo", "radio", "underwater")
+    val FX_IDS = listOf("distant", "echo", "radio", "underwater", "static", "distorted", "robot", "ghost", "demon", "cave", "megaphone", "warble", "fairy")
+
+    /** A squashed or pulled bash clip's speed, or null for normal speed. */
+    fun cleanRate(value: Any?): Double? {
+        val n = (value as? Number)?.toDouble() ?: return null
+        return if (n.isFinite() && n > 0 && kotlin.math.abs(n - 1) > 0.001) n.coerceIn(0.18, 5.4) else null
+    }
+
+    /** How much of an effect (0…1), or null for all of it. */
+    fun cleanMix(value: Any?): Double? {
+        val n = (value as? Number)?.toDouble() ?: return null
+        return if (n.isFinite() && n >= 0 && n < 1) n else null
+    }
     private val BASE64_RE = Regex("^[A-Za-z0-9+/]+={0,2}$")
 
     fun now(): Long = System.currentTimeMillis()

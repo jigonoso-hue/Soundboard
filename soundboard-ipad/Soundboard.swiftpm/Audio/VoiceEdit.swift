@@ -1,11 +1,12 @@
 import AVFoundation
 import AudioToolbox
 
-/// Voice effects for a recording, baked into the saved file. The Mac and
-/// Android have the same list in src/renderer/fx.js (Fx.VOICE); keep the
-/// names, order and sound in step.
+/// Voice effects for a recording (baked into the saved file) and for bash
+/// clips (played live, at any intensity). The Mac and Android have the same
+/// list in src/renderer/fx.js (Fx.VOICE); keep the names, order and sound in step.
 enum VoiceEffect: String, CaseIterable, Identifiable {
     case radio, crackle = "static", distorted, robot, ghost, demon, distant, echo, underwater
+    case cave, megaphone, warble, fairy
 
     var id: String { rawValue }
 
@@ -20,6 +21,10 @@ enum VoiceEffect: String, CaseIterable, Identifiable {
         case .distant: return "Distant room"
         case .echo: return "Empty echo"
         case .underwater: return "Underwater"
+        case .cave: return "Cave"
+        case .megaphone: return "Megaphone"
+        case .warble: return "Warble"
+        case .fairy: return "Fairy"
         }
     }
 
@@ -34,29 +39,63 @@ enum VoiceEffect: String, CaseIterable, Identifiable {
         case .distant: return "Muffled, through a wall"
         case .echo: return "A big empty hall"
         case .underwater: return "Deep and murky"
+        case .cave: return "Dark, dripping echoes"
+        case .megaphone: return "Loud, thin and crunchy"
+        case .warble: return "Wobbling pitch and volume"
+        case .fairy: return "Faster, higher and sparkling"
         }
     }
 
+    /// How fast the sound plays through it (Demon is slower and deeper, Fairy
+    /// faster and higher). Whoever plays the chain applies it, to the dry
+    /// sound as well, so the two stay together.
+    var rate: Double {
+        switch self {
+        case .demon: return 0.72
+        case .fairy: return 1.35
+        default: return 1
+        }
+    }
+
+    /// Seconds it rings on after the sound ends.
+    var tail: Double {
+        switch self {
+        case .radio, .distorted, .megaphone, .warble: return 0.1
+        case .crackle, .robot: return 0.3
+        case .demon, .distant: return 1.5
+        case .underwater: return 2
+        case .fairy: return 3
+        case .ghost, .cave: return 4
+        case .echo: return 5
+        }
+    }
+
+    /// Warble's pitch wobble, in cents, `seconds` into the sound.
+    static func wobble(at seconds: Double) -> Float {
+        Float(200 * sin(2 * Double.pi * 5.5 * seconds))
+    }
+
     /// The voice's path (in order), a separate sound added beside it (Static's
-    /// hiss), how long it rings on, and how fast the voice plays (Demon is
-    /// slower, so deeper).
+    /// hiss), how long it rings on, how fast the voice plays (see `rate`), and
+    /// a pitch unit to wobble (Warble) with `wobble(at:)` as it plays.
     struct Chain {
         var units: [AVAudioNode] = []
         var side: [AVAudioNode] = []
         var tail: Double = 0
         var rate: Double = 1
+        var wobble: AVAudioUnitTimePitch? = nil
     }
 
     func makeChain() -> Chain {
         switch self {
         case .radio:
-            return Chain(units: SoundEffect.radio.makeUnits(), tail: 0.1)
+            return Chain(units: SoundEffect.radio.makeUnits(), tail: tail)
         case .distant:
-            return Chain(units: SoundEffect.distant.makeUnits(), tail: 1.5)
+            return Chain(units: SoundEffect.distant.makeUnits(), tail: tail)
         case .echo:
-            return Chain(units: SoundEffect.echo.makeUnits(), tail: 5)
+            return Chain(units: SoundEffect.echo.makeUnits(), tail: tail)
         case .underwater:
-            return Chain(units: SoundEffect.underwater.makeUnits(), tail: 2)
+            return Chain(units: SoundEffect.underwater.makeUnits(), tail: tail)
         case .crackle:
             // A bad line: a narrow band of voice, a little crunch, hiss and crackle.
             let eq = Self.eq([(.highPass, 350, 0), (.lowPass, 3500, 0)])
@@ -76,7 +115,7 @@ enum VoiceEffect: String, CaseIterable, Identifiable {
             let band = AVAudioUnitEQ(numberOfBands: 1)
             Self.band(band, 0, .bandPass, 2600, bandwidth: 1.5)
             band.globalGain = -21 // about 0.09
-            return Chain(units: [eq, crunch], side: [noise, band], tail: 0.3)
+            return Chain(units: [eq, crunch], side: [noise, band], tail: tail)
         case .distorted:
             // Blown out: driven hard into clipping, then tamed.
             let high = Self.eq([(.highPass, 120, 0)])
@@ -85,7 +124,7 @@ enum VoiceEffect: String, CaseIterable, Identifiable {
             drive.wetDryMix = 100
             let tame = Self.eq([(.lowPass, 4500, 0)])
             tame.globalGain = -8
-            return Chain(units: [high, drive, tame], tail: 0.1)
+            return Chain(units: [high, drive, tame], tail: tail)
         case .robot:
             // Ring modulation (the voice times a 55 Hz tone) and a short metallic comb.
             let ring = AVAudioUnitDistortion()
@@ -105,7 +144,7 @@ enum VoiceEffect: String, CaseIterable, Identifiable {
             comb.feedback = 60
             comb.lowPassCutoff = 8000
             comb.wetDryMix = 35
-            return Chain(units: [ring, comb], tail: 0.3)
+            return Chain(units: [ring, comb], tail: tail)
         case .ghost:
             // Airy and wavering: thinned, doubled a moment later, deep in a long reverb.
             let thin = Self.eq([(.highPass, 260, 0), (.lowPass, 6000, 0)])
@@ -120,11 +159,9 @@ enum VoiceEffect: String, CaseIterable, Identifiable {
             let hall = AVAudioUnitReverb()
             hall.loadFactoryPreset(.cathedral)
             hall.wetDryMix = 60
-            return Chain(units: [thin, shimmer, late, hall], tail: 4)
+            return Chain(units: [thin, shimmer, late, hall], tail: tail)
         case .demon:
-            // Played slower (so deeper), growled and darkened, in a stone room.
-            let slow = AVAudioUnitVarispeed()
-            slow.rate = 0.72
+            // Played slower (so deeper: `rate`), growled and darkened, in a stone room.
             let dark = Self.eq([(.lowPass, 2400, 0)])
             let growl = AVAudioUnitDistortion()
             growl.loadFactoryPreset(.multiDistortedSquared)
@@ -132,7 +169,55 @@ enum VoiceEffect: String, CaseIterable, Identifiable {
             let room = AVAudioUnitReverb()
             room.loadFactoryPreset(.mediumChamber)
             room.wetDryMix = 25
-            return Chain(units: [slow, dark, growl, room], tail: 1.5, rate: 0.72)
+            return Chain(units: [dark, growl, room], tail: tail, rate: rate)
+        case .cave:
+            // Dark and deep underground: dripping echoes in a huge stone space.
+            let dark = Self.eq([(.highPass, 70, 0), (.lowPass, 2800, 0)])
+            let drip = AVAudioUnitDelay()
+            drip.delayTime = 0.27
+            drip.feedback = 35
+            drip.lowPassCutoff = 1800
+            drip.wetDryMix = 40
+            let cavern = AVAudioUnitReverb()
+            cavern.loadFactoryPreset(.cathedral)
+            cavern.wetDryMix = 55
+            return Chain(units: [dark, drip, cavern], tail: tail)
+        case .megaphone:
+            // A horn: only the middle, pushed hard and crunching.
+            let horn = Self.eq([(.highPass, 700, 0), (.lowPass, 2600, 0), (.parametric, 1700, 10)])
+            horn.globalGain = -6
+            let crunch = AVAudioUnitDistortion()
+            crunch.loadFactoryPreset(.multiDistortedCubed)
+            crunch.wetDryMix = 60
+            return Chain(units: [horn, crunch], tail: tail)
+        case .warble:
+            // A worn tape: the pitch wobbles (driven by whoever plays it) and the level throbs.
+            let pitch = AVAudioUnitTimePitch()
+            let throb = AVAudioUnitDistortion()
+            let au = throb.audioUnit
+            let params: [(Int, Float)] = [
+                (Int(kDistortionParam_DelayMix), 0), (Int(kDistortionParam_DecimationMix), 0),
+                (Int(kDistortionParam_PolynomialMix), 0), (Int(kDistortionParam_RingModFreq1), 3.5),
+                (Int(kDistortionParam_RingModFreq2), 3.5), (Int(kDistortionParam_RingModBalance), 0),
+                (Int(kDistortionParam_RingModMix), 100), (Int(kDistortionParam_SoftClipGain), 0),
+            ]
+            for (param, value) in params {
+                AudioUnitSetParameter(au, AudioUnitParameterID(param), kAudioUnitScope_Global, 0, value, 0)
+            }
+            throb.wetDryMix = 35
+            return Chain(units: [pitch, throb], tail: tail, wobble: pitch)
+        case .fairy:
+            // Faster and higher (`rate`), brightened, with sparkling repeats in a hall.
+            let bright = Self.eq([(.highPass, 200, 0), (.highShelf, 3000, 6)])
+            let sparkle = AVAudioUnitDelay()
+            sparkle.delayTime = 0.09
+            sparkle.feedback = 45
+            sparkle.lowPassCutoff = 15000
+            sparkle.wetDryMix = 30
+            let air = AVAudioUnitReverb()
+            air.loadFactoryPreset(.mediumHall)
+            air.wetDryMix = 35
+            return Chain(units: [bright, sparkle, air], tail: tail, rate: rate)
         }
     }
 
@@ -197,6 +282,13 @@ enum VoiceEdit {
         let voicePlayer = AVAudioPlayerNode()
         engine.attach(voicePlayer)
         var last: AVAudioNode = voicePlayer
+        if chain.rate != 1 {
+            let speed = AVAudioUnitVarispeed()
+            speed.rate = Float(chain.rate)
+            engine.attach(speed)
+            engine.connect(voicePlayer, to: speed, format: voiceFile.processingFormat)
+            last = speed
+        }
         for unit in chain.units {
             engine.attach(unit)
             engine.connect(last, to: unit, format: voiceFile.processingFormat)
@@ -245,8 +337,11 @@ enum VoiceEdit {
         }
         let total = AVAudioFramePosition(seconds * sampleRate)
         var stalls = 0
+        // Warble's wobble moves in small steps, so it's rendered a little at a time.
+        let step = Int64(chain.wobble == nil ? buffer.frameCapacity : 256)
         while engine.manualRenderingSampleTime < total {
-            let frames = AVAudioFrameCount(min(Int64(buffer.frameCapacity), total - engine.manualRenderingSampleTime))
+            chain.wobble?.pitch = VoiceEffect.wobble(at: Double(engine.manualRenderingSampleTime) / sampleRate)
+            let frames = AVAudioFrameCount(min(step, total - engine.manualRenderingSampleTime))
             switch try engine.renderOffline(frames, to: buffer) {
             case .success:
                 try output.write(from: buffer)

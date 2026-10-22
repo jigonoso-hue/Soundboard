@@ -114,7 +114,7 @@ body.editor { display: flex; flex-direction: column; height: 100vh; }
 }
 .clip-vol {
   position: absolute;
-  right: 6px;
+  right: 14px;
   bottom: 3px;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.8);
@@ -169,10 +169,19 @@ body.editor { display: flex; flex-direction: column; height: 100vh; }
 .cover-upload { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 
 /* Repeats */
-.clip-repeat {
+.clip-tags {
   position: absolute;
   left: 7px;
+  right: 40px;
   bottom: 3px;
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.clip-repeat, .clip-tag {
+  flex: none;
+  white-space: nowrap;
   font-size: 10px;
   font-weight: 700;
   padding: 0 5px;
@@ -203,3 +212,29 @@ body.editor { display: flex; flex-direction: column; height: 100vh; }
 .dirty { color: #ffb347; font-size: 12px; white-space: nowrap; }
 #confirm-close { width: 440px; }
 #confirm-close h2 { font-size: 16px; }
+
+/* Speed and effect */
+.clip-tag.fx { background: rgba(124, 108, 255, 0.55); }
+.clip-stretch {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent 3px, rgba(255, 255, 255, 0.35) 3px, rgba(255, 255, 255, 0.35) 4px, transparent 4px, transparent 6px, rgba(255, 255, 255, 0.35) 6px, rgba(255, 255, 255, 0.35) 7px, transparent 7px);
+  background-repeat: no-repeat;
+  background-size: 100% 40%;
+  background-position: center;
+}
+.clip-stretch:hover, .clip.stretching .clip-stretch { background-color: rgba(255, 255, 255, 0.15); }
+.clip.stretching { z-index: 4; }
+@media (pointer: coarse) { .clip-stretch { width: 18px; } }
+.clip-speed { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#clip-speed-range { width: 110px; }
+#clip-speed { width: 64px; text-align: center; }
+#clip-fx-amount { width: 90px; }
+#clip-fx-amount-label.disabled { opacity: 0.45; }
+#clip-fx-amount-value { min-width: 34px; color: var(--text); }

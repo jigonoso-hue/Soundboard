@@ -49,8 +49,11 @@ class LiveHost(
         val to: List<String>? = null,
         val by: String? = null,
         val fadeIn: Double = 0.0,
-        /** A scene kit's sound effect: "distant", "echo", "radio" or "underwater". */
+        /** A sound effect (LiveNet.FX_IDS), and how much of it (0…1, null for all). */
         val fx: String? = null,
+        val fxMix: Double? = null,
+        /** A squashed or pulled bash clip's speed (null for normal). */
+        val rate: Double? = null,
     )
 
     /** An ambience layer playing on the host. kind "builtin" (ref: file name) or "sound" (ref: sound id). */
@@ -466,7 +469,11 @@ class LiveHost(
         val fadeIn = LiveNet.fadeSeconds(event.fadeIn)
         if (fadeIn > 0) message.put("fadeIn", fadeIn)
         event.by?.let { message.put("by", it.take(40)) }
-        event.fx?.takeIf { it in LiveNet.FX_IDS }?.let { message.put("fx", it) }
+        event.fx?.takeIf { it in LiveNet.FX_IDS }?.let {
+            message.put("fx", it)
+            LiveNet.cleanMix(event.fxMix)?.let { mix -> message.put("fxMix", mix) }
+        }
+        LiveNet.cleanRate(event.rate)?.let { message.put("rate", it) }
         if (!event.to.isNullOrEmpty()) {
             for (peer in event.to) if (peers.containsKey(peer)) sendTo(peer, message)
             return@onThread

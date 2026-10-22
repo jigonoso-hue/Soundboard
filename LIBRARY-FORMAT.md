@@ -54,7 +54,11 @@ above: `<id>` is a lower-case UUID and `<ext>` 1–5 letters or digits.
     "id": "…", "name": "Ambush!", "createdAt": "…",
     "cover": { "type": "icon", "icon": "crossed-swords", "color": "#7c6cff", "iconColor": "#ffffff" },
             // or { "type": "image", "file": "covers/<bash id>.png" }
-    "clips": [{ "id": "…", "soundId": "…", "offset": 0.5, "volume": 1, "lane": 0, "repeat": { "gap": 0, "times": 3 } }]
+    "clips": [{ "id": "…", "soundId": "…", "offset": 0.5, "volume": 1, "lane": 0, "repeat": { "gap": 0, "times": 3 },
+                "speed": 1.5, "fx": "robot", "fxAmount": 0.4 }]
+            // speed: optional, 0.25…4 (left out = 1); fx: optional, a voice effect's id
+            // (radio, static, distorted, robot, ghost, demon, distant, echo, underwater,
+            // cave, megaphone, warble, fairy) with fxAmount 0…1 (left out = 1)
   }],
   "kits": [{
     "id": "…", "name": "Tavern Brawl", "icon": "mug", "color": "#f5a742", "iconColor": "#ffffff",

@@ -95,3 +95,24 @@ test('emoji covers from older versions become icons', () => {
   assert.deepEqual(store.get('a').cover, { type: 'icon', icon: 'dragon', color: '#ff0000', iconColor: '#ffffff' });
   assert.equal(store.get('b').cover.icon, 'crossed-swords');
 });
+
+test('clips keep their speed (squashed or pulled) and effect, within limits', () => {
+  const store = new BashStore(fs.mkdtempSync(path.join(os.tmpdir(), 'bash-fx-')));
+  const bash = store.create({ name: 'Ambush', soundIds: ['a', 'b', 'c', 'd'] });
+  const [a, b, c, d] = bash.clips;
+  const saved = store.update(bash.id, {
+    clips: [
+      { ...a, speed: 1.5, fx: 'robot', fxAmount: 0.4 },
+      { ...b, speed: 9, fx: 'ghost' },
+      { ...c, speed: 1, fx: 'not-an-effect', fxAmount: 0.3 },
+      { ...d, speed: 0.1, fxAmount: 2 },
+    ],
+  });
+  assert.deepEqual(saved.clips.map((x) => [x.speed, x.fx, x.fxAmount]), [
+    [1.5, 'robot', 0.4],
+    [4, 'ghost', 1],
+    [undefined, undefined, undefined],
+    [0.25, undefined, undefined],
+  ]);
+  assert.deepEqual(new BashStore(store.dir).get(bash.id).clips[0], saved.clips[0], 'kept on disk');
+});

@@ -75,6 +75,18 @@ enum LiveNet {
     }
 
     /// A fade length in seconds from a message: 0 (none) up to 10.
+    /// A bash clip's speed (nil = normal), and how much of its effect you hear
+    /// (nil = all of it). Same ranges as the Mac and Android.
+    static func rate(_ value: Any?) -> Double? {
+        guard let n = number(value), n.isFinite, n > 0, abs(n - 1) > 0.001 else { return nil }
+        return min(5.4, max(0.18, n))
+    }
+
+    static func fxMix(_ value: Any?) -> Double? {
+        guard let n = number(value), n.isFinite, n >= 0, n < 1 else { return nil }
+        return n
+    }
+
     static func fadeSeconds(_ value: Any?) -> Double {
         guard let n = (value as? Double) ?? number(value), n.isFinite, n > 0 else { return 0 }
         return min(10, n)

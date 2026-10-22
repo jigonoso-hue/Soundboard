@@ -40,7 +40,7 @@ Click **+ Add → Record…**, then the red button, and record with your microph
 
 Before saving you can edit it:
 
-- **Voice effect:** **Radio**, **Static** (hiss and crackle on a bad line), **Distorted**, **Robot** (ring-modulated and metallic), **Ghost** (airy and wavering in a long reverb), **Demon** (slower and deeper, growled), **Distant room**, **Empty echo** or **Underwater**.
+- **Voice effect:** **Radio**, **Static** (hiss and crackle on a bad line), **Distorted**, **Robot** (ring-modulated and metallic), **Ghost** (airy and wavering in a long reverb), **Demon** (slower and deeper, growled), **Distant room**, **Empty echo**, **Underwater**, **Cave** (dark, dripping echoes), **Megaphone** (loud, thin and crunchy), **Warble** (wobbling pitch and volume) or **Fairy** (faster, higher and sparkling).
 - **Add sounds:** up to four sounds from your library played along with the recording, each with its own volume and the second it starts (thunder under a villain's line, say).
 
 **Listen** plays the edited version, and **Save** saves it: the edit is mixed into the saved WAV, so it sounds the same everywhere, Live Session listeners included. Record again and the same edit applies to the new take.
@@ -165,6 +165,8 @@ In the editor window:
 - **Adding sounds:** click **+** next to a sound in the list on the left, or drag it onto the timeline. Sounds added with **+** start at 0:00, so by default everything plays at the same moment. Each sound gets its own layer (row).
 - **Timing and layering:** drag a clip **left or right** to change when it starts, or **up and down** to move it between layers. Clips snap to 0.1 s and to the edges of other clips. Hold ⌥ while dragging, or turn off **Snap**, for free positioning. You can also select a clip and type an exact start time, or use ←/→ to nudge it by 0.1 s (⇧ for 1 s) and ↑/↓ to change its layer.
 - **Per-clip controls:** each clip has its own **Volume**, plus **Duplicate** and **Remove** (Delete key).
+- **Squash and pull (speed):** drag a clip's **right edge** in to squash it (it plays faster, and higher) or out to pull it (slower, and deeper), like a tape. It snaps to steps of 0.05× (hold ⌥ for any speed). Or select it and use **Speed** (¼× to 4×; type an exact value) and **Normal** to put it back. The clip shows its speed (⏩ ×1.5).
+- **Effect and intensity:** select a clip and pick an **Effect**: any of the 13 voice effects from the recorder (Radio, Static, Distorted, Robot, Ghost, Demon, Distant room, Empty echo, Underwater, Cave, Megaphone, Warble, Fairy). **Intensity** sets how much of it you hear, from none (the plain sound) to all of it. Demon also plays slower and Fairy faster, on top of the clip's speed. The clip shows its effect (✦ Robot 40%). Live Session listeners hear speed and effect too.
 - **Repeat:** select a clip and tick **Repeat**.
   - **wait** is the number of seconds between plays. 0 starts it again the instant it ends, with no gap.
   - **plays** is how many times it plays in total. Leave it empty to repeat until the Bash is stopped.
@@ -326,7 +328,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/ambience.js` | Ambience mixer |
 | `src/renderer/handouts.js` | Handouts: the listener's locked, zoomable viewer and list, the broadcaster's send dialog |
 | `src/renderer/voice-edit.js` | Editing a recording before it's saved: a voice effect and sounds played along, rendered offline |
-| `src/renderer/fx.js` | Sound effects for scene kits (Distant room, Empty echo, Old radio, Underwater), with Web Audio |
+| `src/renderer/fx.js` | Sound effects with Web Audio: scene kits' four, and the 13 voice effects for recordings and bash clips |
 | `src/library-share.js`, `src/zip.js` | Sharing the whole library as one zip (export, import), the same file as the other apps |
 | `src/library-send.js` | Sending a library online with a code, through the relay (also run by Android) |
 | `src/renderer/music.js` | Playlists (songs one after another, crossfading) and scene changes (a kit that starts its music and ambience when opened) |

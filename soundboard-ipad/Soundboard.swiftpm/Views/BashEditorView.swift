@@ -18,6 +18,7 @@ struct BashEditorView: View {
     @State private var zoom: Double = 70 // points per second
     @State private var playhead: Double = 0
     @State private var dragOrigin: DragOrigin?
+    @State private var stretchOrigin: StretchOrigin?
     @State private var showCover = false
     @State private var showAddSounds = false
     @State private var confirmClose = false
@@ -33,6 +34,13 @@ struct BashEditorView: View {
         let clipId: UUID
         let offset: Double
         let lane: Int
+    }
+
+    /// Dragging a clip's right edge: its length then, and at normal speed.
+    struct StretchOrigin {
+        let clipId: UUID
+        let length: Double
+        let natural: Double
     }
 
     init(bash: Bash) {
@@ -260,8 +268,14 @@ struct BashEditorView: View {
 
     private var laneCount: Int { (draft.clips.map(\.lane).max() ?? -1) + 2 }
 
-    private func length(_ clip: BashClip) -> Double {
+    /// The sound's own length.
+    private func soundLength(_ clip: BashClip) -> Double {
         max(0.1, store.sound(clip.soundId)?.duration ?? 1)
+    }
+
+    /// How long one play of the clip lasts (its speed and effect change it).
+    private func length(_ clip: BashClip) -> Double {
+        clip.playLength(soundLength(clip))
     }
 
     /// Seconds shown on the timeline.
@@ -269,7 +283,7 @@ struct BashEditorView: View {
         var end = 8.0
         for clip in draft.clips {
             let len = length(clip)
-            end = max(end, (clip.end(length: len) ?? (clip.offset + len * 4 + (clip.repetition?.gap ?? 0) * 3)) + 4)
+            end = max(end, (clip.end(length: soundLength(clip)) ?? (clip.offset + len * 4 + (clip.repetition?.gap ?? 0) * 3)) + 4)
         }
         return end
     }
@@ -359,18 +373,31 @@ struct BashEditorView: View {
                     Text(sound?.name ?? "Missing sound")
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
-                    if let repetition = clip.repetition {
-                        HStack(spacing: 3) {
-                            AppIcon(id: "repeat", size: 10)
-                            Text(repetition.times > 0 ? "×\(repetition.times)" : "∞")
+                    HStack(spacing: 6) {
+                        if let repetition = clip.repetition {
+                            HStack(spacing: 3) {
+                                AppIcon(id: "repeat", size: 10)
+                                Text(repetition.times > 0 ? "×\(repetition.times)" : "∞")
+                            }
                         }
-                        .font(.caption2.weight(.bold))
+                        if clip.playSpeed != 1 {
+                            Text("\(clip.playSpeed > 1 ? "⏩" : "⏪") ×\(Self.speedText(clip.playSpeed))")
+                        }
+                        if let effect = clip.effect {
+                            let amount = clip.fxAmount ?? 1
+                            Text("✦ \(effect.name)\(amount < 1 ? " \(Int((amount * 100).rounded()))%" : "")")
+                        }
                     }
+                    .font(.caption2.weight(.bold))
+                    .lineLimit(1)
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 6)
+                .padding(.leading, 6)
+                .padding(.trailing, 14)
                 .padding(.vertical, 4)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(alignment: .trailing) { stretchHandle(clip) }
             .frame(width: max(14, CGFloat(length(clip) * zoom)), height: laneHeight - 10)
             .offset(x: CGFloat(clip.offset * zoom), y: rulerHeight + CGFloat(clip.lane) * laneHeight + 5)
             .onTapGesture { selected = clip.id }
@@ -388,6 +415,47 @@ struct BashEditorView: View {
                     }
                     .onEnded { _ in dragOrigin = nil }
             )
+    }
+
+    /// The clip's right edge: drag it in to squash the clip (faster and higher)
+    /// or out to pull it (slower and deeper), like a tape.
+    private func stretchHandle(_ clip: BashClip) -> some View {
+        HStack(spacing: 2) {
+            Capsule().frame(width: 2, height: 16)
+            Capsule().frame(width: 2, height: 16)
+        }
+        .foregroundStyle(.white.opacity(selected == clip.id ? 0.9 : 0.5))
+        .frame(width: 26, height: laneHeight - 10)
+        .contentShape(Rectangle())
+        .offset(x: 9)
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    if stretchOrigin?.clipId != clip.id {
+                        let natural = soundLength(clip) / (clip.effect?.rate ?? 1)
+                        stretchOrigin = StretchOrigin(clipId: clip.id, length: length(clip), natural: natural)
+                        selected = clip.id
+                    }
+                    guard let origin = stretchOrigin else { return }
+                    let newLength = max(0.01, origin.length + Double(value.translation.width) / zoom)
+                    // Steps of 0.05, like the Mac's snap.
+                    let speed = ((origin.natural / newLength) * 20).rounded() / 20
+                    updateClip(clip.id) { Self.setSpeed(&$0, speed) }
+                }
+                .onEnded { _ in stretchOrigin = nil }
+        )
+        .accessibilityLabel("Stretch")
+        .accessibilityHint("Drag left to make it faster, right to make it slower")
+    }
+
+    static func setSpeed(_ clip: inout BashClip, _ speed: Double) {
+        let value = (min(BashClip.maxSpeed, max(BashClip.minSpeed, speed)) * 100).rounded() / 100
+        clip.speed = abs(value - 1) < 0.001 ? nil : value
+    }
+
+    static func speedText(_ speed: Double) -> String {
+        let rounded = (speed * 100).rounded() / 100
+        return rounded == rounded.rounded() ? String(Int(rounded)) : String(rounded)
     }
 
     /// Faded copies showing when a repeating clip plays again.
@@ -424,7 +492,7 @@ struct BashEditorView: View {
         let position = isPlaying ? bashPlayer.position : playhead
         var total: Double? = 0
         for clip in draft.clips {
-            guard let end = clip.end(length: length(clip)) else { total = nil; break }
+            guard let end = clip.end(length: soundLength(clip)) else { total = nil; break }
             total = max(total ?? 0, end)
         }
         return "\(TimeText.format(position)) / " + (total.map { TimeText.format($0) } ?? "∞ (repeats until stopped)")
@@ -483,6 +551,67 @@ struct BashEditorView: View {
                             .frame(width: compact ? nil : 150)
                     }
 
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Speed ×\(Self.speedText(clip.playSpeed))").font(.caption).foregroundStyle(.secondary)
+                            Spacer(minLength: 8)
+                            if clip.playSpeed != 1 {
+                                Button("Normal") { updateClip(clip.id) { $0.speed = nil } }
+                                    .font(.caption)
+                                    .buttonStyle(.borderless)
+                            }
+                        }
+                        // In doublings (¼× … 4×), so slower and faster get the same room.
+                        Slider(value: Binding(
+                            get: { log2(clip.playSpeed) },
+                            set: { value in updateClip(clip.id) { Self.setSpeed(&$0, abs(value) < 0.03 ? 1 : pow(2, value)) } }
+                        ), in: -2...2)
+                        .frame(width: compact ? nil : 170)
+                        .accessibilityLabel("Speed")
+                        .accessibilityValue("\(Self.speedText(clip.playSpeed)) times")
+                    }
+                    .frame(minHeight: 44)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Effect").font(.caption).foregroundStyle(.secondary)
+                        Menu {
+                            Button {
+                                updateClip(clip.id) { $0.fx = nil; $0.fxAmount = nil }
+                            } label: {
+                                if clip.effect == nil { Label("None", systemImage: "checkmark") } else { Text("None") }
+                            }
+                            ForEach(VoiceEffect.allCases) { effect in
+                                Button {
+                                    updateClip(clip.id) {
+                                        $0.fx = effect.rawValue
+                                        $0.fxAmount = $0.fxAmount ?? 1
+                                    }
+                                } label: {
+                                    if clip.effect == effect { Label(effect.name, systemImage: "checkmark") } else { Text(effect.name) }
+                                    Text(effect.hint)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(clip.effect?.name ?? "None")
+                                Image(systemName: "chevron.up.chevron.down").font(.caption2)
+                            }
+                            .frame(minHeight: 44)
+                        }
+                    }
+
+                    if clip.effect != nil {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Intensity \(Int(((clip.fxAmount ?? 1) * 100).rounded()))%").font(.caption).foregroundStyle(.secondary)
+                            Slider(value: Binding(
+                                get: { clip.fxAmount ?? 1 },
+                                set: { value in updateClip(clip.id) { $0.fxAmount = (value * 100).rounded() / 100 } }
+                            ), in: 0...1)
+                            .frame(width: compact ? nil : 150)
+                            .accessibilityLabel("Effect intensity")
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Repeat", isOn: Binding(
                             get: { clip.repetition != nil },
@@ -530,9 +659,9 @@ struct BashEditorView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 12)
             }
-            .frame(height: compact ? (clip.repetition != nil ? 330 : 250) : (clip.repetition != nil ? 110 : 80))
+            .frame(height: compact ? 320 : (clip.repetition != nil ? 110 : 84))
         } else {
-            Text("Tap a sound to edit it. Drag sounds left or right to change when they start, and up or down to move them between lanes. Tap the ruler to move the playhead.")
+            Text("Tap a sound to edit it: its volume, speed, effect and repeats. Drag sounds left or right to change when they start, and up or down to move them between lanes. Drag a sound's right edge to squash it (faster) or pull it (slower). Tap the ruler to move the playhead.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)

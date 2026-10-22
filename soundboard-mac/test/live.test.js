@@ -131,10 +131,12 @@ test('scene music: crossfades, built-in cues and scene-change fades', async () =
     sam.connect(`ws://127.0.0.1:${transport.port}`);
     await waitFor(host, 'peers', (list) => list.length === 1);
     // A playlist's next song fades in; the one before fades out.
-    await host.play({ pid: 'p1', group: 'pl:music:2', soundId: 'song', name: 'Song', at: Date.now(), volume: 0.7, cat: 'music', fadeIn: 4, fx: 'distant' });
+    await host.play({ pid: 'p1', group: 'pl:music:2', soundId: 'song', name: 'Song', at: Date.now(), volume: 0.7, cat: 'music', fadeIn: 4, fx: 'robot', fxMix: 0.4, rate: 1.5 });
     const song = await cmds.next('play', 5000);
     assert.equal(song.fadeIn, 4);
-    assert.equal(song.fx, 'distant', 'a scene kit sound effect reaches listeners');
+    assert.equal(song.fx, 'robot', 'a sound effect reaches listeners');
+    assert.equal(song.fxMix, 0.4, 'with how much of it');
+    assert.equal(song.rate, 1.5, 'and a squashed clip\'s speed');
     await host.stop('pl:music:1', 4);
     assert.deepEqual(await cmds.next('stop'), { t: 'stop', group: 'pl:music:1', fade: 4 });
     // A now-and-then layer on a built-in loop: played with nothing to fetch.

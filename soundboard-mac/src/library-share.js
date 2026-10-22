@@ -166,6 +166,8 @@ function readManifest(raw) {
         volume: num(c.volume, 0, 1, 1),
         lane: Math.floor(num(c.lane, 0, 999, 0)),
         repeat: c.repeat && typeof c.repeat === 'object' ? { gap: num(c.repeat.gap, 0, 3600, 0), times: Math.floor(num(c.repeat.times, 0, 999, 0)) } : null,
+        ...(Number(c.speed) > 0 ? { speed: num(c.speed, 0.25, 4, 1) } : {}),
+        ...(typeof c.fx === 'string' ? { fx: c.fx, fxAmount: num(c.fxAmount, 0, 1, 1) } : {}),
       })),
       createdAt: typeof b.createdAt === 'string' ? b.createdAt : null,
     });

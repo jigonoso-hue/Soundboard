@@ -19,8 +19,11 @@ struct MirrorPlay {
     var by: String? = nil
     /// Seconds it fades in over (a playlist's next song, a scene change).
     var fadeIn: Double = 0
-    /// A scene kit's sound effect to play it through.
-    var fx: SoundEffect? = nil
+    /// A sound effect to play it through (a scene kit's or a bash clip's), and how much of it.
+    var fx: VoiceEffect? = nil
+    var fxMix: Double = 1
+    /// A squashed or pulled bash clip: faster and higher, or slower and deeper.
+    var rate: Double = 1
 }
 
 /// One thing playing, for the stage's now-playing list.
@@ -74,8 +77,8 @@ final class MirrorPlayer {
     func play(_ play: MirrorPlay) {
         stopVoice(play.pid)
         let made: VoicePlayer?
-        if let fx = play.fx {
-            made = try? FxPlayer(contentsOf: play.url, effect: fx)
+        if play.fx != nil || play.rate != 1 {
+            made = try? FxPlayer(contentsOf: play.url, voice: play.fx, amount: play.fxMix, speed: play.rate)
         } else {
             made = try? AVAudioPlayer(contentsOf: play.url)
         }
@@ -88,7 +91,9 @@ final class MirrorPlayer {
         voices[play.pid] = voice
 
         let wait = play.at.timeIntervalSinceNow
-        let length = player.duration
+        // Listening time; a faster or slower sound covers more or less of its file each second.
+        let rate = (player as? FxPlayer)?.rate ?? 1
+        let length = player.duration / rate
         if play.fadeIn > 0 {
             // Fades in from when it starts; if it started a while ago, for what's left of the fade.
             let fadeIn = play.fadeIn
@@ -105,19 +110,19 @@ final class MirrorPlayer {
             // Late (joined mid-way, or the file arrived late): start part-way through.
             let elapsed = -wait
             if play.loop && length > 0 {
-                player.currentTime = elapsed.truncatingRemainder(dividingBy: length)
+                player.currentTime = elapsed.truncatingRemainder(dividingBy: length) * rate
                 player.play()
             } else if play.gap > 0 && length > 0 {
                 let period = length + play.gap
                 let into = elapsed.truncatingRemainder(dividingBy: period)
                 if into < length {
-                    player.currentTime = into
+                    player.currentTime = into * rate
                     player.play()
                 } else {
                     voice.resumeAt = Date().addingTimeInterval(period - into)
                 }
             } else if elapsed < length - 0.05 {
-                player.currentTime = elapsed
+                player.currentTime = elapsed * rate
                 player.play()
             } else {
                 voices[play.pid] = nil

@@ -156,6 +156,22 @@ async function until(fn, label, timeout = 15000) {
     }), 'the player hearing the echo');
     check(fxLevel > 0, 'a sound effect reaches the player and sounds');
 
+    // A bash clip squashed to ×1.5 with Robot at 40%: the player hears it faster, partly robotic.
+    await gmPage.evaluate(() => {
+      const roar = sounds.find((s) => s.name === 'Dragon Roar');
+      Bashes.player.play({ id: 'e2e-bash', clips: [{ id: 'c1', soundId: roar.id, offset: 0, volume: 1, lane: 0, repeat: null, speed: 1.5, fx: 'robot', fxAmount: 0.4 }] }, sounds, 0);
+    });
+    const clipPlay = await until(() => playerPage.evaluate(() => window.__native.map((e) => e.channel === 'live:command' && JSON.parse(e.json))
+      .find((c) => c && c.t === 'play' && c.fx === 'robot')), 'the bash clip at the player');
+    check(clipPlay.rate === 1.5 && clipPlay.fxMix === 0.4, `the clip's speed and effect intensity arrive (rate ${clipPlay.rate}, fxMix ${clipPlay.fxMix})`);
+    const robot = await until(() => playerPage.evaluate(() => {
+      const audio = [...document.querySelectorAll('audio')].concat(window.__fxAudio || []).find((a) => a.fx && a.fx.id === 'robot');
+      return audio ? { rate: audio.playbackRate, pitch: audio.preservesPitch, wet: audio.fx.wet.gain.value, dry: audio.fx.dry.gain.value } : null;
+    }), 'the player playing the clip');
+    check(Math.abs(robot.rate - 1.5) < 0.01 && robot.pitch === false && Math.abs(robot.wet - 0.4) < 0.01 && Math.abs(robot.dry - 0.6) < 0.01,
+      `the player plays it faster and higher, 40% robot (${JSON.stringify(robot)})`);
+    await gmPage.evaluate(() => Bashes.player.stop());
+
     // A built-in ambience loop reaches the player too.
     await gmPage.evaluate(() => { const toggle = document.querySelector('#amb-collapse'); if (document.querySelector('#amb-layers').classList.contains('hidden')) toggle.click(); });
     await gmPage.click('.layer-name:text-is("Rain")');

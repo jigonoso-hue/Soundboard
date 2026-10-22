@@ -33,6 +33,8 @@ class LiveListener(
             val at: Long, val volume: Double, val cat: String, val loop: Boolean, val gap: Double,
             val buzz: Boolean, val whisper: Boolean, val by: String?, val fadeIn: Double,
             val fx: String? = null,
+            val fxMix: Double? = null,
+            val rate: Double? = null,
         ) : Command()
         data class Stop(val group: String, val fade: Double) : Command()
         data class Volume(val group: String, val volume: Double) : Command()
@@ -266,6 +268,8 @@ class LiveListener(
             by = m.str("by")?.take(40),
             fadeIn = LiveNet.fadeSeconds(m.opt("fadeIn")),
             fx = m.str("fx")?.takeIf { it in LiveNet.FX_IDS },
+            fxMix = LiveNet.cleanMix(m.opt("fxMix")),
+            rate = LiveNet.cleanRate(m.opt("rate")),
         ))
     }
 

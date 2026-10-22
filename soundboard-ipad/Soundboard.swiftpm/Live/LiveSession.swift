@@ -486,7 +486,7 @@ final class LiveSession: ObservableObject {
             pid: pid(), group: group ?? "s:\(sound.id.uuidString)", source: .library(sound.id), name: sound.name,
             at: LiveNet.now - max(0, seek) * 1000, volume: volume, cat: sound.isFull ? "music" : "sfx")
         event.fadeIn = fadeIn
-        event.fx = fx
+        event.fx = fx?.voice
         event.loop = sound.repeatGap == 0
         event.gap = sound.repeatGap ?? 0
         event.buzz = sound.buzz == true || emphasis
@@ -539,9 +539,11 @@ final class LiveSession: ObservableObject {
         if role == .listener { mirror.stopAll(ambienceToo: false) }
     }
 
-    /// One clip of a bash. `at` is the wall-clock time (ms) of the clip's start.
+    /// One clip of a bash. `at` is the wall-clock time (ms) of the clip's start;
+    /// duration: how long the play lasts; speed, fx and fxMix: the clip's own.
     /// An armed whisper or emphasis applies to every clip of the next bash.
-    func bashClip(runId: String, soundId: UUID, at: Double, volume: Double, duration: Double) {
+    func bashClip(runId: String, soundId: UUID, at: Double, volume: Double, duration: Double,
+                  speed: Double = 1, fx: VoiceEffect? = nil, fxMix: Double = 1) {
         guard role == .host, let host, let sound = store?.sound(soundId), sound.gmOnly != true else { return }
         if !seenRuns.contains(runId) {
             if seenRuns.count > 200 { seenRuns.removeAll() }
@@ -556,6 +558,9 @@ final class LiveSession: ObservableObject {
             at: at, volume: volume, cat: "sfx")
         event.buzz = sound.buzz == true
         event.duration = duration
+        event.rate = speed
+        event.fx = fx
+        event.fxMix = fxMix
         if let run = armedRun, run.id == runId {
             if !run.targets.isEmpty { event.to = Array(run.targets) }
             if run.emphasis { event.buzz = true }

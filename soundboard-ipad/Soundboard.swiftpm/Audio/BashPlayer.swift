@@ -15,13 +15,16 @@ final class BashPlayer: ObservableObject {
     private struct Track {
         let clip: BashClip
         let url: URL
-        let length: Double
+        /// The sound's own length.
+        let soundLength: Double
+        /// How long one play lasts (the clip's speed and effect change it).
+        var length: Double { clip.playLength(soundLength) }
         /// Index of the next play to schedule.
         var next = 0
     }
 
     private struct Instance {
-        let player: AVAudioPlayer
+        let player: VoicePlayer
         let end: Double
         let clipVolume: Double
     }
@@ -54,7 +57,7 @@ final class BashPlayer: ObservableObject {
             guard let sound = store.sound(clip.soundId) else { continue }
             let url = store.url(for: sound)
             let length = sound.duration ?? SoundStore.measure(url) ?? 1
-            built.append(Track(clip: clip, url: url, length: max(0.05, length)))
+            built.append(Track(clip: clip, url: url, soundLength: max(0.05, length)))
         }
         guard let first = built.first, let clockPlayer = try? AVAudioPlayer(contentsOf: first.url) else { return }
         tracks = built
@@ -63,9 +66,11 @@ final class BashPlayer: ObservableObject {
         var ends: [Double] = []
         var endless = false
         for track in built {
-            if let end = track.clip.end(length: track.length) { ends.append(end) } else { endless = true }
+            if let end = track.clip.end(length: track.soundLength) { ends.append(end) } else { endless = true }
         }
-        total = endless ? nil : (ends.max() ?? 0)
+        // An effect's echo rings on after the last clip ends.
+        let tail = built.compactMap { $0.clip.effect?.tail }.max() ?? 0
+        total = endless ? nil : (ends.max() ?? 0) + tail
         base = clockPlayer.deviceCurrentTime + 0.08 - start
         position = start
         playingId = bash.id
@@ -116,21 +121,30 @@ final class BashPlayer: ObservableObject {
                 tracks[index].next += 1
                 let endAt = startAt + track.length
                 guard endAt > elapsed else { continue } // already over (when starting mid-way)
-                guard let player = try? AVAudioPlayer(contentsOf: track.url) else { continue }
+                // A squashed or pulled clip, or one with an effect, plays through FxPlayer.
+                let made: VoicePlayer?
+                if clip.effect != nil || clip.playSpeed != 1 {
+                    made = try? FxPlayer(contentsOf: track.url, voice: clip.effect, amount: clip.fxAmount ?? 1, speed: clip.playSpeed)
+                } else {
+                    made = try? AVAudioPlayer(contentsOf: track.url)
+                }
+                guard let player = made else { continue }
                 player.volume = Float(min(1, clip.volume * volume))
                 player.prepareToPlay()
                 if startAt >= elapsed {
-                    player.play(atTime: base + startAt)
+                    // Each player has its own clock: start it the same time from now.
+                    player.play(atTime: player.deviceCurrentTime + (startAt - elapsed))
                 } else {
-                    player.currentTime = elapsed - startAt
+                    player.currentTime = (elapsed - startAt) * clip.rate
                     player.play()
                 }
-                instances.append(Instance(player: player, end: endAt, clipVolume: clip.volume))
+                instances.append(Instance(player: player, end: endAt + (clip.effect?.tail ?? 0), clipVolume: clip.volume))
                 if broadcasting {
                     // Wall-clock time of this play's start, in ms.
                     let at = LiveNet.now + (startAt - elapsed) * 1000
                     live?.bashClip(runId: runId, soundId: clip.soundId, at: at,
-                                   volume: min(1, clip.volume * volume), duration: track.length)
+                                   volume: min(1, clip.volume * volume), duration: track.length,
+                                   speed: clip.playSpeed, fx: clip.effect, fxMix: clip.fxAmount ?? 1)
                 }
             }
         }

@@ -113,7 +113,9 @@ and converts host times to its own clock.
   "whisper": false,        // sent only to some listeners
   "by": "Sam",             // optional: the listener who played it
   "fadeIn": 4,             // optional: seconds to fade in over (up to 10)
-  "fx": "distant"          // optional: a scene kit's sound effect (below)
+  "fx": "distant",         // optional: a sound effect (below)
+  "fxMix": 0.4,            // optional, with fx: how much of the effect, 0…1 (left out = all of it)
+  "rate": 1.5              // optional: a bash clip's speed (left out = 1)
 }
 ```
 
@@ -121,11 +123,22 @@ Instead of `hash` and `ext`, a play can name a built-in sound with
 `"builtin": "thunderstorm.wav"` (a file name of lowercase letters, digits and
 dashes, ending `.wav`). Every copy of the app has those, so nothing is fetched.
 
-`fx` plays the sound through an effect: `"distant"` (Distant room: muffled,
-through a wall), `"echo"` (Empty echo: a big empty hall), `"radio"` (Old radio:
-thin and crackly) or `"underwater"` (Underwater: deep and murky). Listeners
-build it themselves (Web Audio on the Mac and Android, AVAudioEngine on
-iPhone/iPad); an unknown name is dropped and the sound plays as it is.
+`fx` plays the sound through an effect. A scene kit's are `"distant"` (Distant
+room: muffled, through a wall), `"echo"` (Empty echo: a big empty hall),
+`"radio"` (Old radio: thin and crackly) and `"underwater"` (Underwater: deep and
+murky). A bash clip can have any of the voice effects: those four, `"static"`,
+`"distorted"`, `"robot"`, `"ghost"`, `"demon"`, `"cave"`, `"megaphone"`,
+`"warble"` and `"fairy"`. Listeners build it themselves (Web Audio on the Mac
+and Android, AVAudioEngine on iPhone/iPad); an unknown name is dropped and the
+sound plays as it is. `fxMix` (0 up to 1) plays that much of the effect over
+the rest of the plain sound.
+
+`rate` is a squashed or pulled bash clip: it plays this much faster (over 1) or
+slower (under 1), and higher or lower with it, like a tape (0.18 to 5.4; other
+values are clamped). Demon and Fairy change the speed too (×0.72 and ×1.35);
+listeners apply that on top of `rate`. `at` is still when the sound's start
+plays, so a listener who joins part-way is `elapsed × rate × effect speed`
+seconds into the file.
 
 **Groups.** `s:<sound id>` is a sound tile or row; `b:<bash run id>` a bash;
 `pl:<section id>:<n>` one song of a playlist (each song has its own group, so the

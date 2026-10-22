@@ -48,12 +48,13 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${label}`); 
       check(!s.nan && s.rms > 0.05 && s.peak <= 0.99 && s.seconds >= 1 && s.seconds <= 7, `${id}: ${s.seconds.toFixed(2)} s, rms ${s.rms.toFixed(3)}, peak ${s.peak.toFixed(2)}`);
     }
     check(Math.abs(stats.demon.seconds - (1 / 0.72 + 1.5)) < 0.05, 'Demon plays slower (so deeper)');
+    check(Math.abs(stats.fairy.seconds - (1 / 1.35 + 3)) < 0.05, 'Fairy plays faster (so higher)');
 
     // Record, edit, listen, save.
     await page.click('#add-menu-btn'); await page.click('#record-btn'); await page.waitForTimeout(300);
     await page.click('#record-toggle'); await page.waitForTimeout(1600); await page.click('#record-toggle');
     await page.waitForSelector('#record-after:not(.hidden)', { timeout: 5000 });
-    check((await page.$$eval('#record-fx button', (b) => b.map((x) => x.textContent))).join() === 'None,Radio,Static,Distorted,Robot,Ghost,Demon,Distant room,Empty echo,Underwater', 'the effects to choose from');
+    check((await page.$$eval('#record-fx button', (b) => b.map((x) => x.textContent))).join() === 'None,Radio,Static,Distorted,Robot,Ghost,Demon,Distant room,Empty echo,Underwater,Cave,Megaphone,Warble,Fairy', 'the effects to choose from');
     await page.click('#record-fx button:has-text("Robot")');
     check(await page.getAttribute('#record-fx button:has-text("Robot")', 'aria-checked') === 'true', 'Robot is chosen');
     await page.selectOption('#record-add-layer', { label: 'Thunder' });

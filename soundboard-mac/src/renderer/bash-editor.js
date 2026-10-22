@@ -1,4 +1,4 @@
-/* global AudioUtils, BashCommon, IconPicker, Icons */
+/* global AudioUtils, BashCommon, Fx, IconPicker, Icons */
 // Bash editor window: arrange when each sound starts and layer them on a timeline.
 const api = window.soundboard;
 const $ = (sel) => document.querySelector(sel);
@@ -20,9 +20,21 @@ const info = new Map(); // soundId -> { duration, peaks }
 // ---------- Helpers ----------
 
 const soundOf = (clip) => sounds.find((s) => s.id === clip.soundId);
-const clipDuration = (clip) => info.get(clip.soundId)?.duration ?? 2;
+const soundLength = (clip) => info.get(clip.soundId)?.duration ?? 2;
+// How long one play of the clip lasts: its speed (and some effects, like Demon) change it.
+const clipDuration = (clip) => soundLength(clip) / BashCommon.clipRate(clip);
 // Bash time when the clip's last play ends (Infinity = repeats until stopped).
-const clipEnd = (clip) => BashCommon.clipEnd(clip, clipDuration(clip));
+const clipEnd = (clip) => BashCommon.clipEnd(clip, soundLength(clip));
+const MIN_SPEED = 0.25;
+const MAX_SPEED = 4;
+const speedOf = (clip) => (Number(clip.speed) > 0 ? Number(clip.speed) : 1);
+const speedText = (speed) => String(Math.round(speed * 100) / 100);
+function setSpeed(clip, speed) {
+  const value = Math.round(Math.max(MIN_SPEED, Math.min(MAX_SPEED, speed)) * 100) / 100;
+  if (Math.abs(value - 1) < 0.001) delete clip.speed;
+  else clip.speed = value;
+}
+const fxName = (id) => (Fx.VOICE.find((e) => e.id === id) || {}).name || id;
 const totalDuration = () => bash.clips.reduce((end, c) => Math.max(end, clipEnd(c)), 0);
 // Length to lay out on the timeline: endless repeats show a few plays.
 const layoutEnd = (clip) => {
@@ -201,13 +213,14 @@ function renderTimeline() {
       vol.textContent = `${Math.round(clip.volume * 100)}%`;
       el.appendChild(vol);
     }
+    renderTags(el, clip);
 
-    if (clip.repeat) {
-      const rep = document.createElement('span');
-      rep.className = 'clip-repeat';
-      Icons.set(rep, 'repeat', clip.repeat.times ? `×${clip.repeat.times}` : '∞', { size: 10 });
-      el.appendChild(rep);
-    }
+    // The right edge squashes the clip (faster) or pulls it out (slower).
+    const stretch = document.createElement('div');
+    stretch.className = 'clip-stretch';
+    stretch.title = 'Drag to squash (faster) or pull (slower)';
+    stretch.addEventListener('pointerdown', (e) => startStretch(e, clip, el));
+    el.appendChild(stretch);
 
     el.addEventListener('pointerdown', (e) => startDrag(e, clip, el));
     host.appendChild(el);
@@ -215,6 +228,52 @@ function renderTimeline() {
     drawRepeats(host, clip, sound, width);
   }
   positionPlayhead();
+}
+
+// The little labels along a clip's bottom: repeats, speed and effect.
+function renderTags(el, clip) {
+  let tags = el.querySelector('.clip-tags');
+  if (!tags) {
+    tags = document.createElement('span');
+    tags.className = 'clip-tags';
+    el.appendChild(tags);
+  }
+  tags.textContent = '';
+  if (clip.repeat) {
+    const rep = document.createElement('span');
+    rep.className = 'clip-repeat';
+    Icons.set(rep, 'repeat', clip.repeat.times ? `×${clip.repeat.times}` : '∞', { size: 10 });
+    tags.appendChild(rep);
+  }
+  const speed = speedOf(clip);
+  if (speed !== 1) {
+    const tag = document.createElement('span');
+    tag.className = 'clip-tag';
+    tag.textContent = `${speed > 1 ? '⏩' : '⏪'} ×${speedText(speed)}`;
+    tags.appendChild(tag);
+  }
+  if (clip.fx) {
+    const tag = document.createElement('span');
+    tag.className = 'clip-tag fx';
+    const amount = clip.fxAmount ?? 1;
+    tag.textContent = `✦ ${fxName(clip.fx)}${amount < 1 ? ` ${Math.round(amount * 100)}%` : ''}`;
+    tags.appendChild(tag);
+  }
+}
+
+// Redraws one clip in place after its length or labels changed (while dragging
+// or moving a slider), without rebuilding the timeline under the pointer.
+function refreshClip(clip) {
+  const el = document.querySelector(`.clip[data-id="${clip.id}"]`);
+  const sound = soundOf(clip);
+  if (!el || !sound) { render(); return; }
+  positionClip(el, clip);
+  const canvas = el.querySelector('canvas');
+  if (canvas) drawWaveform(canvas, clip);
+  renderTags(el, clip);
+  drawRepeats($('#lanes'), clip, sound, parseFloat($('#content').style.width) || 0);
+  renderInspector();
+  renderTime();
 }
 
 // Faded copies after a repeating clip, one per extra play.
@@ -285,6 +344,16 @@ function renderInspector() {
   for (const input of [$('#clip-repeat-gap'), $('#clip-repeat-times')]) input.disabled = !clip.repeat;
   if (document.activeElement !== $('#clip-repeat-gap')) $('#clip-repeat-gap').value = clip.repeat ? clip.repeat.gap : 0;
   if (document.activeElement !== $('#clip-repeat-times')) $('#clip-repeat-times').value = clip.repeat && clip.repeat.times ? clip.repeat.times : '';
+  const speed = speedOf(clip);
+  if (document.activeElement !== $('#clip-speed-range')) $('#clip-speed-range').value = Math.log2(speed);
+  if (document.activeElement !== $('#clip-speed')) $('#clip-speed').value = speedText(speed);
+  $('#clip-speed-reset').disabled = speed === 1;
+  $('#clip-fx').value = clip.fx || '';
+  const amount = clip.fxAmount ?? 1;
+  $('#clip-fx-amount').disabled = !clip.fx;
+  $('#clip-fx-amount-label').classList.toggle('disabled', !clip.fx);
+  if (document.activeElement !== $('#clip-fx-amount')) $('#clip-fx-amount').value = amount;
+  $('#clip-fx-amount-value').textContent = clip.fx ? `${Math.round(amount * 100)}%` : '';
 }
 
 function renderTime() {
@@ -435,6 +504,50 @@ function onDragEnd() {
   }
 }
 
+// Dragging a clip's right edge: a shorter clip plays faster (and higher),
+// a longer one slower (and deeper), like a tape.
+function startStretch(e, clip, el) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  select(clip.id);
+  const handle = e.currentTarget;
+  handle.setPointerCapture(e.pointerId);
+  // The clip's length at normal speed (its effect may still change it).
+  const natural = soundLength(clip) / BashCommon.clipRate({ ...clip, speed: 1 });
+  dragging = { clip, el, handle, x: e.clientX, length: clipDuration(clip), natural, moved: false };
+  handle.addEventListener('pointermove', onStretchMove);
+  handle.addEventListener('pointerup', onStretchEnd, { once: true });
+  handle.addEventListener('pointercancel', onStretchEnd, { once: true });
+}
+
+function onStretchMove(e) {
+  if (!dragging) return;
+  const dx = e.clientX - dragging.x;
+  if (!dragging.moved && Math.abs(dx) < 3) return;
+  dragging.moved = true;
+  dragging.el.classList.add('stretching');
+  const length = Math.max(0.01, dragging.length + dx / pps);
+  let speed = dragging.natural / length;
+  // Snap to steps of 0.05 (hold ⌥ for any speed), and catch normal speed.
+  if ($('#snap').checked && !e.altKey) speed = Math.round(speed * 20) / 20;
+  else if (Math.abs(speed - 1) < 0.02) speed = 1;
+  setSpeed(dragging.clip, speed);
+  refreshClip(dragging.clip);
+}
+
+function onStretchEnd() {
+  if (!dragging) return;
+  const { el, handle, moved } = dragging;
+  handle.removeEventListener('pointermove', onStretchMove);
+  el.classList.remove('stretching');
+  dragging = null;
+  if (moved) {
+    markDirty();
+    render();
+  }
+}
+
 // Click on the ruler or an empty lane: move the playhead and deselect.
 $('#content').addEventListener('pointerdown', (e) => {
   if (e.target.closest('.clip')) return;
@@ -508,6 +621,63 @@ $('#clip-dup').addEventListener('click', () => {
   markDirty();
   render();
 });
+
+// Speed: the slider works in doublings (¼× … 4×) so slower and faster get the same room.
+$('#clip-speed-range').addEventListener('input', (e) => {
+  const clip = selectedClip();
+  if (!clip) return;
+  const value = Number(e.target.value);
+  setSpeed(clip, Math.abs(value) < 0.03 ? 1 : 2 ** value);
+  markDirty();
+  refreshClip(clip);
+});
+$('#clip-speed-range').addEventListener('change', render);
+$('#clip-speed').addEventListener('change', (e) => {
+  const clip = selectedClip();
+  if (!clip) return;
+  const value = Number(e.target.value);
+  if (!(value > 0)) { toast('Type a speed from 0.25 to 4', true); renderInspector(); return; }
+  setSpeed(clip, value);
+  markDirty();
+  render();
+});
+$('#clip-speed-reset').addEventListener('click', () => {
+  const clip = selectedClip();
+  if (!clip) return;
+  setSpeed(clip, 1);
+  markDirty();
+  render();
+});
+
+// Effect and how much of it you hear.
+for (const effect of Fx.VOICE) {
+  const option = document.createElement('option');
+  option.value = effect.id;
+  option.textContent = effect.name;
+  option.title = effect.hint;
+  $('#clip-fx').appendChild(option);
+}
+$('#clip-fx').addEventListener('change', (e) => {
+  const clip = selectedClip();
+  if (!clip) return;
+  if (e.target.value) {
+    clip.fx = e.target.value;
+    clip.fxAmount = clip.fxAmount ?? 1;
+  } else {
+    delete clip.fx;
+    delete clip.fxAmount;
+  }
+  markDirty();
+  render();
+});
+$('#clip-fx-amount').addEventListener('input', (e) => {
+  const clip = selectedClip();
+  if (!clip || !clip.fx) return;
+  clip.fxAmount = Math.round(Number(e.target.value) * 100) / 100;
+  markDirty();
+  refreshClip(clip);
+});
+$('#clip-fx-amount').addEventListener('change', render);
 
 function updateRepeat() {
   const clip = selectedClip();

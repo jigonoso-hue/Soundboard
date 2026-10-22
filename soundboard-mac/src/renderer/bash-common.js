@@ -1,4 +1,4 @@
-/* global window, document, AudioContext, Icons */
+/* global window, document, AudioContext, Icons, Fx */
 // Shared by the main board and the bash editor windows: bash playback,
 // waveform peaks and cover rendering.
 (function (root) {
@@ -84,19 +84,29 @@
       if (this.pending !== token) return; // another play/stop happened while decoding
 
       const startedAt = this.ctx.currentTime + 0.05;
-      const active = { bashId: bash.id, runId: `${Date.now().toString(36)}-${++this.runs}`, sources: [], startedAt, from, duration: 0, voices: [] };
+      const active = { bashId: bash.id, runId: `${Date.now().toString(36)}-${++this.runs}`, sources: [], startedAt, from, duration: 0, tail: 0, voices: [] };
       for (const { clip, sound, buffer } of entries) {
         active.duration = Math.max(active.duration, clipEnd(clip, buffer.duration));
         const gain = this.ctx.createGain();
         gain.gain.value = clip.volume * (sound.volume ?? 1);
         gain.connect(this.master);
+        // Squashed or pulled clips play faster or slower (and higher or lower),
+        // and an effect (some change speed too) rings on for its tail.
+        const fx = clip.fx && typeof Fx !== 'undefined' ? Fx.validAny(clip.fx) : null;
+        const fxInfo = fx ? Fx.info(fx) : { tail: 0, rate: 1 };
+        const rate = clipRate(clip);
+        const length = buffer.duration / rate;
+        active.tail = Math.max(active.tail, fxInfo.tail);
         // Each voice schedules its plays: once, or repeatedly every (length + gap).
-        const period = buffer.duration + (clip.repeat ? clip.repeat.gap : 0);
+        const period = length + (clip.repeat ? clip.repeat.gap : 0);
         const plays = clip.repeat ? (clip.repeat.times || Infinity) : 1;
         // Skip plays that finished before `from`.
         let index = clip.offset >= from || period <= 0 ? 0 : Math.floor((from - clip.offset) / period);
-        if (index > 0 && from - (clip.offset + index * period) >= buffer.duration) index++;
-        active.voices.push({ buffer, gain, period, plays, offset: clip.offset, index, sound, volume: gain.gain.value });
+        if (index > 0 && from - (clip.offset + index * period) >= length) index++;
+        active.voices.push({
+          buffer, gain, period, plays, offset: clip.offset, index, sound, volume: gain.gain.value,
+          rate, speed: rate / fxInfo.rate, length, fx, fxAmount: fx ? Math.max(0, Math.min(1, clip.fxAmount ?? 1)) : 0, tail: fxInfo.tail,
+        });
         active.sources.push({ gain, source: null });
       }
       this.active = active;
@@ -108,7 +118,7 @@
       if (Number.isFinite(active.duration)) {
         this.endTimer = setTimeout(() => {
           if (this.active === active) this.stop();
-        }, Math.max(0, active.duration - from) * 1000 + 150);
+        }, (Math.max(0, active.duration - from) + active.tail) * 1000 + 150);
       }
     }
 
@@ -122,20 +132,43 @@
           const start = voice.offset + voice.index * voice.period; // bash time
           const when = active.startedAt + (start - active.from);
           if (when > horizon) break;
-          const into = Math.max(0, active.from - start);
-          if (into < voice.buffer.duration) {
+          const into = Math.max(0, active.from - start); // bash seconds
+          if (into < voice.length) {
             const source = this.ctx.createBufferSource();
             source.buffer = voice.buffer;
-            source.connect(voice.gain);
+            source.playbackRate.value = voice.rate;
             const startAt = Math.max(when, this.ctx.currentTime);
-            source.start(startAt, into);
+            if (voice.fx) {
+              // Each play gets its own effect, so its echo and hiss belong to it.
+              const chain = Fx.chain(this.ctx, voice.fx);
+              const wet = this.ctx.createGain();
+              const dry = this.ctx.createGain();
+              wet.gain.value = voice.fxAmount;
+              dry.gain.value = 1 - voice.fxAmount;
+              source.connect(dry);
+              dry.connect(voice.gain);
+              source.connect(chain.input);
+              chain.output.connect(wet);
+              wet.connect(voice.gain);
+              for (const s of chain.sources) {
+                s.start(startAt);
+                s.stop(startAt + (voice.length - into) + chain.tail);
+              }
+            } else {
+              source.connect(voice.gain);
+            }
+            source.start(startAt, into * voice.rate);
             if (this.onSchedule) {
               this.onSchedule({
                 runId: active.runId,
                 sound: voice.sound,
                 at: Date.now() + (startAt - this.ctx.currentTime - into) * 1000,
                 volume: voice.volume * this.master.gain.value,
-                dur: voice.buffer.duration,
+                dur: voice.length,
+                // The clip's own speed: listeners add the effect's (Demon, Fairy) themselves.
+                rate: Math.round(voice.speed * 1000) / 1000,
+                fx: voice.fx,
+                fxAmount: voice.fxAmount,
               });
             }
             active.sources.push({ source, gain: voice.gain });
@@ -174,8 +207,18 @@
     }
   }
 
+  // How fast a clip plays: squashed or pulled on the timeline, times its
+  // effect's own speed (Demon is slower, Fairy faster).
+  function clipRate(clip) {
+    const speed = Number(clip.speed) > 0 ? Number(clip.speed) : 1;
+    const fxRate = clip.fx && typeof Fx !== 'undefined' && Fx.validAny(clip.fx) ? Fx.info(clip.fx).rate : 1;
+    return speed * fxRate;
+  }
+
   // When a clip's last play ends, in bash time (Infinity if it repeats until stopped).
-  function clipEnd(clip, length) {
+  // length: the sound's own length; the clip's speed changes how long it lasts.
+  function clipEnd(clip, soundLength) {
+    const length = soundLength / clipRate(clip);
     if (!clip.repeat) return clip.offset + length;
     if (!clip.repeat.times) return Infinity;
     return clip.offset + clip.repeat.times * length + (clip.repeat.times - 1) * clip.repeat.gap;
@@ -226,5 +269,5 @@
     return out;
   }
 
-  root.BashCommon = { ICONS, ICON_COLORS, BashPlayer, renderCover, peaks, readPrefs, clipEnd };
+  root.BashCommon = { ICONS, ICON_COLORS, BashPlayer, renderCover, peaks, readPrefs, clipEnd, clipRate };
 })(window);

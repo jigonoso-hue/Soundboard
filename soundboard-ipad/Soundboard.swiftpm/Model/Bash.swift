@@ -17,9 +17,27 @@ struct BashClip: Identifiable, Codable, Equatable {
     /// Row in the timeline editor.
     var lane: Int
     var repetition: ClipRepeat? = nil
+    /// Squashed (faster and higher) or pulled (slower and deeper), like a tape; nil = as recorded.
+    var speed: Double? = nil
+    /// A voice effect (VoiceEffect's raw value) and how much of it you hear, 0…1.
+    var fx: String? = nil
+    var fxAmount: Double? = nil
+
+    static let minSpeed = 0.25
+    static let maxSpeed = 4.0
+
+    var effect: VoiceEffect? { fx.flatMap { VoiceEffect(rawValue: $0) } }
+    var playSpeed: Double { speed.map { $0 > 0 ? $0 : 1 } ?? 1 }
+    /// How fast it plays overall: its speed, and its effect's (Demon is slower, Fairy faster).
+    var rate: Double { playSpeed * (effect?.rate ?? 1) }
+
+    /// How long one play lasts, for a sound `soundLength` seconds long.
+    func playLength(_ soundLength: Double) -> Double { soundLength / rate }
 
     /// When this clip's last play ends, or nil if it repeats until stopped.
-    func end(length: Double) -> Double? {
+    /// length: the sound's own length (the clip's speed changes how long it lasts).
+    func end(length soundLength: Double) -> Double? {
+        let length = playLength(soundLength)
         guard let repetition else { return offset + length }
         guard repetition.times > 0 else { return nil }
         return offset + Double(repetition.times) * length + Double(repetition.times - 1) * repetition.gap
@@ -237,6 +255,17 @@ final class BashStore: ObservableObject {
                     gap: min(3600, max(0, (r.gap * 10).rounded() / 10)),
                     times: r.times >= 2 ? min(999, r.times) : 0
                 )
+            }
+            if let speed = clip.speed, speed > 0, abs(speed - 1) > 0.001 {
+                c.speed = (min(BashClip.maxSpeed, max(BashClip.minSpeed, speed)) * 100).rounded() / 100
+            } else {
+                c.speed = nil
+            }
+            if clip.effect != nil {
+                c.fxAmount = (min(1, max(0, clip.fxAmount ?? 1)) * 100).rounded() / 100
+            } else {
+                c.fx = nil
+                c.fxAmount = nil
             }
             return c
         }

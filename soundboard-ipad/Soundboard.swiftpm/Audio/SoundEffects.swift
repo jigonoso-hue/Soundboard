@@ -105,6 +105,9 @@ enum SoundEffect: String, CaseIterable, Identifiable {
         band.bandwidth = bandwidth
         band.bypass = false
     }
+
+    /// The same effect in the full list (bash clips, Live Session plays).
+    var voice: VoiceEffect { VoiceEffect(rawValue: rawValue) ?? .radio }
 }
 
 /// What a playing copy of a sound needs from its player: AVAudioPlayer, or
@@ -125,8 +128,10 @@ protocol VoicePlayer: AnyObject {
 
 extension AVAudioPlayer: VoicePlayer {}
 
-/// Plays a file through a sound effect, with the same controls as
-/// AVAudioPlayer (volume and fades, seeking, looping, starting at a time).
+/// Plays a file through a sound effect, faster or slower, with the same
+/// controls as AVAudioPlayer (volume and fades, seeking, looping, starting at
+/// a time). currentTime and duration are in the file's own time; it plays
+/// `rate` seconds of the file each second.
 final class FxPlayer: VoicePlayer {
     private let engine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
@@ -134,6 +139,13 @@ final class FxPlayer: VoicePlayer {
     private let file: AVAudioFile
     private let sampleRate: Double
     private let tail: TimeInterval
+    /// An effect's own sound (Static's hiss), heard only while the file plays.
+    private var sideGate: AVAudioMixerNode?
+    /// Warble's pitch, moved while it plays.
+    private var wobble: AVAudioUnitTimePitch?
+    private var wobbleTimer: Timer?
+    private var wobbleStart = Date()
+    let rate: Double
     /// Where the scheduled part of the file starts, in frames.
     private var segmentStart: AVAudioFramePosition = 0
     /// Where play() starts from (moved by setting currentTime).
@@ -146,20 +158,69 @@ final class FxPlayer: VoicePlayer {
     var numberOfLoops = 0
     let duration: TimeInterval
 
-    init(contentsOf url: URL, effect: SoundEffect) throws {
+    /// A scene kit's effect.
+    convenience init(contentsOf url: URL, effect: SoundEffect) throws {
+        try self.init(contentsOf: url, voice: effect.voice)
+    }
+
+    /// voice: the effect, or nil for none. amount: how much of it you hear (the
+    /// rest is the plain sound). speed: faster and higher, or slower and deeper.
+    init(contentsOf url: URL, voice: VoiceEffect?, amount: Double = 1, speed: Double = 1) throws {
         file = try AVAudioFile(forReading: url)
         let format = file.processingFormat
         sampleRate = format.sampleRate
         duration = sampleRate > 0 ? Double(file.length) / sampleRate : 0
-        tail = effect.tail
-        let units = effect.makeUnits()
+        let chain = voice?.makeChain() ?? VoiceEffect.Chain()
+        tail = chain.tail
+        rate = max(0.1, speed * chain.rate)
+        wobble = chain.wobble
         engine.attach(node)
-        for unit in units { engine.attach(unit) }
         engine.attach(output)
-        let chain: [AVAudioNode] = [node] + units + [output]
-        for index in 0..<(chain.count - 1) {
-            engine.connect(chain[index], to: chain[index + 1], format: format)
+
+        // Speed goes first, so the plain and the effected sound stay together.
+        var source: AVAudioNode = node
+        if abs(rate - 1) > 0.001 {
+            let varispeed = AVAudioUnitVarispeed()
+            varispeed.rate = Float(rate)
+            engine.attach(varispeed)
+            engine.connect(node, to: varispeed, format: format)
+            source = varispeed
         }
+        guard voice != nil, !chain.units.isEmpty else {
+            engine.connect(source, to: output, format: format)
+            engine.connect(output, to: engine.mainMixerNode, format: nil)
+            return
+        }
+
+        // The sound splits: through the effect (wet) and as it is (dry).
+        let mix = Float(min(1, max(0, amount)))
+        let wet = AVAudioMixerNode()
+        let dry = AVAudioMixerNode()
+        engine.attach(wet)
+        engine.attach(dry)
+        wet.outputVolume = mix
+        dry.outputVolume = 1 - mix
+        for unit in chain.units { engine.attach(unit) }
+        engine.connect(source, to: [AVAudioConnectionPoint(node: chain.units[0], bus: 0), AVAudioConnectionPoint(node: dry, bus: 0)],
+                       fromBus: 0, format: format)
+        for index in 1..<chain.units.count {
+            engine.connect(chain.units[index - 1], to: chain.units[index], format: format)
+        }
+        engine.connect(chain.units[chain.units.count - 1], to: wet, fromBus: 0, toBus: 0, format: format)
+        if !chain.side.isEmpty {
+            let gate = AVAudioMixerNode()
+            gate.outputVolume = 0
+            engine.attach(gate)
+            for node in chain.side { engine.attach(node) }
+            for index in 1..<chain.side.count {
+                engine.connect(chain.side[index - 1], to: chain.side[index], format: format)
+            }
+            engine.connect(chain.side[chain.side.count - 1], to: gate, format: format)
+            engine.connect(gate, to: wet, fromBus: 0, toBus: wet.nextAvailableInputBus, format: format)
+            sideGate = gate
+        }
+        engine.connect(wet, to: output, fromBus: 0, toBus: 0, format: format)
+        engine.connect(dry, to: output, fromBus: 0, toBus: output.nextAvailableInputBus, format: format)
         engine.connect(output, to: engine.mainMixerNode, format: nil)
     }
 
@@ -214,6 +275,7 @@ final class FxPlayer: VoicePlayer {
         fadeTimer?.invalidate()
         fadeTimer = nil
         node.stop()
+        sideGate?.outputVolume = 0
         playing = false
         resumeFrame = 0
         windDown()
@@ -249,6 +311,20 @@ final class FxPlayer: VoicePlayer {
         guard schedule(from: resumeFrame) else { return false }
         node.play(at: when)
         playing = true
+        let delay = when.map { max(0, AVAudioTime.seconds(forHostTime: $0.hostTime) - deviceCurrentTime) } ?? 0
+        if let gate = sideGate {
+            let current = generation
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                if let self, self.playing, self.generation == current { gate.outputVolume = 1 }
+            }
+        }
+        if let wobble, wobbleTimer == nil {
+            wobbleStart = Date().addingTimeInterval(delay)
+            wobbleTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                wobble.pitch = VoiceEffect.wobble(at: max(0, Date().timeIntervalSince(self.wobbleStart)))
+            }
+        }
         return true
     }
 
@@ -284,6 +360,7 @@ final class FxPlayer: VoicePlayer {
     private func finished() {
         playing = false
         resumeFrame = 0
+        sideGate?.outputVolume = 0
         windDown()
     }
 
@@ -291,7 +368,11 @@ final class FxPlayer: VoicePlayer {
     /// kept alive until then, even if nothing else holds it.
     private func windDown() {
         DispatchQueue.main.asyncAfter(deadline: .now() + tail + 0.3) { [self] in
-            if !self.playing { self.engine.stop() }
+            if !self.playing {
+                self.engine.stop()
+                self.wobbleTimer?.invalidate()
+                self.wobbleTimer = nil
+            }
         }
     }
 }

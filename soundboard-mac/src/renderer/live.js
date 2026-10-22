@@ -216,7 +216,7 @@ const Live = (() => {
 
   // Bash clips arrive one play at a time from the bash player.
   // An armed whisper or emphasis applies to every clip of the next bash.
-  Bashes.player.onSchedule = ({ runId, sound, at, volume, dur }) => {
+  Bashes.player.onSchedule = ({ runId, sound, at, volume, dur, rate = 1, fx = null, fxAmount = 1 }) => {
     if (!hosting() || !sound || sound.gmOnly) return;
     if (!seenRuns.has(runId)) {
       if (seenRuns.size > 200) seenRuns.clear();
@@ -230,6 +230,9 @@ const Live = (() => {
     api.live.hostEvent({
       t: 'play', pid: pid(), group: `b:${runId}`, soundId: sound.id, name: sound.name,
       at, volume: Math.min(1, volume), cat: 'sfx', buzz: !!sound.buzz || !!(armed && armed.emphasis), dur,
+      // A squashed or pulled clip, and its effect and how much of it.
+      ...(rate !== 1 ? { rate } : {}),
+      ...(fx ? { fx, ...(fxAmount < 1 ? { fxMix: fxAmount } : {}) } : {}),
       ...(armed && armed.to ? { to: armed.to } : {}),
     });
   };
@@ -429,15 +432,21 @@ const Live = (() => {
       const audio = new Audio();
       const fx = Fx.prepare(audio, cmd.fx);
       audio.src = cmd.url;
-      if (fx) Fx.attach(audio, cmd.fx);
+      // A squashed or pulled bash clip: faster and higher, or slower and deeper.
+      if (cmd.rate > 0 && cmd.rate !== 1) {
+        audio.preservesPitch = false;
+        audio.playbackRate = cmd.rate;
+      }
+      if (fx) Fx.attach(audio, cmd.fx, cmd.fxMix ?? 1);
       sink(audio);
       const entry = { audio, group: cmd.group, cat: cmd.cat, volume: cmd.volume, timer: null, name: cmd.name, whisper: cmd.whisper, by: cmd.by || null, at: cmd.at };
       plays.set(cmd.pid, entry);
       audio.volume = cmd.fadeIn > 0 ? 0 : Math.min(1, cmd.volume * level(cmd.cat));
       if (cmd.loop) audio.loop = true;
       const finish = () => { clearTimeout(entry.timer); Fx.release(audio); if (plays.get(cmd.pid) === entry) { plays.delete(cmd.pid); renderNowPlaying(); } };
+      // position: seconds of listening time in; a faster or slower sound covers more or less of its file.
       const startAt = (position) => {
-        audio.currentTime = position;
+        audio.currentTime = position * (audio.playbackRate || 1);
         audio.play().catch(finish);
         // A song crossfading in: what's left of the fade, if it started late.
         if (cmd.fadeIn > 0) {
@@ -458,7 +467,7 @@ const Live = (() => {
         if (wait > 0) { entry.timer = setTimeout(() => startAt(0), wait); return; }
         // Late (joined mid-way, or the file arrived late): start part-way through.
         const elapsed = -wait / 1000;
-        const length = audio.duration || 0;
+        const length = (audio.duration || 0) / (audio.playbackRate || 1);
         if (cmd.loop && length) { startAt(elapsed % length); return; }
         if (cmd.gap && length) {
           const period = length + cmd.gap;

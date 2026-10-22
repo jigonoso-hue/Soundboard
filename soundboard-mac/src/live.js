@@ -22,7 +22,10 @@ const CHUNK_SIZE = 256 * 1024;
 const MAX_MESSAGE = 1024 * 1024;
 const CHUNKS_IN_FLIGHT = 4;
 // Sound effects a play can carry (renderer/fx.js, SoundEffects.swift).
-const FX_IDS = ['distant', 'echo', 'radio', 'underwater'];
+const FX_IDS = ['distant', 'echo', 'radio', 'underwater', 'static', 'distorted', 'robot', 'ghost', 'demon', 'cave', 'megaphone', 'warble', 'fairy'];
+// A squashed or pulled bash clip's speed, and how much of its effect (0…1).
+const cleanRate = (value) => { const n = Number(value); return Number.isFinite(n) && n > 0 && Math.abs(n - 1) > 0.001 ? Math.min(5.4, Math.max(0.18, n)) : null; };
+const cleanMix = (value) => { const n = Number(value); return Number.isFinite(n) && n >= 0 && n < 1 ? n : null; };
 const HASH_RE = /^[0-9a-f]{64}$/;
 const EXT_RE = /^[a-z0-9]{1,5}$/;
 const BUILTIN_RE = /^[a-z0-9-]+\.wav$/;
@@ -824,7 +827,11 @@ class LiveHost extends EventEmitter {
     const fadeIn = fadeSeconds(event.fadeIn);
     if (fadeIn) message.fadeIn = fadeIn;
     if (event.by) message.by = String(event.by).slice(0, 40);
-    if (FX_IDS.includes(event.fx)) message.fx = event.fx;
+    if (FX_IDS.includes(event.fx)) {
+      message.fx = event.fx;
+      if (cleanMix(event.fxMix) !== null) message.fxMix = cleanMix(event.fxMix);
+    }
+    if (cleanRate(event.rate) !== null) message.rate = cleanRate(event.rate);
     const targets = Array.isArray(event.to) ? event.to : (event.to ? [event.to] : null);
     if (targets) {
       for (const peer of targets) if (this.peers.has(peer)) await this.sendTo(peer, message);
@@ -1305,7 +1312,8 @@ class LiveListener extends EventEmitter {
       whisper: !!message.whisper,
       by: message.by ? String(message.by).slice(0, 40) : null,
       ...(fadeSeconds(message.fadeIn) ? { fadeIn: fadeSeconds(message.fadeIn) } : {}),
-      ...(FX_IDS.includes(message.fx) ? { fx: message.fx } : {}),
+      ...(FX_IDS.includes(message.fx) ? { fx: message.fx, ...(cleanMix(message.fxMix) !== null ? { fxMix: cleanMix(message.fxMix) } : {}) } : {}),
+      ...(cleanRate(message.rate) !== null ? { rate: cleanRate(message.rate) } : {}),
     });
   }
 

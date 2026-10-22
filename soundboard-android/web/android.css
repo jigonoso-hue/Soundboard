@@ -74,5 +74,5 @@
   .android .ed-library > p { display: none; }
   .android .lib-list button { min-width: 44px; min-height: 44px; }
   .android .inspector { max-height: 30dvh; overflow-y: auto; }
-  .android #inspector-clip button { min-height: 44px; }
+  .android #inspector-clip button, .android #inspector-clip select, .android #inspector-clip input[type="number"] { min-height: 44px; }
 }
