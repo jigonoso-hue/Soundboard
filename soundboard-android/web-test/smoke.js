@@ -97,6 +97,8 @@ const check = (ok, msg) => { log.push(`${ok ? 'PASS' : 'FAIL'} ${msg}`); console
     await frame.click('.lib-row button');
     await frame.waitForTimeout(800);
     await frame.$eval('#zoom', (el) => { el.value = '15'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    // Edges trim by default; Speed makes the right edge squash and pull.
+    await frame.click('#mode-speed');
     const before = await frame.$eval('.clip', (el) => el.getBoundingClientRect().width);
     const handle = await frame.$eval('.clip-stretch', (el) => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
     const box = await page.$eval('iframe.android-editor', (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y }; });

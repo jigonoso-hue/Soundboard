@@ -116,3 +116,24 @@ test('clips keep their speed (squashed or pulled) and effect, within limits', ()
   ]);
   assert.deepEqual(new BashStore(store.dir).get(bash.id).clips[0], saved.clips[0], 'kept on disk');
 });
+
+test('clips keep their trims, and a bash its own length, within limits', () => {
+  const store = new BashStore(fs.mkdtempSync(path.join(os.tmpdir(), 'bash-trim-')));
+  const bash = store.create({ name: 'Ambush', soundIds: ['a', 'b', 'c'] });
+  const [a, b, c] = bash.clips;
+  let saved = store.update(bash.id, {
+    clips: [
+      { ...a, trimStart: 1.25, trimEnd: 4 },
+      { ...b, trimStart: 3, trimEnd: 2 }, // an end before the start keeps a sliver
+      { ...c, trimStart: -2, trimEnd: 0 },
+    ],
+    length: 12.3456,
+  });
+  assert.deepEqual(saved.clips.map((x) => [x.trimStart, x.trimEnd]), [[1.25, 4], [3, 3.02], [undefined, undefined]]);
+  assert.equal(saved.length, 12.346);
+  assert.equal(new BashStore(store.dir).get(bash.id).length, 12.346, 'kept on disk');
+  assert.equal(store.duplicate(bash.id).length, 12.346, 'a copy keeps it');
+  saved = store.update(bash.id, { length: null });
+  assert.equal(saved.length, undefined, 'Auto takes it off');
+  assert.equal(store.update(bash.id, { length: 0.01 }).length, 0.1);
+});

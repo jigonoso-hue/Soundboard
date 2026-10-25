@@ -34,6 +34,20 @@
     </aside>
 
     <main class="ed-main">
+      <div class="ed-tools">
+        <button id="cut-btn" title="Cut the selected sound in two at the playhead, or every sound under it if none is selected (C)"><i data-icon="scissors"></i> Cut at playhead</button>
+        <span class="tool-group" role="group" aria-label="Dragging a sound's edges">
+          <span class="muted">Edges</span>
+          <button id="mode-trim" class="seg" data-mode="trim" title="Drag either edge of a sound to trim it: cut off its start or its end">Trim</button>
+          <button id="mode-speed" class="seg" data-mode="speed" title="Drag a sound's right edge to squash it (faster) or pull it (slower). The left edge still trims.">Speed</button>
+        </span>
+        <span class="tool-group" title="The bash stops here, whatever is still playing (repeats too). Auto: when its last sound ends. You can also drag the red end marker on the timeline.">
+          <label class="muted" for="bash-length">Bash length</label>
+          <input id="bash-length" class="mono time" placeholder="Auto" aria-label="Bash length">
+          <button id="length-here" title="End the bash at the playhead">End at playhead</button>
+          <button id="length-auto" title="Play until the last sound ends">Auto</button>
+        </span>
+      </div>
       <div id="timeline" class="timeline">
         <div id="content" class="timeline-content">
           <div id="ruler" class="ruler"></div>
@@ -45,13 +59,19 @@
       <div id="inspector" class="inspector">
         <div id="inspector-empty" class="muted">
           Select a clip to edit it. Drag clips <b>left/right</b> to change when they start and <b>up/down</b> to move them between layers.
-          Click the ruler to move the playhead. Space plays, Delete removes, ←/→ nudge. Select a clip to make it <b>repeat</b>, change its <b>speed</b> or add an <b>effect</b>. Drag a clip's right edge to squash it (faster) or pull it (slower).
+          Click the ruler to move the playhead. Space plays, Delete removes, ←/→ nudge. Drag a clip's <b>edges</b> to trim it, and <b>Cut at playhead</b> (C) to split it in two. Select a clip to make it <b>repeat</b>, change its <b>speed</b> or add an <b>effect</b>. Set <b>Bash length</b> to stop the whole bash at a time you choose.
         </div>
         <div id="inspector-clip" class="hidden">
           <span id="clip-color" class="dot"></span>
           <b id="clip-name"></b>
           <label>Starts at <input id="clip-offset" class="mono time" aria-label="Start time"></label>
           <label>Volume <input id="clip-volume" type="range" min="0" max="1" step="0.01"></label>
+          <span class="clip-trim" title="The part of the sound this clip plays. Or drag the clip's edges.">
+            <label>Plays from <input id="clip-trim-start" class="mono time" aria-label="Trim start"></label>
+            <label>to <input id="clip-trim-end" class="mono time" aria-label="Trim end"></label>
+            <span id="clip-sound-length" class="muted small"></span>
+            <button id="clip-trim-reset" title="Play the whole sound again">Untrim</button>
+          </span>
           <span class="clip-speed" title="Faster is shorter and higher, slower is longer and deeper. You can also drag the clip's right edge.">
             <label>Speed <input id="clip-speed-range" type="range" min="-2" max="2" step="0.01" aria-label="Speed"></label>
             <input id="clip-speed" type="number" min="0.25" max="4" step="0.05" aria-label="Speed (times)"><span class="muted">×</span>

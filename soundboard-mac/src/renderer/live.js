@@ -216,7 +216,10 @@ const Live = (() => {
 
   // Bash clips arrive one play at a time from the bash player.
   // An armed whisper or emphasis applies to every clip of the next bash.
-  Bashes.player.onSchedule = ({ runId, sound, at, volume, dur, rate = 1, fx = null, fxAmount = 1 }) => {
+  // Trimmed or cut clips get a group of their own, stopped for listeners when the
+  // clip should end: runId -> { groups: Set, timers: [] }.
+  const bashRuns = new Map();
+  Bashes.player.onSchedule = ({ runId, sound, at, volume, dur, rate = 1, fx = null, fxAmount = 1, from = 0, stopAt = null }) => {
     if (!hosting() || !sound || sound.gmOnly) return;
     if (!seenRuns.has(runId)) {
       if (seenRuns.size > 200) seenRuns.clear();
@@ -227,17 +230,36 @@ const Live = (() => {
       }
     }
     const armed = armedRun && armedRun.runId === runId ? armedRun : null;
+    const id = pid();
+    let group = `b:${runId}`;
+    if (stopAt) {
+      group = `b:${runId}:${id}`;
+      if (!bashRuns.has(runId)) bashRuns.set(runId, { groups: new Set(), timers: [] });
+      const run = bashRuns.get(runId);
+      run.groups.add(group);
+      run.timers.push(setTimeout(() => {
+        run.groups.delete(group);
+        if (hosting()) api.live.hostEvent({ t: 'stop', group, fade: 0.02 });
+      }, Math.max(0, stopAt - Date.now())));
+    }
     api.live.hostEvent({
-      t: 'play', pid: pid(), group: `b:${runId}`, soundId: sound.id, name: sound.name,
+      t: 'play', pid: id, group, soundId: sound.id, name: sound.name,
       at, volume: Math.min(1, volume), cat: 'sfx', buzz: !!sound.buzz || !!(armed && armed.emphasis), dur,
       // A squashed or pulled clip, and its effect and how much of it.
       ...(rate !== 1 ? { rate } : {}),
+      // A trimmed clip starts this far into its sound.
+      ...(from > 0 ? { from } : {}),
       ...(fx ? { fx, ...(fxAmount < 1 ? { fxMix: fxAmount } : {}) } : {}),
       ...(armed && armed.to ? { to: armed.to } : {}),
     });
   };
   Bashes.player.onStop = (runId) => {
-    if (hosting()) api.live.hostEvent({ t: 'stop', group: `b:${runId}` });
+    const run = bashRuns.get(runId);
+    bashRuns.delete(runId);
+    if (run) for (const timer of run.timers) clearTimeout(timer);
+    if (!hosting()) return;
+    api.live.hostEvent({ t: 'stop', group: `b:${runId}` });
+    if (run) for (const group of run.groups) api.live.hostEvent({ t: 'stop', group });
   };
 
   // Now-and-then ambience layers: each time one plays, listeners play it too.
@@ -440,13 +462,15 @@ const Live = (() => {
       if (fx) Fx.attach(audio, cmd.fx, cmd.fxMix ?? 1);
       sink(audio);
       const entry = { audio, group: cmd.group, cat: cmd.cat, volume: cmd.volume, timer: null, name: cmd.name, whisper: cmd.whisper, by: cmd.by || null, at: cmd.at };
+      // A trimmed bash clip: it starts this many seconds into the file.
+      const from = cmd.from > 0 ? cmd.from : 0;
       plays.set(cmd.pid, entry);
       audio.volume = cmd.fadeIn > 0 ? 0 : Math.min(1, cmd.volume * level(cmd.cat));
       if (cmd.loop) audio.loop = true;
       const finish = () => { clearTimeout(entry.timer); Fx.release(audio); if (plays.get(cmd.pid) === entry) { plays.delete(cmd.pid); renderNowPlaying(); } };
       // position: seconds of listening time in; a faster or slower sound covers more or less of its file.
       const startAt = (position) => {
-        audio.currentTime = position * (audio.playbackRate || 1);
+        audio.currentTime = from + position * (audio.playbackRate || 1);
         audio.play().catch(finish);
         // A song crossfading in: what's left of the fade, if it started late.
         if (cmd.fadeIn > 0) {
@@ -467,7 +491,7 @@ const Live = (() => {
         if (wait > 0) { entry.timer = setTimeout(() => startAt(0), wait); return; }
         // Late (joined mid-way, or the file arrived late): start part-way through.
         const elapsed = -wait / 1000;
-        const length = (audio.duration || 0) / (audio.playbackRate || 1);
+        const length = Math.max(0, (audio.duration || 0) - from) / (audio.playbackRate || 1);
         if (cmd.loop && length) { startAt(elapsed % length); return; }
         if (cmd.gap && length) {
           const period = length + cmd.gap;

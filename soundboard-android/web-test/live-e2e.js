@@ -172,6 +172,23 @@ async function until(fn, label, timeout = 15000) {
       `the player plays it faster and higher, 40% robot (${JSON.stringify(robot)})`);
     await gmPage.evaluate(() => Bashes.player.stop());
 
+    // A trimmed clip: listeners start part-way into the sound and stop where it was cut.
+    await gmPage.evaluate(() => {
+      const roar = sounds.find((s) => s.name === 'Dragon Roar');
+      Bashes.player.play({ id: 'e2e-trim', clips: [{ id: 'c2', soundId: roar.id, offset: 0, volume: 1, lane: 0, repeat: null, trimStart: 0.5, trimEnd: 1.5, fx: 'cave' }] }, sounds, 0);
+    });
+    const trimmed = await until(() => playerPage.evaluate(() => window.__native.map((e) => e.channel === 'live:command' && JSON.parse(e.json))
+      .find((c) => c && c.t === 'play' && c.fx === 'cave')), 'the trimmed clip at the player');
+    check(trimmed.from === 0.5 && /^b:[^:]+:/.test(trimmed.group), `a trimmed clip arrives with where it starts, in a group of its own (from ${trimmed.from}, ${trimmed.group})`);
+    const startedAt = await until(() => playerPage.evaluate(() => {
+      const audio = [...document.querySelectorAll('audio')].concat(window.__fxAudio || []).find((a) => a.fx && a.fx.id === 'cave');
+      return audio && !audio.paused ? audio.currentTime : null;
+    }), 'the player playing the trimmed clip');
+    check(startedAt >= 0.45 && startedAt < 1.5, `the player starts it part-way in (${startedAt.toFixed(2)} s)`);
+    const stopped = await until(() => playerPage.evaluate((group) => window.__native.map((e) => e.channel === 'live:command' && JSON.parse(e.json))
+      .find((c) => c && c.t === 'stop' && c.group === group), trimmed.group), 'the stop where it was cut');
+    check(!!stopped, 'the player is told to stop it where it was trimmed');
+
     // A built-in ambience loop reaches the player too.
     await gmPage.evaluate(() => { const toggle = document.querySelector('#amb-collapse'); if (document.querySelector('#amb-layers').classList.contains('hidden')) toggle.click(); });
     await gmPage.click('.layer-name:text-is("Rain")');

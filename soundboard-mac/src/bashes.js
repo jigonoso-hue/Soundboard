@@ -15,6 +15,11 @@ const MAX_OFFSET = 60 * 60;
 const CLIP_EFFECTS = ['radio', 'static', 'distorted', 'robot', 'ghost', 'demon', 'distant', 'echo', 'underwater', 'cave', 'megaphone', 'warble', 'fairy'];
 // How far a clip can be squashed (faster, higher) or pulled (slower, deeper).
 const MIN_SPEED = 0.25;
+// Trims: the shortest part of a sound a clip can keep, and how far into a sound a trim can be.
+const MIN_TRIM = 0.02;
+const MAX_SOUND = 6 * 60 * 60;
+// The shortest a bash can be cut to.
+const MIN_LENGTH = 0.1;
 const MAX_SPEED = 4;
 
 class BashStore {
@@ -70,7 +75,7 @@ class BashStore {
     const index = this.bashes.findIndex((b) => b.id === id);
     if (index < 0) throw new Error('Bash not found');
     const current = this.bashes[index];
-    const next = normalize({ ...current, ...pick(changes, ['name', 'clips', 'cover']), id: current.id, createdAt: current.createdAt });
+    const next = normalize({ ...current, ...pick(changes, ['name', 'clips', 'cover', 'length']), id: current.id, createdAt: current.createdAt });
     // An image cover can only be set through setCoverImage.
     if (next.cover.type === 'image' && next.cover.file !== current.cover.file) next.cover = current.cover;
     if (current.cover.type === 'image' && next.cover.type !== 'image') this._removeCoverFile(current.cover.file);
@@ -125,9 +130,9 @@ class BashStore {
     if (source.cover.type === 'image') {
       const data = fs.readFileSync(path.join(this.coversDir, source.cover.file));
       this.setCoverImage(copy.id, data, path.extname(source.cover.file).slice(1));
-      return this.update(copy.id, { clips: source.clips });
+      return this.update(copy.id, { clips: source.clips, length: source.length });
     }
-    return this.update(copy.id, { clips: source.clips, cover });
+    return this.update(copy.id, { clips: source.clips, cover, length: source.length });
   }
 
   // Drops clips that point at a deleted sound. Returns true if anything changed.
@@ -176,14 +181,28 @@ function normalize(bash) {
       ...(Number(c.speed) > 0 && Math.abs(Number(c.speed) - 1) > 0.001 ? { speed: Math.round(clamp(Number(c.speed), MIN_SPEED, MAX_SPEED) * 100) / 100 } : {}),
       // An effect, and how much of it (0…1).
       ...(CLIP_EFFECTS.includes(c.fx) ? { fx: c.fx, fxAmount: Math.round(clamp(Number(c.fxAmount ?? 1), 0, 1) * 100) / 100 } : {}),
+      // Trimmed: only the part of the sound from trimStart to trimEnd (seconds into it) plays.
+      ...normalizeTrim(c),
     }));
+  const length = Number(bash.length);
   return {
     id: bash.id,
     name: String(bash.name || 'Untitled bash').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 80) || 'Untitled bash',
     cover,
     clips,
+    // The bash's own length: everything stops here (repeats too). Left out = until its last sound ends.
+    ...(length > 0 ? { length: Math.round(clamp(length, MIN_LENGTH, MAX_OFFSET) * 1000) / 1000 } : {}),
     createdAt: bash.createdAt || new Date().toISOString(),
   };
+}
+
+function normalizeTrim(c) {
+  const out = {};
+  const start = Math.round(clamp(Number(c.trimStart) || 0, 0, MAX_SOUND) * 1000) / 1000;
+  if (start > 0) out.trimStart = start;
+  const end = Number(c.trimEnd);
+  if (end > 0) out.trimEnd = Math.round(clamp(end, start + MIN_TRIM, MAX_SOUND) * 1000) / 1000;
+  return out;
 }
 
 // null = play once. { gap, times }: replay `gap` seconds after each play ends
@@ -207,4 +226,4 @@ function pick(obj, keys) {
   return out;
 }
 
-module.exports = { BashStore, ICONS, ICON_COLORS, COVER_TYPES, CLIP_EFFECTS, MIN_SPEED, MAX_SPEED };
+module.exports = { BashStore, ICONS, ICON_COLORS, COVER_TYPES, CLIP_EFFECTS, MIN_SPEED, MAX_SPEED, MIN_TRIM, MIN_LENGTH };

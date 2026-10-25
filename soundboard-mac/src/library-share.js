@@ -88,6 +88,7 @@ function exportPlan({ library, bashes, kits, app = 'Dungeon Radio' }) {
       name: b.name,
       cover,
       clips: b.clips.filter((c) => soundIds.has(id(c.soundId))).map((c) => ({ ...c, soundId: id(c.soundId) })),
+      ...(b.length ? { length: b.length } : {}),
       createdAt: b.createdAt || null,
     });
   }
@@ -168,7 +169,10 @@ function readManifest(raw) {
         repeat: c.repeat && typeof c.repeat === 'object' ? { gap: num(c.repeat.gap, 0, 3600, 0), times: Math.floor(num(c.repeat.times, 0, 999, 0)) } : null,
         ...(Number(c.speed) > 0 ? { speed: num(c.speed, 0.25, 4, 1) } : {}),
         ...(typeof c.fx === 'string' ? { fx: c.fx, fxAmount: num(c.fxAmount, 0, 1, 1) } : {}),
+        ...(Number(c.trimStart) > 0 ? { trimStart: num(c.trimStart, 0, 21600, 0) } : {}),
+        ...(Number(c.trimEnd) > 0 ? { trimEnd: num(c.trimEnd, 0, 21600, 0) } : {}),
       })),
+      ...(Number(b.length) > 0 ? { length: num(b.length, 0.1, 3600, 0) } : {}),
       createdAt: typeof b.createdAt === 'string' ? b.createdAt : null,
     });
   }

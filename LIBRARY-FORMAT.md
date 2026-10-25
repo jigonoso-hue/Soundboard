@@ -58,7 +58,9 @@ above: `<id>` is a lower-case UUID and `<ext>` 1–5 letters or digits.
                 "speed": 1.5, "fx": "robot", "fxAmount": 0.4 }]
             // speed: optional, 0.25…4 (left out = 1); fx: optional, a voice effect's id
             // (radio, static, distorted, robot, ghost, demon, distant, echo, underwater,
-            // cave, megaphone, warble, fairy) with fxAmount 0…1 (left out = 1)
+            // cave, megaphone, warble, fairy) with fxAmount 0…1 (left out = 1);
+            // trimStart / trimEnd: optional, seconds into the sound the clip plays from / to
+    "length": 30   // optional: the bash stops here (seconds); left out = when its last sound ends
   }],
   "kits": [{
     "id": "…", "name": "Tavern Brawl", "icon": "mug", "color": "#f5a742", "iconColor": "#ffffff",

@@ -37,6 +37,12 @@ object LiveNet {
         return if (n.isFinite() && n > 0 && kotlin.math.abs(n - 1) > 0.001) n.coerceIn(0.18, 5.4) else null
     }
 
+    /** Seconds into the file a trimmed bash clip starts from, or null for its start. */
+    fun cleanFrom(value: Any?): Double? {
+        val n = (value as? Number)?.toDouble() ?: return null
+        return if (n.isFinite() && n > 0) n.coerceAtMost(21600.0) else null
+    }
+
     /** How much of an effect (0…1), or null for all of it. */
     fun cleanMix(value: Any?): Double? {
         val n = (value as? Number)?.toDouble() ?: return null

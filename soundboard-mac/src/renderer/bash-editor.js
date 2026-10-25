@@ -21,10 +21,18 @@ const info = new Map(); // soundId -> { duration, peaks }
 
 const soundOf = (clip) => sounds.find((s) => s.id === clip.soundId);
 const soundLength = (clip) => info.get(clip.soundId)?.duration ?? 2;
-// How long one play of the clip lasts: its speed (and some effects, like Demon) change it.
-const clipDuration = (clip) => soundLength(clip) / BashCommon.clipRate(clip);
+// How long one play of the clip lasts: its trims, speed (and some effects, like Demon) change it.
+const clipDuration = (clip) => BashCommon.clipLength(clip, soundLength(clip));
+// The part of its sound the clip plays (seconds into the sound).
+const spanOf = (clip) => BashCommon.clipSpan(clip, soundLength(clip));
 // Bash time when the clip's last play ends (Infinity = repeats until stopped).
 const clipEnd = (clip) => BashCommon.clipEnd(clip, soundLength(clip));
+// Where the bash stops, if it has its own length (else Infinity).
+const bashLimit = () => BashCommon.bashLimit(bash);
+const round3 = (n) => Math.round(n * 1000) / 1000;
+// What dragging a clip's edges does: 'trim' (both edges) or 'speed' (the right edge squashes or pulls).
+let edgeMode = 'trim';
+try { if (localStorage.getItem('bashEdgeMode') === 'speed') edgeMode = 'speed'; } catch { /* no storage */ }
 const MIN_SPEED = 0.25;
 const MAX_SPEED = 4;
 const speedOf = (clip) => (Number(clip.speed) > 0 ? Number(clip.speed) : 1);
@@ -35,7 +43,7 @@ function setSpeed(clip, speed) {
   else clip.speed = value;
 }
 const fxName = (id) => (Fx.VOICE.find((e) => e.id === id) || {}).name || id;
-const totalDuration = () => bash.clips.reduce((end, c) => Math.max(end, clipEnd(c)), 0);
+const totalDuration = () => Math.min(bashLimit(), bash.clips.reduce((end, c) => Math.max(end, clipEnd(c)), 0));
 // Length to lay out on the timeline: endless repeats show a few plays.
 const layoutEnd = (clip) => {
   const end = clipEnd(clip);
@@ -43,7 +51,7 @@ const layoutEnd = (clip) => {
   const period = clipDuration(clip) + clip.repeat.gap;
   return clip.offset + Math.max(period * 4, 20);
 };
-const layoutDuration = () => bash.clips.reduce((end, c) => Math.max(end, layoutEnd(c)), 0);
+const layoutDuration = () => bash.clips.reduce((end, c) => Math.max(end, layoutEnd(c)), Number.isFinite(bashLimit()) ? bashLimit() : 0);
 const laneCount = () => Math.max(3, bash.clips.reduce((max, c) => Math.max(max, c.lane + 1), 0) + 1);
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
 
@@ -76,7 +84,7 @@ function markDirty() {
 async function save() {
   try {
     $('#save-btn').disabled = true;
-    const changes = { name: bash.name, clips: bash.clips };
+    const changes = { name: bash.name, clips: bash.clips, length: bash.length ?? null };
     if (!pendingCover && bash.cover.type === 'icon') changes.cover = bash.cover;
     await api.bashes.update(bashId, changes);
     if (pendingCover) await api.bashes.setCoverData(bashId, pendingCover);
@@ -152,7 +160,7 @@ function render() {
   if (!bash) return;
   renderTimeline();
   renderInspector();
-  renderTime();
+  renderTimeAndControls();
 }
 
 function rulerStep() {
@@ -215,19 +223,92 @@ function renderTimeline() {
     }
     renderTags(el, clip);
 
-    // The right edge squashes the clip (faster) or pulls it out (slower).
-    const stretch = document.createElement('div');
-    stretch.className = 'clip-stretch';
-    stretch.title = 'Drag to squash (faster) or pull (slower)';
-    stretch.addEventListener('pointerdown', (e) => startStretch(e, clip, el));
-    el.appendChild(stretch);
+    // The edges: the left one trims the start; the right one trims the end, or
+    // (Speed) squashes the clip (faster) or pulls it out (slower).
+    const left = document.createElement('div');
+    left.className = 'clip-edge left';
+    left.title = 'Drag to trim the start';
+    left.addEventListener('pointerdown', (e) => startTrim(e, clip, el, 'left'));
+    el.appendChild(left);
+    const right = document.createElement('div');
+    if (edgeMode === 'speed') {
+      right.className = 'clip-stretch';
+      right.title = 'Drag to squash (faster) or pull (slower)';
+      right.addEventListener('pointerdown', (e) => startStretch(e, clip, el));
+    } else {
+      right.className = 'clip-edge right';
+      right.title = 'Drag to trim the end';
+      right.addEventListener('pointerdown', (e) => startTrim(e, clip, el, 'right'));
+    }
+    el.appendChild(right);
 
     el.addEventListener('pointerdown', (e) => startDrag(e, clip, el));
     host.appendChild(el);
     drawWaveform(canvas, clip);
     drawRepeats(host, clip, sound, width);
   }
+  renderEndMarker();
   positionPlayhead();
+}
+
+// The bash's own end: a red line with a flag in the ruler to drag, and the time
+// after it shaded.
+function renderEndMarker() {
+  const content = $('#content');
+  for (const el of content.querySelectorAll('.bash-end, .bash-after')) el.remove();
+  const limit = bashLimit();
+  if (!Number.isFinite(limit)) return;
+  const height = RULER_HEIGHT + laneCount() * LANE_HEIGHT;
+  const after = document.createElement('div');
+  after.className = 'bash-after';
+  after.style.left = `${limit * pps}px`;
+  after.style.height = `${height}px`;
+  const end = document.createElement('div');
+  end.className = 'bash-end';
+  end.style.left = `${limit * pps}px`;
+  end.style.height = `${height}px`;
+  const flag = document.createElement('div');
+  flag.className = 'bash-end-flag';
+  flag.textContent = `End ${AudioUtils.formatTime(limit)}`;
+  flag.title = 'The bash stops here. Drag to change its length.';
+  flag.addEventListener('pointerdown', (e) => startEndDrag(e, flag));
+  end.appendChild(flag);
+  content.append(after, end);
+}
+
+function setLength(seconds) {
+  if (seconds === null || !(seconds > 0)) delete bash.length;
+  else bash.length = round3(Math.max(0.1, Math.min(3600, seconds)));
+  markDirty();
+}
+
+function startEndDrag(e, flag) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  flag.setPointerCapture(e.pointerId);
+  if (document.activeElement === $('#bash-length')) $('#bash-length').blur();
+  const origin = { x: e.clientX, length: bashLimit() };
+  const move = (ev) => {
+    const t = snapTime(origin.length + (ev.clientX - origin.x) / pps, null, ev.altKey || !$('#snap').checked);
+    setLength(t);
+    const left = `${bashLimit() * pps}px`;
+    $('.bash-end').style.left = left;
+    $('.bash-after').style.left = left;
+    flag.textContent = `End ${AudioUtils.formatTime(bashLimit())}`;
+    renderLengthControls();
+    renderTime();
+  };
+  flag.addEventListener('pointermove', move);
+  flag.addEventListener('pointerup', () => { flag.removeEventListener('pointermove', move); render(); }, { once: true });
+  flag.addEventListener('pointercancel', () => { flag.removeEventListener('pointermove', move); render(); }, { once: true });
+}
+
+function renderLengthControls() {
+  const limit = bashLimit();
+  if (document.activeElement !== $('#bash-length')) $('#bash-length').value = Number.isFinite(limit) ? AudioUtils.formatTime(limit) : '';
+  $('#length-auto').disabled = !Number.isFinite(limit);
+  for (const button of document.querySelectorAll('.seg')) button.classList.toggle('active', button.dataset.mode === edgeMode);
 }
 
 // The little labels along a clip's bottom: repeats, speed and effect.
@@ -244,6 +325,13 @@ function renderTags(el, clip) {
     rep.className = 'clip-repeat';
     Icons.set(rep, 'repeat', clip.repeat.times ? `×${clip.repeat.times}` : '∞', { size: 10 });
     tags.appendChild(rep);
+  }
+  if (clip.trimStart || clip.trimEnd) {
+    const tag = document.createElement('span');
+    tag.className = 'clip-tag';
+    tag.textContent = '✂';
+    tag.title = 'Trimmed';
+    tags.appendChild(tag);
   }
   const speed = speedOf(clip);
   if (speed !== 1) {
@@ -321,8 +409,13 @@ function drawWaveform(canvas, clip) {
   g.fillStyle = 'rgba(255,255,255,0.55)';
   const columns = data.peaks.length / 2;
   const mid = height / 2;
+  // Only the part the clip plays.
+  const span = spanOf(clip);
+  const length = soundLength(clip);
+  const first = (span.start / length) * columns;
+  const shown = ((span.end - span.start) / length) * columns;
   for (let x = 0; x < width; x++) {
-    const c = Math.min(columns - 1, Math.floor((x / width) * columns));
+    const c = Math.min(columns - 1, Math.floor(first + (x / width) * shown));
     const min = data.peaks[c * 2] * clip.volume;
     const max = data.peaks[c * 2 + 1] * clip.volume;
     g.fillRect(x, mid - max * mid * 0.9, 1, Math.max(1, (max - min) * mid * 0.9));
@@ -344,6 +437,11 @@ function renderInspector() {
   for (const input of [$('#clip-repeat-gap'), $('#clip-repeat-times')]) input.disabled = !clip.repeat;
   if (document.activeElement !== $('#clip-repeat-gap')) $('#clip-repeat-gap').value = clip.repeat ? clip.repeat.gap : 0;
   if (document.activeElement !== $('#clip-repeat-times')) $('#clip-repeat-times').value = clip.repeat && clip.repeat.times ? clip.repeat.times : '';
+  const span = spanOf(clip);
+  if (document.activeElement !== $('#clip-trim-start')) $('#clip-trim-start').value = AudioUtils.formatTime(span.start);
+  if (document.activeElement !== $('#clip-trim-end')) $('#clip-trim-end').value = AudioUtils.formatTime(span.end);
+  $('#clip-sound-length').textContent = `of ${AudioUtils.formatTime(soundLength(clip))}`;
+  $('#clip-trim-reset').disabled = !clip.trimStart && !clip.trimEnd;
   const speed = speedOf(clip);
   if (document.activeElement !== $('#clip-speed-range')) $('#clip-speed-range').value = Math.log2(speed);
   if (document.activeElement !== $('#clip-speed')) $('#clip-speed').value = speedText(speed);
@@ -354,6 +452,11 @@ function renderInspector() {
   $('#clip-fx-amount-label').classList.toggle('disabled', !clip.fx);
   if (document.activeElement !== $('#clip-fx-amount')) $('#clip-fx-amount').value = amount;
   $('#clip-fx-amount-value').textContent = clip.fx ? `${Math.round(amount * 100)}%` : '';
+}
+
+function renderTimeAndControls() {
+  renderTime();
+  renderLengthControls();
 }
 
 function renderTime() {
@@ -504,6 +607,112 @@ function onDragEnd() {
   }
 }
 
+// Snaps a bash time (a clip's edge, the bash's end) to the 0.1s grid, the playhead,
+// 0:00 and other clips' edges. `clip` (if any) is left out.
+function snapTime(t, clip, free) {
+  if (free) return Math.max(0, t);
+  const threshold = 8 / pps;
+  let best = Math.round(t * 10) / 10;
+  let bestDistance = Math.abs(best - t);
+  const candidates = [0, cursor];
+  for (const other of bash.clips) {
+    if (clip && other.id === clip.id) continue;
+    candidates.push(other.offset, other.offset + clipDuration(other));
+  }
+  for (const edge of candidates) {
+    const d = Math.abs(edge - t);
+    if (d < threshold && d <= bestDistance) { best = edge; bestDistance = d; }
+  }
+  return Math.max(0, round3(best));
+}
+
+// Dragging a clip's edge trims it: the right edge cuts off its end, the left edge
+// its start (the rest of the sound stays where it was in time).
+function startTrim(e, clip, el, side) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  select(clip.id);
+  const handle = e.currentTarget;
+  handle.setPointerCapture(e.pointerId);
+  dragging = {
+    clip, el, handle, side, x: e.clientX, moved: false,
+    offset: clip.offset, span: spanOf(clip), rate: BashCommon.clipRate(clip), sound: soundLength(clip),
+  };
+  handle.addEventListener('pointermove', onTrimMove);
+  handle.addEventListener('pointerup', onTrimEnd, { once: true });
+  handle.addEventListener('pointercancel', onTrimEnd, { once: true });
+}
+
+function onTrimMove(e) {
+  const d = dragging;
+  if (!d) return;
+  const dx = e.clientX - d.x;
+  if (!d.moved && Math.abs(dx) < 3) return;
+  d.moved = true;
+  d.el.classList.add('trimming');
+  const free = e.altKey || !$('#snap').checked;
+  const { clip, span, rate } = d;
+  if (d.side === 'right') {
+    const end = snapTime(d.offset + (span.end - span.start) / rate + dx / pps, clip, free);
+    const trimEnd = Math.max(span.start + BashCommon.MIN_TRIM, Math.min(d.sound, span.start + (end - d.offset) * rate));
+    if (trimEnd >= d.sound - 0.0005) delete clip.trimEnd;
+    else clip.trimEnd = round3(trimEnd);
+  } else {
+    const start = snapTime(d.offset + dx / pps, clip, free);
+    let trimStart = Math.max(0, Math.min(span.end - BashCommon.MIN_TRIM, span.start + (start - d.offset) * rate));
+    // Not before 0:00 on the timeline.
+    trimStart = Math.max(trimStart, span.start - d.offset * rate);
+    clip.offset = Math.max(0, round3(d.offset + (trimStart - span.start) / rate));
+    if (trimStart <= 0.0005) delete clip.trimStart;
+    else clip.trimStart = round3(trimStart);
+    // The end stays where it was in the sound.
+    if (span.end < d.sound - 0.0005) clip.trimEnd = round3(span.end);
+  }
+  refreshClip(clip);
+}
+
+function onTrimEnd() {
+  if (!dragging) return;
+  const { el, handle, moved } = dragging;
+  handle.removeEventListener('pointermove', onTrimMove);
+  el.classList.remove('trimming');
+  dragging = null;
+  if (moved) {
+    markDirty();
+    render();
+  }
+}
+
+// Cuts sounds in two at the playhead: the selected one, or every one under it.
+// Each half is the same sound, trimmed, so either can be moved, trimmed or removed.
+function cutAtPlayhead() {
+  const t = player.state() ? player.state().position : cursor;
+  const picked = selectedClip();
+  const candidates = picked ? [picked] : bash.clips.slice();
+  let cut = 0;
+  let repeating = 0;
+  for (const clip of candidates) {
+    const length = clipDuration(clip);
+    if (!(t > clip.offset + 0.01 && t < clip.offset + length - 0.01)) continue;
+    if (clip.repeat) { repeating++; continue; }
+    const span = spanOf(clip);
+    const at = round3(span.start + (t - clip.offset) * BashCommon.clipRate(clip));
+    const second = { ...clip, id: newId(), offset: round3(t), trimStart: at };
+    if (span.end < soundLength(clip) - 0.0005) second.trimEnd = round3(span.end);
+    clip.trimEnd = at;
+    bash.clips.push(second);
+    cut++;
+  }
+  if (!cut) {
+    toast(repeating ? 'Turn off Repeat to cut a repeating sound.' : (picked ? 'Move the playhead over this sound to cut it there.' : 'Move the playhead over a sound to cut it there.'), true);
+    return;
+  }
+  markDirty();
+  render();
+  toast(cut === 1 ? 'Cut in two.' : `Cut ${cut} sounds in two.`);
+}
+
 // Dragging a clip's right edge: a shorter clip plays faster (and higher),
 // a longer one slower (and deeper), like a tape.
 function startStretch(e, clip, el) {
@@ -514,7 +723,7 @@ function startStretch(e, clip, el) {
   const handle = e.currentTarget;
   handle.setPointerCapture(e.pointerId);
   // The clip's length at normal speed (its effect may still change it).
-  const natural = soundLength(clip) / BashCommon.clipRate({ ...clip, speed: 1 });
+  const natural = clipDuration({ ...clip, speed: 1 });
   dragging = { clip, el, handle, x: e.clientX, length: clipDuration(clip), natural, moved: false };
   handle.addEventListener('pointermove', onStretchMove);
   handle.addEventListener('pointerup', onStretchEnd, { once: true });
@@ -550,7 +759,7 @@ function onStretchEnd() {
 
 // Click on the ruler or an empty lane: move the playhead and deselect.
 $('#content').addEventListener('pointerdown', (e) => {
-  if (e.target.closest('.clip')) return;
+  if (e.target.closest('.clip, .bash-end-flag')) return;
   const rect = $('#content').getBoundingClientRect();
   cursor = Math.max(0, (e.clientX - rect.left) / pps);
   select(null);
@@ -621,6 +830,62 @@ $('#clip-dup').addEventListener('click', () => {
   markDirty();
   render();
 });
+
+// Trim: the part of the sound the clip plays, typed exactly.
+function setTrim(which, value) {
+  const clip = selectedClip();
+  if (!clip) return;
+  const seconds = AudioUtils.parseTime(value);
+  if (!Number.isFinite(seconds)) { toast('Type a time like 1.5 or 0:01.5', true); renderInspector(); return; }
+  const length = soundLength(clip);
+  const span = spanOf(clip);
+  if (which === 'start') {
+    const start = Math.max(0, Math.min(span.end - BashCommon.MIN_TRIM, seconds));
+    if (start <= 0.0005) delete clip.trimStart; else clip.trimStart = round3(start);
+    if (span.end < length - 0.0005) clip.trimEnd = round3(span.end);
+  } else {
+    const end = Math.max(span.start + BashCommon.MIN_TRIM, Math.min(length, seconds));
+    if (end >= length - 0.0005) delete clip.trimEnd; else clip.trimEnd = round3(end);
+  }
+  markDirty();
+  render();
+}
+$('#clip-trim-start').addEventListener('change', (e) => setTrim('start', e.target.value));
+$('#clip-trim-end').addEventListener('change', (e) => setTrim('end', e.target.value));
+$('#clip-trim-reset').addEventListener('click', () => {
+  const clip = selectedClip();
+  if (!clip) return;
+  delete clip.trimStart;
+  delete clip.trimEnd;
+  markDirty();
+  render();
+});
+
+// Tools: cut, what the edges do, and the bash's length.
+$('#cut-btn').addEventListener('click', cutAtPlayhead);
+for (const button of document.querySelectorAll('.seg')) {
+  button.addEventListener('click', () => {
+    edgeMode = button.dataset.mode;
+    try { localStorage.setItem('bashEdgeMode', edgeMode); } catch { /* no storage */ }
+    render();
+  });
+}
+$('#bash-length').addEventListener('change', (e) => {
+  const text = e.target.value.trim();
+  if (!text || /^auto$/i.test(text)) { setLength(null); render(); return; }
+  const seconds = AudioUtils.parseTime(text);
+  if (!(seconds > 0)) { toast('Type a length like 12 or 0:12.5, or leave it empty for Auto.', true); renderLengthControls(); return; }
+  setLength(seconds);
+  e.target.value = AudioUtils.formatTime(bash.length);
+  render();
+});
+$('#length-here').addEventListener('click', () => {
+  const t = player.state() ? player.state().position : cursor;
+  if (!(t > 0)) { toast('Move the playhead to where the bash should end (click the ruler).', true); return; }
+  setLength(t);
+  render();
+});
+$('#length-auto').addEventListener('click', () => { setLength(null); render(); });
 
 // Speed: the slider works in doublings (¼× … 4×) so slower and faster get the same room.
 $('#clip-speed-range').addEventListener('input', (e) => {
@@ -748,6 +1013,7 @@ document.addEventListener('keydown', (e) => {
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) && document.activeElement.type !== 'range' && document.activeElement.type !== 'checkbox';
   if (typing) return;
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); cutAtPlayhead(); }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) { e.preventDefault(); removeClip(selectedId); }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedId) {
     e.preventDefault();

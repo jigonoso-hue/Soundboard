@@ -26,6 +26,7 @@ Where the code lives, side by side:
 | Listener playback | `src/renderer/live.js` (Mirror) | `Live/MirrorPlayer.swift` |
 | Recording, and its edit (voice effects, sounds played along) | `src/renderer/recorder.js`, `voice-edit.js`, `fx.js` (Fx.VOICE) | `Views/RecorderView.swift`, `Audio/VoiceEdit.swift` (keep the effects in step) |
 | Bash clips: speed (squash and pull), effect and intensity | `src/bashes.js`, `src/renderer/bash-common.js` (player), `bash-editor.js` | `Model/Bash.swift`, `Audio/BashPlayer.swift`, `Audio/SoundEffects.swift` (FxPlayer), `Views/BashEditorView.swift` |
+| Bash trims, Cut at playhead, bash length | `src/bashes.js`, `bash-common.js`, `bash-editor.js` | Not yet: Mac and Android only, at the user's request. a library imported on iPhone/iPad plays those clips whole, with no length. iPhone/iPad listeners in a Live Session start trimmed clips at the sound's beginning but are stopped on time |
 | Dice tray | `src/renderer/dice.js` (three.js + cannon-es) | `Views/DiceView.swift` (SceneKit) |
 | Dice shapes and rules | `src/renderer/dice-geometry.js` | `Model/DiceGeometry.swift` (keep in step) |
 | Roll requests, initiative, who wins | `src/renderer/table.js` | `Views/TableView.swift` |

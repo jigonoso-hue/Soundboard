@@ -115,7 +115,8 @@ and converts host times to its own clock.
   "fadeIn": 4,             // optional: seconds to fade in over (up to 10)
   "fx": "distant",         // optional: a sound effect (below)
   "fxMix": 0.4,            // optional, with fx: how much of the effect, 0…1 (left out = all of it)
-  "rate": 1.5              // optional: a bash clip's speed (left out = 1)
+  "rate": 1.5,             // optional: a bash clip's speed (left out = 1)
+  "from": 2.5              // optional: a trimmed bash clip starts this many seconds into the sound
 }
 ```
 
@@ -140,7 +141,14 @@ listeners apply that on top of `rate`. `at` is still when the sound's start
 plays, so a listener who joins part-way is `elapsed × rate × effect speed`
 seconds into the file.
 
-**Groups.** `s:<sound id>` is a sound tile or row; `b:<bash run id>` a bash;
+`from` is a trimmed bash clip: at `at`, the sound is already `from` seconds in
+(file time). A clip whose end is trimmed, or that the bash's own length cuts
+off, gets a group of its own, `b:<bash run id>:<pid>`, and the host sends a
+`stop` for that group when it should end (and when the bash stops), so
+listeners that don't know `from` still stop it on time.
+
+**Groups.** `s:<sound id>` is a sound tile or row; `b:<bash run id>` a bash
+(`b:<bash run id>:<pid>` one of its trimmed clips);
 `pl:<section id>:<n>` one song of a playlist (each song has its own group, so the
 next can fade in while this one fades out); `a:<layer id>` a now-and-then
 ambience layer (each time it plays is a `play` with `cat: "ambience"`); and

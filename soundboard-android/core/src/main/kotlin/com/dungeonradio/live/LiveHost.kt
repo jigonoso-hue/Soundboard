@@ -54,6 +54,8 @@ class LiveHost(
         val fxMix: Double? = null,
         /** A squashed or pulled bash clip's speed (null for normal). */
         val rate: Double? = null,
+        /** A trimmed bash clip: seconds into the file it starts from (null for its start). */
+        val from: Double? = null,
     )
 
     /** An ambience layer playing on the host. kind "builtin" (ref: file name) or "sound" (ref: sound id). */
@@ -474,6 +476,7 @@ class LiveHost(
             LiveNet.cleanMix(event.fxMix)?.let { mix -> message.put("fxMix", mix) }
         }
         LiveNet.cleanRate(event.rate)?.let { message.put("rate", it) }
+        LiveNet.cleanFrom(event.from)?.let { message.put("from", it) }
         if (!event.to.isNullOrEmpty()) {
             for (peer in event.to) if (peers.containsKey(peer)) sendTo(peer, message)
             return@onThread

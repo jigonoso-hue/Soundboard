@@ -31,6 +31,8 @@ function makeLibrary() {
   s.library.update(roar.id, { tags: ['creature', 'boss fight'], volume: 0.6, repeat: { gap: 2 }, buzz: true, color: '#5ec8ff' });
   const bash = s.bashes.create({ name: 'Ambush!', soundIds: [roar.id, song.id] });
   s.bashes.setCoverImage(bash.id, noise(300), 'png');
+  const [first, second] = s.bashes.get(bash.id).clips;
+  s.bashes.update(bash.id, { clips: [{ ...first, trimStart: 0.2, trimEnd: 0.8, speed: 1.5, fx: 'cave', fxAmount: 0.5 }, second], length: 30 });
   const kit = s.kits.create({ name: 'Tavern Brawl' });
   s.kits.addItems(kit.id, [{ type: 'sound', id: roar.id }, { type: 'sound', id: song.id }, { type: 'bash', id: bash.id }], null, s.library.list());
   const sections = s.kits.get(kit.id).sections;
@@ -96,6 +98,8 @@ test('a whole library goes to one file and comes back the same in another librar
   const bash = b.bashes.get(a.bash.id);
   assert.equal(bash.name, 'Ambush!');
   assert.equal(bash.clips.length, 2);
+  assert.deepEqual([bash.clips[0].trimStart, bash.clips[0].trimEnd, bash.clips[0].speed, bash.clips[0].fx, bash.clips[0].fxAmount], [0.2, 0.8, 1.5, 'cave', 0.5]);
+  assert.equal(bash.length, 30);
   assert.equal(bash.cover.type, 'image');
   assert.ok(fs.existsSync(b.bashes.coverPath(bash.cover.file)));
 

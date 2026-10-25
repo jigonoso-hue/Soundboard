@@ -35,6 +35,7 @@ class LiveListener(
             val fx: String? = null,
             val fxMix: Double? = null,
             val rate: Double? = null,
+            val from: Double? = null,
         ) : Command()
         data class Stop(val group: String, val fade: Double) : Command()
         data class Volume(val group: String, val volume: Double) : Command()
@@ -270,6 +271,7 @@ class LiveListener(
             fx = m.str("fx")?.takeIf { it in LiveNet.FX_IDS },
             fxMix = LiveNet.cleanMix(m.opt("fxMix")),
             rate = LiveNet.cleanRate(m.opt("rate")),
+            from = LiveNet.cleanFrom(m.opt("from")),
         ))
     }
 

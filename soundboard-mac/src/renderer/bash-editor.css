@@ -238,3 +238,74 @@ body.editor { display: flex; flex-direction: column; height: 100vh; }
 #clip-fx-amount { width: 90px; }
 #clip-fx-amount-label.disabled { opacity: 0.45; }
 #clip-fx-amount-value { min-width: 34px; color: var(--text); }
+
+/* Tools: cut, edges, bash length */
+.ed-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.ed-tools button { display: inline-flex; align-items: center; gap: 6px; }
+.tool-group { display: inline-flex; align-items: center; gap: 6px; }
+.seg { border-radius: 0; margin: 0 -3px 0 0; }
+.tool-group .seg:first-of-type { border-radius: 8px 0 0 8px; }
+.tool-group .seg:last-of-type { border-radius: 0 8px 8px 0; }
+.seg.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+#bash-length { width: 86px; text-align: center; }
+
+/* Trim handles: brackets at a clip's edges */
+.clip-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.clip-edge.left { left: 0; border-left: 3px solid rgba(255, 255, 255, 0.45); border-radius: 8px 0 0 8px; }
+.clip-edge.right { right: 0; border-right: 3px solid rgba(255, 255, 255, 0.45); border-radius: 0 8px 8px 0; }
+.clip-edge:hover, .clip.trimming .clip-edge { background: rgba(255, 255, 255, 0.18); border-color: #fff; }
+.clip.trimming { z-index: 4; }
+@media (pointer: coarse) { .clip-edge { width: 18px; } }
+.clip-trim { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.clip-trim .time { width: 76px; }
+
+/* The bash's own end */
+.bash-end {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #ff5d73;
+  z-index: 5;
+  pointer-events: none;
+}
+.bash-end-flag {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  padding: 2px 7px;
+  border-radius: 0 6px 6px 0;
+  background: #ff5d73;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.bash-after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(10, 10, 16, 0.55);
+  background-image: repeating-linear-gradient(135deg, transparent 0 8px, rgba(255, 93, 115, 0.08) 8px 16px);
+  z-index: 3;
+  pointer-events: none;
+}
