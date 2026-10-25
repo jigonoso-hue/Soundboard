@@ -422,35 +422,42 @@ function drawWaveform(canvas, clip) {
   }
 }
 
+// The clip the inspector last showed: a field being edited keeps what's typed in
+// it only while the same clip stays selected.
+let inspectedId = null;
+
 function renderInspector() {
   const clip = bash.clips.find((c) => c.id === selectedId);
+  const sameClip = !!clip && clip.id === inspectedId;
+  inspectedId = clip ? clip.id : null;
+  const editing = (sel) => sameClip && document.activeElement === $(sel);
   $('#inspector-empty').classList.toggle('hidden', !!clip);
   $('#inspector-clip').classList.toggle('hidden', !clip);
   if (!clip) return;
   const sound = soundOf(clip);
   $('#clip-color').style.background = sound?.color || '#7c6cff';
   $('#clip-name').textContent = sound?.name || 'Missing sound';
-  if (document.activeElement !== $('#clip-offset')) $('#clip-offset').value = AudioUtils.formatTime(clip.offset);
-  if (document.activeElement !== $('#clip-volume')) $('#clip-volume').value = clip.volume;
+  if (!editing('#clip-offset')) $('#clip-offset').value = AudioUtils.formatTime(clip.offset);
+  if (!editing('#clip-volume')) $('#clip-volume').value = clip.volume;
   $('#clip-repeat').checked = !!clip.repeat;
   $('#clip-repeat-fields').classList.toggle('disabled', !clip.repeat);
   for (const input of [$('#clip-repeat-gap'), $('#clip-repeat-times')]) input.disabled = !clip.repeat;
-  if (document.activeElement !== $('#clip-repeat-gap')) $('#clip-repeat-gap').value = clip.repeat ? clip.repeat.gap : 0;
-  if (document.activeElement !== $('#clip-repeat-times')) $('#clip-repeat-times').value = clip.repeat && clip.repeat.times ? clip.repeat.times : '';
+  if (!editing('#clip-repeat-gap')) $('#clip-repeat-gap').value = clip.repeat ? clip.repeat.gap : 0;
+  if (!editing('#clip-repeat-times')) $('#clip-repeat-times').value = clip.repeat && clip.repeat.times ? clip.repeat.times : '';
   const span = spanOf(clip);
-  if (document.activeElement !== $('#clip-trim-start')) $('#clip-trim-start').value = AudioUtils.formatTime(span.start);
-  if (document.activeElement !== $('#clip-trim-end')) $('#clip-trim-end').value = AudioUtils.formatTime(span.end);
+  if (!editing('#clip-trim-start')) $('#clip-trim-start').value = AudioUtils.formatTime(span.start);
+  if (!editing('#clip-trim-end')) $('#clip-trim-end').value = AudioUtils.formatTime(span.end);
   $('#clip-sound-length').textContent = `of ${AudioUtils.formatTime(soundLength(clip))}`;
   $('#clip-trim-reset').disabled = !clip.trimStart && !clip.trimEnd;
   const speed = speedOf(clip);
-  if (document.activeElement !== $('#clip-speed-range')) $('#clip-speed-range').value = Math.log2(speed);
-  if (document.activeElement !== $('#clip-speed')) $('#clip-speed').value = speedText(speed);
+  if (!editing('#clip-speed-range')) $('#clip-speed-range').value = Math.log2(speed);
+  if (!editing('#clip-speed')) $('#clip-speed').value = speedText(speed);
   $('#clip-speed-reset').disabled = speed === 1;
   $('#clip-fx').value = clip.fx || '';
   const amount = clip.fxAmount ?? 1;
   $('#clip-fx-amount').disabled = !clip.fx;
   $('#clip-fx-amount-label').classList.toggle('disabled', !clip.fx);
-  if (document.activeElement !== $('#clip-fx-amount')) $('#clip-fx-amount').value = amount;
+  if (!editing('#clip-fx-amount')) $('#clip-fx-amount').value = amount;
   $('#clip-fx-amount-value').textContent = clip.fx ? `${Math.round(amount * 100)}%` : '';
 }
 
@@ -540,6 +547,8 @@ function removeClip(id) {
 }
 
 function select(id) {
+  // Finish (or drop) any typing in the inspector before it shows another clip.
+  if (id !== selectedId && document.activeElement && $('#inspector').contains(document.activeElement)) document.activeElement.blur();
   selectedId = id;
   for (const el of document.querySelectorAll('.clip')) el.classList.toggle('selected', el.dataset.id === id);
   renderInspector();
@@ -566,11 +575,18 @@ function snapOffset(offset, clip, free) {
   return Math.max(0, Math.round(best * 1000) / 1000);
 }
 
+// A clip's element on the timeline now (it's replaced when the timeline redraws).
+function liveClipEl(clip, el) {
+  return el.isConnected ? el : (document.querySelector(`.clip[data-id="${clip.id}"]`) || el);
+}
+
 function startDrag(e, clip, el) {
   if (e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
   select(clip.id);
+  // Selecting can apply a value typed for the last clip, redrawing the timeline.
+  el = liveClipEl(clip, el);
   el.setPointerCapture(e.pointerId);
   dragging = { clip, el, x: e.clientX, y: e.clientY, offset: clip.offset, lane: clip.lane, moved: false };
   el.addEventListener('pointermove', onDragMove);
@@ -632,8 +648,12 @@ function startTrim(e, clip, el, side) {
   if (e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
+  let handle = e.currentTarget;
   select(clip.id);
-  const handle = e.currentTarget;
+  if (!handle.isConnected) {
+    el = liveClipEl(clip, el);
+    handle = el.querySelector(`.clip-edge.${side}`) || handle;
+  }
   handle.setPointerCapture(e.pointerId);
   dragging = {
     clip, el, handle, side, x: e.clientX, moved: false,
@@ -719,8 +739,12 @@ function startStretch(e, clip, el) {
   if (e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
+  let handle = e.currentTarget;
   select(clip.id);
-  const handle = e.currentTarget;
+  if (!handle.isConnected) {
+    el = liveClipEl(clip, el);
+    handle = el.querySelector('.clip-stretch') || handle;
+  }
   handle.setPointerCapture(e.pointerId);
   // The clip's length at normal speed (its effect may still change it).
   const natural = clipDuration({ ...clip, speed: 1 });

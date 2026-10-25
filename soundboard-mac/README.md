@@ -6,7 +6,7 @@ A desktop soundboard for your Mac. You can:
 - **Clips and Full Sounds.** Short effects are *Clips*, shown as tiles. Songs and long tracks are *Full Sounds*, shown as rows with a play button, a timer and a progress bar.
 - **Tags and filters.** Premade tags (surprise, comedy, horror, shock, suspense, combat, magic, creature, weather, nature, tavern, music, victory, sad, mystery) plus your own. A sound can have several, and tiles and rows show as many as fit on one line, then "+N". Filter from the sidebar by one or more tags (with **Find a tag** to search the list), search names and tags, and sort.
 - **Scene Kits.** Collect clips, full songs and Bashes from your whole library into a kit for a scene, such as "Tavern Brawl" or "Dragon's Lair", and open it from the sidebar.
-- **Bashes.** Named groups of sounds that play together with one click, each with a cover image or icon. Every Bash opens in its own editor window, with a timeline for choosing when each sound starts and layering sounds.
+- **Bashes.** Named groups of sounds that play together with one click, each with a cover image or icon. Every Bash opens in an editor over the main window, with a timeline for choosing when each sound starts and layering sounds.
 - **Ambience layers.** Loop background sounds under the soundboard, such as rain, campfire, wind, ocean, a forest stream, cave drips, night forest, a dark dungeon drone, a thunderstorm with lightning, howling wind or a stormy sea. Each layer has its own volume and fades in and out. Any sound in your library can also be a layer, such as a song you saved from YouTube.
 - **Save full audio from YouTube.** Save a whole video's audio track, such as a song or a one-hour tavern mix, to your library.
 - **Clip sounds from YouTube.** A built-in YouTube browser lets you search for a video, mark a start and end, and save that piece of audio as a new sound.
@@ -157,10 +157,10 @@ The type is detected automatically. Anything a minute or longer, and anything sa
 A Bash plays several sounds at once from one card, for example "Ambush!" with a war horn, a battle cry and clashing swords. Bashes appear in the **Bashes** row above your sounds:
 
 - **Click a card** to play the Bash. Click it again, press **Stop All**, or press Esc to stop it.
-- **Double-click a card**, or use **⋯ → Edit…**, to open its editor in a new window. The **⋯** menu also has **Duplicate** and **Delete**. Deleting a Bash never deletes its sounds.
+- **Double-click a card**, or use **⋯ → Edit…**, to open its editor. It opens over the main window (no new window); **Close** or **Save** goes back to the board. The **⋯** menu also has **Duplicate** and **Delete**. Deleting a Bash never deletes its sounds.
 - **+ New Bash** creates an empty Bash and opens its editor. You can also add a sound to a Bash from the sound's own editor, using **Add to Bash…**.
 
-In the editor window:
+In the editor:
 
 - **Adding sounds:** click **+** next to a sound in the list on the left, or drag it onto the timeline. Sounds added with **+** start at 0:00, so by default everything plays at the same moment. Each sound gets its own layer (row).
 - **Timing and layering:** drag a clip **left or right** to change when it starts, or **up and down** to move it between layers. Clips snap to 0.1 s and to the edges of other clips. Hold ⌥ while dragging, or turn off **Snap**, for free positioning. You can also select a clip and type an exact start time, or use ←/→ to nudge it by 0.1 s (⇧ for 1 s) and ↑/↓ to change its layer.
@@ -177,7 +177,7 @@ In the editor window:
 - **Playback:** Space or **▶ Play** plays from the playhead. Click the ruler to move the playhead.
 - **Cover and name:** click the cover at the top left to pick an icon, an icon colour and a background colour, or **Upload image…** to use your own picture as album art. Edit the name next to the cover.
 - **Zoom** changes the timeline scale.
-- **Saving:** the editor opens as its own smaller window in front of the main app. Changes aren't saved until you click **Save** (or press ⌘S), which saves and closes the editor. Until then, **● Unsaved changes** shows at the top.
+- **Saving:** changes aren't saved until you click **Save** (or press ⌘S), which saves and closes the editor. Until then, **● Unsaved changes** shows at the top. **Close**, ⌘W or the window's red button closes the editor (not the app), asking first if there are unsaved changes.
 - **Closing:** **Close** (or ⌘W, or the window's red button) closes the editor. With unsaved changes it asks first: **Save**, **Don't Save** or **Keep Editing**. If you don't save a brand-new Bash, it's removed.
 
 ## YouTube ad blocker
@@ -325,7 +325,7 @@ npm test   # unit tests for the library (incl. tags), bashes, audio helpers and 
 | `src/renderer/icon-picker.*` | Icon picker with icon and background colours |
 | `src/icon-ids.js` | Validates stored icon choices and converts old emoji |
 | `src/renderer/bashes-board.js` | Bash cards on the main board |
-| `src/renderer/bash-editor.*` | Bash editor window (timeline) |
+| `src/renderer/bash-editor.*` | Bash editor (timeline), shown over the main window by `editor-layer.js` (`editor-frame.js` passes its calls to the main page) |
 | `src/renderer/bash-common.js` | Bash playback engine, covers, waveforms |
 | `src/renderer/tags.js` | Tag colours, chips, picker and the new-sound tagging dialog |
 | `src/renderer/ambience.js` | Ambience mixer |

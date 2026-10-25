@@ -309,3 +309,6 @@ body.editor { display: flex; flex-direction: column; height: 100vh; }
   z-index: 3;
   pointer-events: none;
 }
+
+/* Open over the main window: clear of its close/minimise buttons at the top left. */
+.in-layer .ed-top { padding-left: 84px; }

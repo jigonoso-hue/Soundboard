@@ -33,7 +33,6 @@ let bashes;
 let kits;
 let bookmarks;
 let ytdlp;
-const editors = new Map(); // bash id -> editor window
 let mainWindow;
 
 function createWindow() {
@@ -54,6 +53,14 @@ function createWindow() {
     },
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // While the bash editor is open, ⌘W and the red button close the editor first
+  // (asking about unsaved changes); quitting only stops for unsaved changes.
+  mainWindow.on('close', (e) => {
+    if (!editorLayer.open || (quitting && !editorLayer.dirty)) return;
+    e.preventDefault();
+    quitting = false;
+    mainWindow.webContents.send('bash-editor:close-requested');
+  });
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -83,49 +90,18 @@ function broadcast(channel, payload, except) {
   }
 }
 
+// The bash editor opens over the main window (renderer/editor-layer.js), not in
+// a window of its own.
 function openBashEditor(id, { isNew = false } = {}) {
-  const existing = editors.get(id);
-  if (existing && !existing.isDestroyed()) {
-    existing.focus();
-    return;
-  }
-  const bash = bashes.get(id);
-  if (!bash) return;
-  // A smaller window with a normal title bar, floating in front of (and
-  // offset from) the main window, so it clearly reads as a separate editor.
-  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-  const bounds = parent ? parent.getBounds() : null;
-  const width = 1040;
-  const height = 640;
-  const win = new BrowserWindow({
-    width,
-    height,
-    minWidth: 760,
-    minHeight: 480,
-    ...(bounds ? { x: Math.round(bounds.x + (bounds.width - width) / 2), y: Math.round(bounds.y + Math.max(40, (bounds.height - height) / 2)) } : {}),
-    parent,
-    title: `Edit Bash — ${bash.name}`,
-    backgroundColor: '#181822',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
-  win.loadFile(path.join(__dirname, 'renderer', 'bash-editor.html'), { query: { id, new: isNew ? '1' : '0' } });
-  editors.set(id, win);
-  // With unsaved changes, the red button / ⌘W asks the editor to confirm first.
-  win.on('close', (e) => {
-    if (dirtyEditors.has(win.webContents.id)) {
-      e.preventDefault();
-      win.webContents.send('bash-editor:close-requested');
-    }
-  });
-  win.on('closed', () => editors.delete(id));
+  if (!mainWindow || mainWindow.isDestroyed() || !bashes.get(id)) return;
+  mainWindow.webContents.send('bash-editor:open', id, { isNew });
+  mainWindow.show();
+  mainWindow.focus();
 }
 
-const dirtyEditors = new Set(); // webContents ids of editors with unsaved changes
+// Whether the editor is open over the main window, and has unsaved changes.
+let editorLayer = { open: false, dirty: false };
+let quitting = false;
 
 function syncHotkeys() {
   globalShortcut.unregisterAll();
@@ -249,36 +225,33 @@ function registerIpc() {
   ipcMain.handle('youtube:cancel-download', (_e, jobId) => ytdlp.cancel(jobId));
 
   // ---- Bashes ----
-  const bashesChanged = (sender) => broadcast('bashes:changed', bashes.list(), sender);
+  // Every window hears it, the sender too: the editor's changes come through the main window.
+  const bashesChanged = () => broadcast('bashes:changed', bashes.list());
 
   ipcMain.handle('bashes:list', () => bashes.list());
   ipcMain.handle('bashes:get', (_e, id) => bashes.get(id));
   ipcMain.handle('bashes:create', (e, options) => {
     const bash = bashes.create(options);
-    bashesChanged(e.sender);
+    bashesChanged();
     return bash;
   });
   ipcMain.handle('bashes:update', (e, id, changes) => {
     const bash = bashes.update(id, changes);
-    bashesChanged(e.sender);
-    const editor = editors.get(id);
-    if (editor && !editor.isDestroyed()) editor.setTitle(`Edit Bash — ${bash.name}`);
+    bashesChanged();
     return bash;
   });
   ipcMain.handle('bashes:duplicate', (e, id) => {
     const bash = bashes.duplicate(id);
-    bashesChanged(e.sender);
+    bashesChanged();
     return bash;
   });
   ipcMain.handle('bashes:remove', (e, id) => {
     bashes.remove(id);
     if (kits.prune('bash', id)) broadcast('kits:changed', kits.list());
-    const editor = editors.get(id);
-    if (editor && !editor.isDestroyed()) editor.close();
-    bashesChanged(e.sender);
+    bashesChanged();
   });
-  ipcMain.handle('bash-editor:set-dirty', (e, dirty) => {
-    if (dirty) dirtyEditors.add(e.sender.id); else dirtyEditors.delete(e.sender.id);
+  ipcMain.handle('bash-editor:layer', (_e, state) => {
+    editorLayer = { open: !!(state && state.open), dirty: !!(state && state.dirty) };
   });
   ipcMain.handle('bashes:open-editor', (_e, id, options) => openBashEditor(id, options));
 
@@ -302,7 +275,7 @@ function registerIpc() {
 
   ipcMain.handle('bashes:set-cover-data', (e, id, base64) => {
     const bash = bashes.setCoverImage(id, Buffer.from(String(base64), 'base64'), 'png');
-    bashesChanged(e.sender);
+    bashesChanged();
     return bash;
   });
 
@@ -431,7 +404,7 @@ function registerIpc() {
     receiving = session;
   });
   ipcMain.handle('share:receive-cancel', () => stopReceiving());
-  app.on('before-quit', () => { stopSending(); stopReceiving(); });
+  app.on('before-quit', () => { quitting = true; stopSending(); stopReceiving(); });
 
   registerLiveIpc();
 

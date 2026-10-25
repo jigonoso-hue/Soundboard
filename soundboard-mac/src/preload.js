@@ -28,8 +28,10 @@ contextBridge.exposeInMainWorld('soundboard', {
     rename: (id, name) => ipcRenderer.invoke('bookmarks:rename', id, name),
     remove: (id) => ipcRenderer.invoke('bookmarks:remove', id),
   },
+  // The bash editor over the main window (editor-layer.js): whether it's open and
+  // has unsaved changes, and ⌘W / the red button asking it to close.
   editor: {
-    setDirty: (dirty) => ipcRenderer.invoke('bash-editor:set-dirty', dirty),
+    setLayer: (state) => ipcRenderer.invoke('bash-editor:layer', state),
     onCloseRequested: (callback) => ipcRenderer.on('bash-editor:close-requested', () => callback()),
   },
   tags: {
@@ -58,6 +60,7 @@ contextBridge.exposeInMainWorld('soundboard', {
     duplicate: (id) => ipcRenderer.invoke('bashes:duplicate', id),
     remove: (id) => ipcRenderer.invoke('bashes:remove', id),
     openEditor: (id, options) => ipcRenderer.invoke('bashes:open-editor', id, options),
+    onOpenEditor: (callback) => ipcRenderer.on('bash-editor:open', (_e, id, options) => callback(id, options)),
     pickCover: () => ipcRenderer.invoke('bashes:pick-cover'),
     setCoverData: (id, base64) => ipcRenderer.invoke('bashes:set-cover-data', id, base64),
     coverData: (file) => ipcRenderer.invoke('bashes:cover-data', file),

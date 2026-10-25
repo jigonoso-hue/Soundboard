@@ -2067,3 +2067,14 @@ html:not(.android) #app.sidebar-hidden .titlebar { padding-left: 84px; } /* the 
   font-size: 8px; font-weight: 800; line-height: 11px; text-align: center;
   background: var(--on-accent); color: var(--accent-fill);
 }
+
+/* The bash editor, open over the main window (editor-layer.js). */
+.editor-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  z-index: 9000;
+  background: #181822;
+}
